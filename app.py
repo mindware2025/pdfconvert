@@ -294,7 +294,6 @@ if uploaded_file:
 else:
     st.info("Please upload a Google DNTS invoice PDF file to get started.")
 
-# ----------- Footer -----------
 st.markdown("""
 <footer style='text-align:center; margin-top:3rem; color:#1a73e8; font-size:20px; font-weight:bold; font-family: Google Sans, sans-serif;'>
     Made with ❤️ by Mindware | © 2025
