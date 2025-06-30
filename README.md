@@ -22,7 +22,7 @@ This app extracts the 'Summary of costs by domain' table from a PDF and saves it
 
 4. The extracted table will be saved as `summary_of_costs_by_domain.xlsx`.
 
-## Notes
+## Notes // to be updated
 - The script only extracts tables with the header:
   - Domain name | Customer ID | Amount(US$)
 - If the table is not found, the script will notify you.
