@@ -6,8 +6,10 @@ import tempfile
 import os
 import io
 from datetime import datetime
+import dotenv
 
-# ----------- Page config -----------
+dotenv.load_dotenv()
+
 st.set_page_config(
     page_title="Google DNTS upload file",
     layout="wide"
@@ -82,9 +84,9 @@ DEFAULTS = {
 }
 
 # ----------- Simple Login Page -----------
-CORRECT_USERNAME = "S.Bhaskaran"
-CORRECT_PASSWORD = "BHASAKHRAN@str2@25z#"
 
+CORRECT_USERNAME = os.getenv("NAME")
+CORRECT_PASSWORD = os.getenv("PASSWORD")
 if "login_state" not in st.session_state:
     st.session_state.login_state = "login"  # can be 'login', 'fail', or 'success'
 
