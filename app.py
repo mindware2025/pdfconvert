@@ -84,8 +84,7 @@ DEFAULTS = {
 }
 
 # ----------- Simple Login Page -----------
-
-CORRECT_USERNAME = os.getenv("NAME")
+CORRECT_USERNAME = os.getenv("USERNAME")
 CORRECT_PASSWORD = os.getenv("PASSWORD")
 if "login_state" not in st.session_state:
     st.session_state.login_state = "login"  # can be 'login', 'fail', or 'success'
