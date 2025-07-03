@@ -17,7 +17,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Hide Streamlit default menu, footer, and header
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
