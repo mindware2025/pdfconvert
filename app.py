@@ -6,11 +6,12 @@ import tempfile
 import os
 import io
 from datetime import datetime
-import dotenv
+
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
 from utils.helpers import format_amount, format_invoice_date
+from dotenv import load_dotenv
+load_dotenv()
 
-dotenv.load_dotenv()
 
 st.set_page_config(
     page_title="Google DNTS upload file",
