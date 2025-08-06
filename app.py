@@ -8,9 +8,10 @@ import io
 from datetime import datetime
 
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
-from utils.helpers import format_amount, format_invoice_date
+from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 load_dotenv()
+from extractors.google_invoice import extract_table_from_text as extract_invoice_table, extract_invoice_info as extract_invoice_info_invoice, GOOGLE_INVOICE_COLS
 
 
 st.set_page_config(
@@ -25,7 +26,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ----------- Minimal, Modern CSS Styling -----------
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap');
@@ -75,17 +75,17 @@ DEFAULTS = {
     "location_code": "UJ200"
 }
 
-# ----------- Simple Login Page -----------
+
 CORRECT_USERNAME = os.getenv("NAME")
 CORRECT_PASSWORD = os.getenv("PASSWORD")
 if "login_state" not in st.session_state:
-    st.session_state.login_state = "login"  # can be 'login', 'fail', or 'success'
+    st.session_state.login_state = "login" 
 
 def show_login():
-    # Add vertical space to help with vertical centering
+    
     for _ in range(10):
         st.write("")
-    # Use columns to center horizontally
+   
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
         st.title("🔒 Login to PDF to Excel")
@@ -110,6 +110,73 @@ elif st.session_state.login_state == "fail":
     show_fail()
     st.stop()
 
+def extractor_workflow(
+    extractor_name,
+    extractor_info,
+    file_uploader_label,
+    extract_invoice_info_func,
+    extract_table_func,
+    table_columns,
+    file_name_template,
+    show_header_df_func=None,
+    header_columns=None,
+    item_row_builder=None,
+    item_columns=None
+):
+    st.title(f"PDF TO EXCEL ({extractor_name})")
+    st.write(extractor_info)
+    uploaded_file = st.file_uploader(file_uploader_label, type=["pdf"], accept_multiple_files=False, key=f"uploader_{extractor_name}")
+    if uploaded_file:
+        invoice_num, invoice_date = extract_invoice_info_func(uploaded_file)
+        if invoice_num and invoice_date:
+            file_date = format_month_year(invoice_date)
+            file_name = file_name_template.format(invoice_num=invoice_num, file_date=file_date)
+        else:
+            file_name = file_name_template.format(invoice_num='unknown', file_date='unknown')
+        rows = extract_table_func(uploaded_file)
+        if rows:
+            df = pd.DataFrame(rows, columns=table_columns)
+            if show_header_df_func and header_columns and item_row_builder and item_columns:
+                today_str = datetime.today().strftime("%d/%m/%Y")
+                remarks = f"GOOGLE INV-{invoice_num}" if invoice_num else "GOOGLE INV-UNKNOWN"
+                header_df = pd.DataFrame([
+                    show_header_df_func(invoice_num, invoice_date, today_str, remarks)
+                ], columns=header_columns)
+                st.subheader("DNTS Header Preview")
+                st.dataframe(header_df, height=120)
+                dnts_item_data = [item_row_builder(idx, *row, invoice_num) for idx, row in enumerate(rows, 1)]
+                dnts_item_df = pd.DataFrame(dnts_item_data, columns=item_columns)
+                st.subheader("DNTS Items Preview")
+                st.dataframe(dnts_item_df)
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    header_df.to_excel(writer, sheet_name='DNTS_HEADER', index=False)
+                    dnts_item_df.to_excel(writer, sheet_name='DNTS_ITEM', index=False)
+                output.seek(0)
+                st.download_button(
+                    label=f"⬇️ Download DNTS Excel",
+                    data=output.getvalue(),
+                    file_name=file_name,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"download_{extractor_name}"
+                )
+            else:
+                st.subheader("Extracted Table")
+                st.dataframe(df, height=300)
+                towrite = io.BytesIO()
+                df.to_excel(towrite, index=False, engine='openpyxl')
+                towrite.seek(0)
+                st.download_button(
+                    label="Download as Excel",
+                    data=towrite,
+                    file_name=file_name,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+        else:
+            st.warning("No table data found in the uploaded PDF.")
+    else:
+        st.info(f"Please upload a {extractor_name} PDF file to get started.")
+
 # ----------- Tool Selector UI -----------
 st.markdown("""
     <div style='text-align:center; margin-top:2rem; margin-bottom:1.5rem;'>
@@ -121,6 +188,7 @@ st.markdown("""
 TOOL_OPTIONS = [
     "-- Select a tool --",
     "🟦 Google DNTS Extractor",
+    "🟩 Google Invoice Extractor",
     "Other"
 ]
 tool = st.selectbox(
@@ -131,80 +199,41 @@ tool = st.selectbox(
 
 if tool == "-- Select a tool --":
     st.info("Please select a tool above to get started.")
-
 elif tool == "🟦 Google DNTS Extractor":
-    st.title("PDF TO EXCEL")
-    st.write("Upload one PDF containing a **'Summary of costs by domain'** table. The app will extract the table and let you download it as Excel.")
-    st.info("Upload a Google DNTS invoice PDF containing a 'Summary of costs by domain' table.")
-    uploaded_file = st.file_uploader("Choose your Google DNTS Invoice PDF", type=["pdf"], accept_multiple_files=False)
-    if uploaded_file:
-        # Extract invoice info
-        invoice_num, invoice_date = extract_invoice_info(uploaded_file)
-        today_str = datetime.today().strftime("%d/%m/%Y")
-        remarks = f"GOOGLE INV-{invoice_num}" if invoice_num else "GOOGLE INV-UNKNOWN"
-
-        if invoice_num and invoice_date:
-            st.success(f"Invoice Number: **{invoice_num}** | Invoice Date: **{format_invoice_date(invoice_date)}**")
-        else:
-            st.warning("Could not extract Invoice Number or Invoice Date from PDF header.")
-
-        # Prepare DNTS header dataframe
-        header_df = pd.DataFrame([make_dnts_header_row(invoice_num, invoice_date, today_str, remarks)], columns=DNTS_HEADER_COLS)
-        st.subheader("DNTS Header Preview")
-        st.dataframe(header_df, height=120)
-
-        # Extract and show the table
-        table_rows = extract_table_from_text(uploaded_file)
-        dnts_item_data = []
-        for idx, (domain, customer_id, amount) in enumerate(table_rows, 1):
-            formatted_amount = format_amount(amount)
-            item_name = (
-                f"GOOGLE INV-{invoice_num} / DOMAIN NAME : {domain} / CUSTOMER ID : {customer_id} / AMOUNT - USD - {formatted_amount}"
-            ).upper()
-            dnts_item_data.append([
-                idx,  # S.No
-                1,    # Ref. Key
-                "NS", # Item_Code
-                item_name, # Item_Name
-                "NA", # Grade1
-                "NA", # Grade2
-                "NOS", # UOM
-                1,     # Qty
-                0,     # Qty_Ls
-                formatted_amount,   # Rate
-                14401, # Main_Account
-                "SDIG005", # Sub_Account
-                "PUHO", # Division
-                "GEN",  # Department
-                "ZZ-COMM" # Analysis-2
-            ])
-        dnts_item_df = pd.DataFrame(dnts_item_data, columns=DNTS_ITEM_COLS)
-
-        st.subheader("DNTS Items Preview")
-        st.dataframe(dnts_item_df)
-
-        # Download Excel (bottom button)
-        st.markdown("## 📥 Download your Excel file below:")
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            header_df.to_excel(writer, sheet_name='DNTS_HEADER', index=False)
-            dnts_item_df.to_excel(writer, sheet_name='DNTS_ITEM', index=False)
-        output.seek(0)
-        st.download_button(
-            label=f"⬇️ Download DNTS Excel",
-            data=output.getvalue(),
-            file_name=f"DNTS_Invoice_{invoice_num or 'unknown'}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="download_bottom"
-        )
-    else:
-        st.info("Please upload a Google DNTS invoice PDF file to get started.")
-
+    def dnts_item_row(idx, domain, customer_id, amount, invoice_num):
+        formatted_amount = format_amount(amount)
+        item_name = (
+            f"GOOGLE INV-{invoice_num} / DOMAIN NAME : {domain} / CUSTOMER ID : {customer_id} / AMOUNT - USD - {formatted_amount}"
+        ).upper()
+        return [
+            idx, 1, "NS", item_name, "NA", "NA", "NOS", 1, 0, formatted_amount, 14401, "SDIG005", "PUHO", "GEN", "ZZ-COMM"
+        ]
+    extractor_workflow(
+        extractor_name="Google DNTS Extractor",
+        extractor_info="Upload one PDF containing a **'Summary of costs by domain'** table. The app will extract the table and let you download it as Excel.",
+        file_uploader_label="Choose your Google DNTS Invoice PDF",
+        extract_invoice_info_func=extract_invoice_info,
+        extract_table_func=extract_table_from_text,
+        table_columns=DNTS_ITEM_COLS[:3],
+        file_name_template="{invoice_num}-{file_date}.xlsx",
+        show_header_df_func=make_dnts_header_row,
+        header_columns=DNTS_HEADER_COLS,
+        item_row_builder=dnts_item_row,
+        item_columns=DNTS_ITEM_COLS
+    )
+elif tool == "🟩 Google Invoice Extractor":
+    extractor_workflow(
+        extractor_name="Google Invoice Extractor",
+        extractor_info="Upload a Google Invoice PDF. The app will extract the relevant data and let you download it as Excel.",
+        file_uploader_label="Choose your Google Invoice PDF",
+        extract_invoice_info_func=extract_invoice_info_invoice,
+        extract_table_func=extract_invoice_table,
+        table_columns=GOOGLE_INVOICE_COLS,
+        file_name_template="{invoice_num}-{file_date}.xlsx"
+    )
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
     st.info("Currently, only the Google DNTS Extractor tool is available. More tools can be added based on your requirements.")
-
-# ----------- Streamlit UI -----------
 
 st.markdown("""
 <footer style='text-align:center; margin-top:3rem; color:#1a73e8; font-size:20px; font-weight:bold; font-family: Google Sans, sans-serif;'>
