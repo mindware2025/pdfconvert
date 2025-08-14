@@ -245,14 +245,33 @@ elif tool == "🟩 Google Invoice Extractor":
     )
 elif tool == "📄 Claims Automation":
     st.title("Claims Automation")
-    with st.sidebar:
-        st.header("Inputs")
+    
+    # Create columns for better layout
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        st.header("📁 Upload Files")
         source1_file = st.file_uploader("Source File 1 (.xlsx)", type=["xlsx"], accept_multiple_files=False, key="claims_source1")
         master1_file = st.file_uploader("Master File 1 (.xlsx)", type=["xlsx"], accept_multiple_files=False, key="claims_master1")
         source2_file = st.file_uploader("Source File 2 (.xlsx)", type=["xlsx"], accept_multiple_files=False, key="claims_source2")
         master2_file = st.file_uploader("Master File 2 (.xlsx)", type=["xlsx"], accept_multiple_files=False, key="claims_master2")
-
-    run_clicked = st.button("Generate Output", key="claims_run")
+        
+        st.markdown("---")
+        run_clicked = st.button("🚀 Generate Output", key="claims_run", use_container_width=True)
+    
+    with col2:
+        st.header("ℹ️ Instructions")
+        st.markdown("""
+        **Required Files:**
+        - **Source File 1**: Main source data (required)
+        
+        **Optional Files:**
+        - **Master File 1**: Employee mapping (enhances output)
+        - **Source File 2**: Additional data (enhances output)  
+        - **Master File 2**: Account mapping (enhances output)
+        
+        Upload at least Source File 1, then click Generate Output to download the processed Excel file.
+        """)
 
     if run_clicked:
         if not source1_file:
