@@ -12,6 +12,16 @@ from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 load_dotenv()
 from extractors.google_invoice import extract_table_from_text as extract_invoice_table, extract_invoice_info as extract_invoice_info_invoice, GOOGLE_INVOICE_COLS
+from claims_automation import (
+    build_output_rows_from_source1,
+    write_output_excel,
+    read_source1_rows,
+    read_master1_map,
+    read_source2_rows,
+    build_debit_rows_from_source2,
+    read_master2_entries,
+    derive_defaults_from_source1,
+)
 
 
 st.set_page_config(
@@ -76,8 +86,9 @@ DEFAULTS = {
 }
 
 
-CORRECT_USERNAME = os.getenv("NAME")
-CORRECT_PASSWORD = os.getenv("PASSWORD")
+CORRECT_USERNAME = "admin"
+CORRECT_PASSWORD = "admin"
+
 if "login_state" not in st.session_state:
     st.session_state.login_state = "login" 
 
@@ -189,6 +200,7 @@ TOOL_OPTIONS = [
     "-- Select a tool --",
     "🟦 Google DNTS Extractor",
     "🟩 Google Invoice Extractor",
+    "📄 Claims Automation",
     "Other"
 ]
 tool = st.selectbox(
@@ -231,6 +243,70 @@ elif tool == "🟩 Google Invoice Extractor":
         table_columns=GOOGLE_INVOICE_COLS,
         file_name_template="{invoice_num}-{file_date}.xlsx"
     )
+elif tool == "📄 Claims Automation":
+    st.title("Claims Automation")
+    with st.sidebar:
+        st.header("Inputs")
+        source1_file = st.file_uploader("Source File 1 (.xlsx)", type=["xlsx"], accept_multiple_files=False, key="claims_source1")
+        master1_file = st.file_uploader("Master File 1 (.xlsx)", type=["xlsx"], accept_multiple_files=False, key="claims_master1")
+        source2_file = st.file_uploader("Source File 2 (.xlsx)", type=["xlsx"], accept_multiple_files=False, key="claims_source2")
+        master2_file = st.file_uploader("Master File 2 (.xlsx)", type=["xlsx"], accept_multiple_files=False, key="claims_master2")
+
+    run_clicked = st.button("Generate Output", key="claims_run")
+
+    if run_clicked:
+        if not source1_file:
+            st.error("Please upload Source File 1.")
+            st.stop()
+        try:
+            src_rows = read_source1_rows(source1_file)
+            master_map = read_master1_map(master1_file) if master1_file else None
+            src2_rows = read_source2_rows(source2_file) if source2_file else None
+            master2_entries = read_master2_entries(master2_file) if master2_file else None
+
+            credit_rows = build_output_rows_from_source1(
+                src_rows,
+                master1_map=master_map,
+                source2_rows=src2_rows,
+                user_id_col="Sub Acct",
+            )
+
+            src1_defaults = derive_defaults_from_source1(src_rows)
+
+            doc_ref = ""
+            for r in src_rows:
+                val = r.get("Doc Ref.", "")
+                if val and str(val).strip():
+                    doc_ref = str(val).strip()
+                    break
+
+            debit_rows = build_debit_rows_from_source2(
+                src2_rows,
+                master2_entries=master2_entries,
+                master1_map=master_map,
+                default_div=src1_defaults.get("Div", ""),
+                default_dept=src1_defaults.get("Dept", ""),
+                default_anly1=src1_defaults.get("Anly1", ""),
+                default_anly2=src1_defaults.get("Anly2", ""),
+                default_currency=src_rows[0].get("Currency", "") if src_rows else "",
+                doc_ref=doc_ref,
+            )
+
+            out_rows = credit_rows + debit_rows
+
+            output_buffer = io.BytesIO()
+            write_output_excel(output_buffer, out_rows)
+            output_buffer.seek(0)
+
+            st.download_button(
+                label="Download claims_output.xlsx",
+                data=output_buffer,
+                file_name="claims_output.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="claims_download"
+            )
+        except Exception as e:
+            st.error(f"Error: {e}")
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
     st.info("Currently, only the Google DNTS Extractor tool is available. More tools can be added based on your requirements.")
