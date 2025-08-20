@@ -247,10 +247,10 @@ elif tool == "📄 Claims Automation":
     st.title("Claims Automation")
     
     st.header("📁 Upload Files")
-    source1_file = st.file_uploader("Source File 1 (.xlsx)", type=["xlsx"], accept_multiple_files=False, key="claims_source1")
-    master1_file = st.file_uploader("Master File 1 (.xlsx)", type=["xlsx"], accept_multiple_files=False, key="claims_master1")
-    source2_file = st.file_uploader("Source File 2 (.xlsx)", type=["xlsx"], accept_multiple_files=False, key="claims_source2")
-    master2_file = st.file_uploader("Master File 2 (.xlsx)", type=["xlsx"], accept_multiple_files=False, key="claims_master2")
+    source1_file = st.file_uploader("JV Orion from SAP (.xlsx)", type=["xlsx"], accept_multiple_files=False, key="claims_source1")
+    master1_file = st.file_uploader("User information (.xlsx)", type=["xlsx"], accept_multiple_files=False, key="claims_master1")
+    source2_file = st.file_uploader("Employee benefits (.xlsx)", type=["xlsx"], accept_multiple_files=False, key="claims_source2")
+    master2_file = st.file_uploader("Main acc file (.xlsx)", type=["xlsx"], accept_multiple_files=False, key="claims_master2")
     
     st.markdown("---")
     run_clicked = st.button("🚀 Generate Output", key="claims_run", use_container_width=True)
