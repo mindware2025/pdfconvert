@@ -547,6 +547,7 @@ def build_output_rows_from_source1(
 
         set_col("Val Date", doc_dt_str)
         set_col("Doc Ref", doc_ref_src)
+        set_col("TH Doc ref", doc_ref_src)
         # Per requirement: Due Dt should be the same as Doc Dt for all rows
         set_col("Due Dt", doc_dt_str)
 
@@ -666,6 +667,7 @@ def build_debit_rows_from_source2(
         set_col("Due Dt", doc_dt_str)
         if doc_ref and str(doc_ref).strip() != "":
             set_col("Doc Ref", str(doc_ref).strip())
+            set_col("TH Doc ref", str(doc_ref).strip()) 
 
         purpose = str(src.get("Purpose/Description", "") or "").strip()
         benefit_item_text = str(src.get("Benefit Item", "") or "").strip()
