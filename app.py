@@ -94,11 +94,11 @@ DEFAULTS = {
     "doc_src_locn": "UJ000",
     "location_code": "UJ200"
 }
-CORRECT_USERNAME = "admin"
-CORRECT_PASSWORD = "admin"
+#CORRECT_USERNAME = "admin"
+#CORRECT_PASSWORD = "admin"
 
-#CORRECT_USERNAME = os.getenv("NAME")
-#CORRECT_PASSWORD = os.getenv("PASSWORD")
+CORRECT_USERNAME = os.getenv("NAME")
+CORRECT_PASSWORD = os.getenv("PASSWORD")
 
 
 if "login_state" not in st.session_state:
