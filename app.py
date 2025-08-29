@@ -6,12 +6,21 @@ import tempfile
 import os
 import io
 from datetime import datetime
+from openpyxl.styles import PatternFill
 
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 load_dotenv()
 from extractors.google_invoice import extract_table_from_text as extract_invoice_table, extract_invoice_info as extract_invoice_info_invoice, GOOGLE_INVOICE_COLS
+from extractors.dell_invoice import (
+    extract_invoice_info as extract_dell_invoice_info,
+    extract_table_from_text as extract_dell_table,
+    DELL_INVOICE_COLS,
+    PRE_ALERT_HEADERS,
+    build_pre_alert_rows,
+    read_master_mapping,
+)
 from extractors.cloud_invoice import process_cloud_invoice
 from claims_automation import (
     build_output_rows_from_source1,
@@ -85,11 +94,11 @@ DEFAULTS = {
     "doc_src_locn": "UJ000",
     "location_code": "UJ200"
 }
-#CORRECT_USERNAME = "admin"
-#CORRECT_PASSWORD = "admin"
+CORRECT_USERNAME = "admin"
+CORRECT_PASSWORD = "admin"
 
-CORRECT_USERNAME = os.getenv("NAME")
-CORRECT_PASSWORD = os.getenv("PASSWORD")
+#CORRECT_USERNAME = os.getenv("NAME")
+#CORRECT_PASSWORD = os.getenv("PASSWORD")
 
 
 if "login_state" not in st.session_state:
@@ -333,6 +342,88 @@ elif tool == "🧾 Cloud Invoice Tool":
             file_name="cloud_invoice_output.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
+elif tool == "💻 Dell Invoice Extractor":
+    st.title("Dell Invoice Extractor (Pre-Alert Upload)")
+    st.write("Upload one or more Dell invoice PDFs. We'll generate a single Excel with sheet 'PRE ALERT UPLOAD'.")
+    uploaded_files = st.file_uploader("Choose Dell invoice PDF(s)", type=["pdf"], accept_multiple_files=True, key="dell_upload")
+    master_file = st.file_uploader("Master Excel (starts header at row 9)", type=["xlsx"], key="dell_master")
+    if uploaded_files:
+        from datetime import datetime, timedelta
+        tomorrow_date = (datetime.today() + timedelta(days=1)).strftime("%d/%m/%Y")
+        all_rows = []
+        master_lookup = None
+        supplier_counts = None
+        orion_counts = None
+        if master_file is not None:
+            try:
+                master_lookup, supplier_counts, orion_counts = read_master_mapping(master_file)
+            except Exception as e:
+                st.warning(f"Could not read master file: {e}")
+        diag: list[dict] = []
+        for f in uploaded_files:
+            try:
+                rows = build_pre_alert_rows(
+                    f,
+                    tomorrow_date,
+                    master_lookup=master_lookup,
+                    supplier_counts=supplier_counts,
+                    orion_counts=orion_counts,
+                    diagnostics=diag,
+                )
+                all_rows.extend(rows)
+            except Exception as e:
+                st.warning(f"Failed to parse {getattr(f, 'name', 'file')}: {e}")
+        if all_rows:
+            df = pd.DataFrame(all_rows, columns=PRE_ALERT_HEADERS)
+            st.subheader("PRE ALERT UPLOAD Preview")
+            st.dataframe(df, height=300)
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, sheet_name='PRE ALERT UPLOAD', index=False)
+                # Apply color highlights on PRE ALERT UPLOAD based on matching diagnostics
+                if diag:
+                    ws = writer.sheets['PRE ALERT UPLOAD']
+                    # Column indices (1-based): M=13, N=14
+                    red = PatternFill(fill_type='solid', start_color='FFFF0000', end_color='FFFF0000')
+                    yellow = PatternFill(fill_type='solid', start_color='FFFFFF00', end_color='FFFFFF00')
+                    green = PatternFill(fill_type='solid', start_color='FF00FF00', end_color='FF00FF00')
+                    for i, d in enumerate(diag, start=2):  # start at row 2 (after header)
+                        matched = d.get('matched', False)
+                        sup_matches = int(d.get('supplier_matches', 0))
+                        ori_matches = int(d.get('orion_matches', 0))
+                        fill = None
+                        if not matched:
+                            fill = red
+                        elif sup_matches > 1:
+                            fill = yellow
+                        elif ori_matches > 1:
+                            fill = green
+                        if fill is not None:
+                            ws.cell(row=i, column=13).fill = fill
+                            ws.cell(row=i, column=14).fill = fill
+
+                # Write master file content as sheet 2 if provided
+                if master_file is not None:
+                    try:
+                        master_file.seek(0)
+                    except Exception:
+                        pass
+                    try:
+                        df_master = pd.read_excel(master_file, header=8)
+                        df_master.to_excel(writer, sheet_name='MASTER', index=False)
+                    except Exception:
+                        pass
+            output.seek(0)
+            st.download_button(
+                label="⬇️ Download PRE ALERT UPLOAD",
+                data=output.getvalue(),
+                file_name="pre_alert_upload.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_dell_pre_alert"
+            )
+        else:
+            st.warning("No items found in the uploaded PDF(s).")
 
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
