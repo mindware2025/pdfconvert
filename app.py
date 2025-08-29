@@ -205,6 +205,7 @@ TOOL_OPTIONS = [
     "🟩 Google Invoice Extractor",
     "📄 Claims Automation",
     "🧾 Cloud Invoice Tool",
+    "💻 Dell Invoice Extractor", 
     "Other"
 ]
 tool = st.selectbox(

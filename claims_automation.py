@@ -531,7 +531,7 @@ def build_output_rows_from_source1(
         set_col("Main A/C", "12501")
         set_col("Sub A/C", sub_acct)
         set_col("Div", division)
-        set_col("Dept", dept)
+        set_col("Dept", "GEN")
         set_col("Anly1", anly1)
         set_col("Anly2", anly2)
         set_col("Currency", currency)
@@ -650,8 +650,7 @@ def build_debit_rows_from_source2(
             set_col("Acty1", acty1_value)
         if default_div is not None and str(default_div).strip() != "":
             set_col("Div", str(default_div).strip())
-        if default_dept is not None and str(default_dept).strip() != "":
-            set_col("Dept", str(default_dept).strip())
+        set_col("Dept", "GEN")
         if default_anly1 is not None and str(default_anly1).strip() != "":
             set_col("Anly1", str(default_anly1).strip())
         if default_anly2 is not None and str(default_anly2).strip() != "":
