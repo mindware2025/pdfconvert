@@ -18,7 +18,7 @@ from typing import List, Dict, Any, Optional, Union, IO
 
 from dateutil import parser as date_parser
 from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Alignment
+from openpyxl.styles import Alignment, PatternFill
 
 # ---------------------------------------------------------------------------
 # Configuration & constants
@@ -773,6 +773,17 @@ def write_output_excel(path_or_stream: Union[str, IO[bytes]], rows: List[List[An
 
     # Improve readability
     _apply_multiline_alignment(ws, ["Detail Narration", "Header Narration"]) 
+
+    # Highlight rows where Main A/C = 54909 in purple
+    purple_fill = PatternFill(start_color="800080", end_color="800080", fill_type="solid")
+    main_ac_col_idx = OUTPUT_HEADERS.index("Main A/C") + 1  # 1-based index
+    
+    for row_idx in range(2, ws.max_row + 1):  # Start from row 2 (after header)
+        cell_value = ws.cell(row=row_idx, column=main_ac_col_idx).value
+        if str(cell_value).strip() == "54909":
+            # Highlight the entire row in purple
+            for col_idx in range(1, ws.max_column + 1):
+                ws.cell(row=row_idx, column=col_idx).fill = purple_fill
 
     wb.save(path_or_stream)
 
