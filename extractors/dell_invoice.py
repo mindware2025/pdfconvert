@@ -380,16 +380,42 @@ def build_pre_alert_rows(
                         "orion_matches": (orion_counts.get((po_key, _normalize_item_code(mapped_item_code)), 1) if orion_counts else 1),
                     })
             else:
-                if diagnostics is not None:
-                    diagnostics.append({
-                        "po": po_key,
-                        "supplier_item_code": item_no_norm,
-                        "matched": False,
-                        "orion_item_code": "",
-                        "pi_item_desc": "",
-                        "supplier_matches": 0,
-                        "orion_matches": 0,
-                    })
+                # Fallback: allow prefix match on supplier item code within same PO
+                # Example: master has '706-12539-ABC' and PDF has '706-12539'
+                # Also allow flexible PO matching: master PO and PDF PO can be prefix-compatible
+                def po_flex_match(master_po: str, pdf_po: str) -> bool:
+                    return bool(master_po) and bool(pdf_po) and (master_po.startswith(pdf_po) or pdf_po.startswith(master_po))
+
+                candidates: List[Tuple[Tuple[str, str], Tuple[str, str]]] = [
+                    (k, v) for k, v in master_lookup.items()
+                    if po_flex_match(k[0], po_key) and (k[1].startswith(item_no_norm) or item_no_norm.startswith(k[1]))
+                ]
+                if candidates:
+                    # Prefer the longest supplier code match to reduce ambiguity
+                    candidates.sort(key=lambda kv: len(kv[0][1]), reverse=True)
+                    chosen_key, (mapped_item_code, mapped_item_desc) = candidates[0]
+                    supplier_match_count = len(candidates)
+                    if diagnostics is not None:
+                        diagnostics.append({
+                            "po": po_key,
+                            "supplier_item_code": item_no_norm,
+                            "matched": True,
+                            "orion_item_code": mapped_item_code,
+                            "pi_item_desc": mapped_item_desc,
+                            "supplier_matches": supplier_match_count,
+                            "orion_matches": (orion_counts.get((po_key, _normalize_item_code(mapped_item_code)), 1) if orion_counts else 1),
+                        })
+                else:
+                    if diagnostics is not None:
+                        diagnostics.append({
+                            "po": po_key,
+                            "supplier_item_code": item_no_norm,
+                            "matched": False,
+                            "orion_item_code": "",
+                            "pi_item_desc": "",
+                            "supplier_matches": 0,
+                            "orion_matches": 0,
+                        })
         row = [
             "PO",  # PO Txn Code
             headers.get("po_number", ""),
