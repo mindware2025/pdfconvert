@@ -98,10 +98,10 @@ def last_day_of_previous_month(today: Optional[date] = None) -> date:
 
 
 def to_excel_date_string(d: date | None) -> str:
-    """Format a date as dd-mm-YYYY for Excel cells."""
+    """Format a date as dd/mm/YYYY for Excel cells."""
     if d is None:
         return ""
-    return d.strftime("%d-%m-%Y")
+    return d.strftime("%d/%m/%Y")
 
 
 def parse_date_maybe(value: Any) -> str:

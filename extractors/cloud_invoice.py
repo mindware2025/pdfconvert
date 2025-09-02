@@ -25,7 +25,7 @@ def highlight_red(val):
 # === Main Processing Function ===
 def process_cloud_invoice(df):
     today = datetime.today()
-    today_str = f"{today.month}/{today.day}/{today.year}"
+    today_str = f"{today.day:02d}/{today.month:02d}/{today.year}"
     out_rows = []
 
     # === Mappings ===
@@ -157,9 +157,9 @@ def process_cloud_invoice(df):
         except Exception:
             out_row["Rate Per Qty"] = 0
         try:
-            out_row["Gross Value"] = f"{float(gross_value):.2f}"
+            out_row["Gross Value"] = round(float(gross_value), 2)
         except Exception:
-            out_row["Gross Value"] = gross_value
+            out_row["Gross Value"] = 0.00
 
         for field in [
             "ITEM Discount Code", "ITEM Discount %", "ITEM Discount Currency", "ITEM Discount Basis", "ITEM Disc Value",
