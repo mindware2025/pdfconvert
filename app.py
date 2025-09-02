@@ -403,6 +403,20 @@ elif tool == "💻 Dell Invoice Extractor":
                             ws.cell(row=i, column=13).fill = fill
                             ws.cell(row=i, column=14).fill = fill
 
+                # Create COMPONENT UPLOAD sheet with only the header row
+                component_headers = [
+                    'PO Txn Code',
+                    'PO Number',
+                    'Parent Item Code',
+                    'Component Item Code',
+                    'UOM',
+                    'Qty',
+                    'Rate',
+                ]
+                pd.DataFrame(columns=component_headers).to_excel(
+                    writer, sheet_name='COMPONENT UPLOAD', index=False
+                )
+
                 # Write master file content as sheet 2 if provided
                 if master_file is not None:
                     try:
