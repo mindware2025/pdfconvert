@@ -245,7 +245,46 @@ def process_cloud_invoice(df):
    
     result_df = pd.DataFrame(out_rows, columns=CLOUD_INVOICE_HEADER)
 
-    
+    # === Aggregation for AS-CNS ===
+    try:
+        if not result_df.empty:
+            # Split AS-CNS and non AS-CNS
+            is_as_cns = result_df["ITEM Code"].astype(str).str.strip().str.upper() == "AS-CNS"
+            df_as = result_df[is_as_cns].copy()
+            df_other = result_df[~is_as_cns].copy()
+
+            if not df_as.empty:
+                # Ensure numeric for Gross Value and Cost
+                df_as["Gross Value"] = pd.to_numeric(df_as["Gross Value"], errors="coerce").fillna(0.0)
+                df_as["Cost"] = pd.to_numeric(df_as["Cost"], errors="coerce").fillna(0.0)
+
+                # Group by Invoice No., End User, and LPO Number
+                group_cols = ["Invoice No.", "End User", "LPO Number"]
+                agg = df_as.groupby(group_cols, as_index=False).agg({
+                    "Gross Value": "sum"
+                })
+
+                # Take the first row's other fields for each group
+                merged = (
+                    agg.merge(
+                        df_as.drop(columns=["Gross Value"]).drop_duplicates(subset=group_cols),
+                        on=group_cols,
+                        how="left"
+                    )
+                )
+
+                # Set Quantity = 1, Rate Per Qty = sum, Cost = sum (numeric)
+                merged["Gross Value"] = merged["Gross Value"].round(2)
+                merged["Quantity"] = 1
+                merged["Rate Per Qty"] = merged["Gross Value"]
+                merged["Cost"] = merged["Gross Value"]
+
+                # Recombine
+                result_df = pd.concat([df_other, merged], ignore_index=True)[CLOUD_INVOICE_HEADER]
+    except Exception:
+        # On any unexpected issue, fall back to original result_df
+        pass
+
     styled_df = result_df.style.applymap(highlight_red, subset=["Customer Code", "ITEM Code"])
     return styled_df
 
