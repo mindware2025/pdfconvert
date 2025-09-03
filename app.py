@@ -21,7 +21,7 @@ from extractors.dell_invoice import (
     build_pre_alert_rows,
     read_master_mapping,
 )
-from extractors.cloud_invoice import process_cloud_invoice
+from extractors.cloud_invoice import process_cloud_invoice, build_cloud_invoice_df
 from claims_automation import (
     build_output_rows_from_source1,
     write_output_excel,
@@ -94,11 +94,11 @@ DEFAULTS = {
     "doc_src_locn": "UJ000",
     "location_code": "UJ200"
 }
-#CORRECT_USERNAME = "admin"
-#CORRECT_PASSWORD = "admin"
+CORRECT_USERNAME = "admin"
+CORRECT_PASSWORD = "admin"
 
-CORRECT_USERNAME = os.getenv("NAME")
-CORRECT_PASSWORD = os.getenv("PASSWORD")
+#CORRECT_USERNAME = os.getenv("NAME")
+#CORRECT_PASSWORD = os.getenv("PASSWORD")
 
 
 if "login_state" not in st.session_state:
@@ -330,16 +330,25 @@ elif tool == "🧾 Cloud Invoice Tool":
         df = pd.read_csv(uploaded_file)
         st.write("Preview of uploaded file:", df.head())
 
-        processed_df = process_cloud_invoice(df)
+        # Build plain DataFrame for splitting
+        final_df = build_cloud_invoice_df(df)
+        st.subheader("Processed Preview")
+        st.dataframe(final_df.head(50))
+
+        # Split by sign of Gross Value
+        pos_df = final_df[final_df["Gross Value"].astype(float) >= 0].copy()
+        neg_df = final_df[final_df["Gross Value"].astype(float) < 0].copy()
 
         output_buffer = io.BytesIO()
-        processed_df.to_excel(output_buffer, index=False, engine='openpyxl')
+        with pd.ExcelWriter(output_buffer, engine='openpyxl') as writer:
+            pos_df.to_excel(writer, sheet_name='Positive', index=False)
+            neg_df.to_excel(writer, sheet_name='Negative', index=False)
         output_buffer.seek(0)
 
         st.download_button(
-            label="Download processed Excel",
+            label="Download Cloud Invoice (Positive & Negative)",
             data=output_buffer,
-            file_name="cloud_invoice_output.xlsx",
+            file_name="cloud_invoice_split.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
