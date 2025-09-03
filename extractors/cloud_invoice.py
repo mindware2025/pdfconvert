@@ -79,8 +79,8 @@ def process_cloud_invoice(df):
         doc_loc = row.get("DocumentLocation", "")
         gross_value = row.get("GrossValue", 0)
 
-        # === Basic Fields ===
-        out_row["Invoice No."] = row.get("InvoiceNo", "") #this to be updated based on the rule 
+       
+        out_row["Invoice No."] = row.get("InvoiceNo", "") #to beeee updated
         out_row["Customer Code"] = row.get("CustomerCode", "")
         out_row["Customer Name"] = row.get("CustomerName", "")
         out_row["Invoice Date"] = today_str
@@ -117,7 +117,7 @@ def process_cloud_invoice(df):
         out_row["Billing Cycle Start Date"] = row.get("BillingCycleStartDate", "")
         out_row["Billing Cycle End Date"] = row.get("BillingCycleEndDate", "")
 
-        # === ITEM Code Matching ===
+        # === ITEM Code Matcching ===
         item_code = row.get("ITEMCode", "")
         item_desc = str(row.get("ITEMDescription", "")).lower()
 
@@ -136,7 +136,7 @@ def process_cloud_invoice(df):
             if not matched:
                 out_row["ITEM Code"] = ""
 
-        # === ITEM Name Composition ===
+        # === ITEM Name composition ===
         merged_desc = (
             str(row.get("ITEMDescription", "")) + "-" +
             str(row.get("ITEMName", "")) + "-" +
@@ -207,15 +207,15 @@ def process_cloud_invoice(df):
 
         out_rows.append(out_row)
 
-    # === Final DataFrame ===
+   
     result_df = pd.DataFrame(out_rows, columns=CLOUD_INVOICE_HEADER)
 
-    # === Apply Styling ===
+    
     styled_df = result_df.style.applymap(highlight_red, subset=["Customer Code", "ITEM Code"])
     return styled_df
 
-# === Example Usage ===
+
 if __name__ == "__main__":
-    input_df = pd.read_excel("your_input_file.xlsx")  # Replace with actual file name
+    input_df = pd.read_excel("your_input_file.xlsx")  
     styled_output = process_cloud_invoice(input_df)
     styled_output.to_excel("cloud_invoice_output.xlsx", index=False, engine="openpyxl")
