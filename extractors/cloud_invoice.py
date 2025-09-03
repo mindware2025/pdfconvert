@@ -72,8 +72,6 @@ def process_cloud_invoice(df):
             cost_val = float(cost)
         except Exception:
             cost_val = 0
-        if cost_val <= 0:
-            continue
 
         out_row = {}
         doc_loc = row.get("DocumentLocation", "")
@@ -103,19 +101,41 @@ def process_cloud_invoice(df):
         ]:
             out_row[field] = ""
 
-        item_desc_raw = str(row.get("ITEMDescription", "")).lower()
+        item_desc_raw = str(row.get("ITEMDescription", ""))
+        item_desc_lower = item_desc_raw.lower()
+        invoice_desc = str(row.get("InvoiceDescription", ""))
+
+        def extract_digits(s: str) -> str:
+            return "".join(ch for ch in s if ch.isdigit())
+
         sub_id = row.get("SubscriptionId", "")
         if pd.notna(sub_id) and str(sub_id).strip() != "":
-            out_row["Subscription Id"] = sub_id
-        elif "msaz-cns" in item_desc_raw:
-            out_row["Subscription Id"] = item_desc_raw[:73]
-        elif "reserved vm instance" in item_desc_raw:
+            out_row["Subscription Id"] = str(sub_id).strip()
+        elif "msaz-cns" in item_desc_lower:
+            # Last 36 digits from InvoiceDescription
+            digits = extract_digits(invoice_desc)
+            out_row["Subscription Id"] = digits[-36:] if len(digits) >= 1 else ""
+        elif "msri-cns" in item_desc_lower or "ms-ri-cns" in item_desc_lower:
+            # First 38 characters from InvoiceDescription
+            out_row["Subscription Id"] = invoice_desc[:38]
+        elif "reserved vm instance" in item_desc_lower:
             out_row["Subscription Id"] = item_desc_raw[:38]
         else:
             out_row["Subscription Id"] = "Sub"
 
-        out_row["Billing Cycle Start Date"] = row.get("BillingCycleStartDate", "")
-        out_row["Billing Cycle End Date"] = row.get("BillingCycleEndDate", "")
+        # Format billing cycle dates as dd/mm/YYYY
+        def fmt_date(value):
+            try:
+                from dateutil import parser as _parser
+                dt = _parser.parse(str(value), dayfirst=False, fuzzy=True)
+                return f"{dt.day:02d}/{dt.month:02d}/{dt.year}"
+            except Exception:
+                return str(value) if value is not None else ""
+
+        b_start = row.get("BillingCycleStartDate", "")
+        b_end = row.get("BillingCycleEndDate", "")
+        out_row["Billing Cycle Start Date"] = fmt_date(b_start)
+        out_row["Billing Cycle End Date"] = fmt_date(b_end)
 
         # === ITEM Code Matcching ===
         item_code = row.get("ITEMCode", "")
@@ -137,14 +157,29 @@ def process_cloud_invoice(df):
                 out_row["ITEM Code"] = ""
 
         # === ITEM Name composition ===
-        merged_desc = (
-            str(row.get("ITEMDescription", "")) + "-" +
-            str(row.get("ITEMName", "")) + "-" +
-            str(out_row["Subscription Id"]) + "-" +
-            str(out_row["Billing Cycle Start Date"]) + "-" +
-            str(out_row["Billing Cycle End Date"])
-        )
-        out_row["ITEM Name"] = merged_desc
+        item_code_for_name = str(out_row.get("ITEM Code", "")).strip().upper()
+        special_codes = {"MSAZ-CNS", "AS-CNS", "AWS-UTILITIES-CNS", "MS-RI-CNS", "MSRI-CNS"}
+        if item_code_for_name in special_codes:
+            # End date month/year
+            end_date_str = str(out_row.get("Billing Cycle End Date", ""))
+            mm_yyyy = end_date_str[3:10] if len(end_date_str) >= 7 else end_date_str
+            merged_desc = (
+                f"{str(row.get('ITEMDescription', ''))}-"
+                f"{str(row.get('ITEMName', ''))}-"
+                f"{item_code_for_name}-"
+                f"{str(out_row.get('Subscription Id', ''))}-"
+                f"{mm_yyyy}"
+            )
+            out_row["ITEM Name"] = merged_desc
+        else:
+            merged_desc = (
+                str(row.get("ITEMDescription", "")) + "-" +
+                str(row.get("ITEMName", "")) + "-" +
+                str(out_row["Subscription Id"]) + "-" +
+                str(out_row["Billing Cycle Start Date"]) + "-" +
+                str(out_row["Billing Cycle End Date"])
+            )
+            out_row["ITEM Name"] = merged_desc
 
         out_row["UOM"] = row.get("UOM", "")
         out_row["Grade code-1"] = row.get("Gradecode1", "")
