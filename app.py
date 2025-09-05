@@ -325,19 +325,81 @@ elif tool == "📄 Claims Automation":
 
 elif tool == "🧾 Cloud Invoice Tool":
     st.title("Cloud Invoice Tool")
+    st.markdown(
+        """
+        <div style="
+            padding: 18px 20px;
+            background: linear-gradient(90deg, #fff3cd, #ffeeba);
+            border: 2px solid #ffcc00;
+            border-radius: 10px;
+            font-weight: 700;
+            color: #7a5a00;
+            font-size: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            margin-bottom: 12px;
+        ">
+            <span style="font-size: 18px;">🚨 IMPORTANT:</span>
+            <span style="margin-left: 8px;">
+            Please make sure to <b>open the CB file</b>, click <b>Convert</b>, then <b>upload the converted file here</b> and use this tool; otherwise <b>you will have missing invoices</b>.
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <div style="
+            padding: 14px 16px;
+            background: #fff;
+            border: 1px dashed #ffcc00;
+            border-radius: 10px;
+            color: #4a4a4a;
+            font-size: 15px;
+            margin-bottom: 8px;
+        ">
+        <b>Follow these steps before uploading:</b>
+        <ol style="margin-top: 6px;">
+            <li>Open the <b>CB file</b>.</li>
+            <li>Click <b>Convert</b> to generate the latest output.</li>
+            <li>Upload the <b>converted file</b> here.</li>
+        </ol>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    confirmed = st.checkbox("I confirm I opened the CB file and clicked Convert ✅", key="cloud_cb_confirm")
+    if not confirmed:
+        st.warning("Please confirm the IMPORTANT notice steps above to proceed.")
+        st.stop()
     uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"], key="cloud_invoice_upload")
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
-        st.write("Preview of uploaded file:", df.head())
-
         # Build plain DataFrame for splitting
         final_df = build_cloud_invoice_df(df)
-        st.subheader("Processed Preview")
-        st.dataframe(final_df.head(50))
 
         # Split by sign of Gross Value
         pos_df = final_df[final_df["Gross Value"].astype(float) >= 0].copy()
         neg_df = final_df[final_df["Gross Value"].astype(float) < 0].copy()
+
+        # Show counts (excluding headers by definition) BEFORE previews
+        pos_count = int(len(pos_df.index))
+        neg_count = int(len(neg_df.index))
+        total_count = pos_count + neg_count
+        st.success(f"{pos_count} invoice positive , {neg_count} invoice negative , total invoices : {total_count}")
+
+        # VIP-style prominent summary
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.metric(label="✅ Positive invoices", value=pos_count)
+        with c2:
+            st.metric(label="❌ Negative invoices", value=neg_count)
+        with c3:
+            st.metric(label="🧮 Total invoices", value=total_count)
+
+        # Now show previews
+        st.write("Preview of uploaded file:", df.head())
+        st.subheader("Processed Preview")
+        st.dataframe(final_df.head(50))
 
         output_buffer = io.BytesIO()
         with pd.ExcelWriter(output_buffer, engine='openpyxl') as writer:

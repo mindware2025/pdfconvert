@@ -25,7 +25,7 @@ def highlight_red(val):
 # === Main Processing Function ===
 def process_cloud_invoice(df):
     today = datetime.today()
-    today_str = f"{today.day:02d}/{today.month:02d}/{today.year}"
+    today_str = f"{today.month:02d}-{today.day:02d}-{today.year}"
     out_rows = []
 
     # === Mappings ===
@@ -123,12 +123,12 @@ def process_cloud_invoice(df):
         else:
             out_row["Subscription Id"] = "Sub"
 
-        # Format billing cycle dates as dd/mm/YYYY
+        # Format billing cycle dates as MM-DD-YYYY
         def fmt_date(value):
             try:
                 from dateutil import parser as _parser
                 dt = _parser.parse(str(value), dayfirst=False, fuzzy=True)
-                return f"{dt.day:02d}/{dt.month:02d}/{dt.year}"
+                return f"{dt.month:02d}-{dt.day:02d}-{dt.year}"
             except Exception:
                 return str(value) if value is not None else ""
 
@@ -160,9 +160,14 @@ def process_cloud_invoice(df):
         item_code_for_name = str(out_row.get("ITEM Code", "")).strip().upper()
         special_codes = {"MSAZ-CNS", "AS-CNS", "AWS-UTILITIES-CNS", "MS-RI-CNS", "MSRI-CNS"}
         if item_code_for_name in special_codes:
-            # End date month/year
+            # End date month-year (MM-YYYY)
             end_date_str = str(out_row.get("Billing Cycle End Date", ""))
-            mm_yyyy = end_date_str[3:10] if len(end_date_str) >= 7 else end_date_str
+            try:
+                from dateutil import parser as _parser
+                dt_end = _parser.parse(str(b_end), dayfirst=False, fuzzy=True)
+                mm_yyyy = f"{dt_end.month:02d}-{dt_end.year}"
+            except Exception:
+                mm_yyyy = end_date_str
             merged_desc = (
                 f"{str(row.get('ITEMDescription', ''))}-"
                 f"{str(row.get('ITEMName', ''))}-"
@@ -295,7 +300,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
     Returns a plain DataFrame with columns CLOUD_INVOICE_HEADER.
     """
     today = datetime.today()
-    today_str = f"{today.day:02d}/{today.month:02d}/{today.year}"
+    today_str = f"{today.month:02d}-{today.day:02d}-{today.year}"
     out_rows: list[dict] = []
 
     exchange_rate_map = {
@@ -384,7 +389,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         def fmt_date(value):
             try:
                 dt = _parser.parse(str(value), dayfirst=False, fuzzy=True)
-                return f"{dt.day:02d}/{dt.month:02d}/{dt.year}"
+                return f"{dt.month:02d}-{dt.day:02d}-{dt.year}"
             except Exception:
                 return str(value) if value is not None else ""
         b_start = row.get("BillingCycleStartDate", "")
@@ -413,7 +418,11 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         special_codes = {"MSAZ-CNS", "AS-CNS", "AWS-UTILITIES-CNS", "MS-RI-CNS", "MSRI-CNS"}
         if item_code_for_name in special_codes:
             end_date_str = str(out_row.get("Billing Cycle End Date", ""))
-            mm_yyyy = end_date_str[3:10] if len(end_date_str) >= 7 else end_date_str
+            try:
+                dt_end = _parser.parse(str(b_end), dayfirst=False, fuzzy=True)
+                mm_yyyy = f"{dt_end.month:02d}-{dt_end.year}"
+            except Exception:
+                mm_yyyy = end_date_str
             merged_desc = (
                 f"{str(row.get('ITEMDescription', ''))}-"
                 f"{str(row.get('ITEMName', ''))}-"
