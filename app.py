@@ -94,11 +94,11 @@ DEFAULTS = {
     "doc_src_locn": "UJ000",
     "location_code": "UJ200"
 }
-#CORRECT_USERNAME = "admin"
-#CORRECT_PASSWORD = "admin"
+CORRECT_USERNAME = "admin"
+CORRECT_PASSWORD = "admin"
 
-CORRECT_USERNAME = os.getenv("NAME")
-CORRECT_PASSWORD = os.getenv("PASSWORD")
+#CORRECT_USERNAME = os.getenv("NAME")
+#CORRECT_PASSWORD = os.getenv("PASSWORD")
 
 
 if "login_state" not in st.session_state:
@@ -426,9 +426,12 @@ elif tool == "💻 Dell Invoice Extractor":
         master_lookup = None
         supplier_counts = None
         orion_counts = None
+        supplier_index = None
+        orion_index = None
+        po_price_index = None
         if master_file is not None:
             try:
-                master_lookup, supplier_counts, orion_counts = read_master_mapping(master_file)
+                master_lookup, supplier_counts, orion_counts, supplier_index, orion_index, po_price_index = read_master_mapping(master_file)
             except Exception as e:
                 st.warning(f"Could not read master file: {e}")
         diag: list[dict] = []
@@ -440,6 +443,9 @@ elif tool == "💻 Dell Invoice Extractor":
                     master_lookup=master_lookup,
                     supplier_counts=supplier_counts,
                     orion_counts=orion_counts,
+                    supplier_index=supplier_index,
+                    orion_index=orion_index,
+                    po_price_index=po_price_index,
                     diagnostics=diag,
                 )
                 all_rows.extend(rows)
@@ -452,27 +458,40 @@ elif tool == "💻 Dell Invoice Extractor":
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df.to_excel(writer, sheet_name='PRE ALERT UPLOAD', index=False)
-                # Apply color highlights on PRE ALERT UPLOAD based on matching diagnostics
+                # Format ETS (K) and ETA (L) as dates (short date)
+                ws = writer.sheets['PRE ALERT UPLOAD']
+                from datetime import datetime as _dt
+                for r in range(2, len(df) + 2):
+                    for c in (4, 11, 12):  # D, K, L
+                        cell = ws.cell(row=r, column=c)
+                        val = cell.value
+                        if isinstance(val, str):
+                            try:
+                                d = _dt.strptime(val, "%d/%m/%Y")
+                                cell.value = d
+                                cell.number_format = 'dd/mm/yyyy'
+                            except Exception:
+                                pass
+                # Apply color highlights on PRE ALERT UPLOAD based on new diagnostics logic
                 if diag:
                     ws = writer.sheets['PRE ALERT UPLOAD']
-                    # Column indices (1-based): M=13, N=14
                     red = PatternFill(fill_type='solid', start_color='FFFF0000', end_color='FFFF0000')
                     yellow = PatternFill(fill_type='solid', start_color='FFFFFF00', end_color='FFFFFF00')
                     green = PatternFill(fill_type='solid', start_color='FF00FF00', end_color='FF00FF00')
                     for i, d in enumerate(diag, start=2):  # start at row 2 (after header)
-                        matched = d.get('matched', False)
-                        sup_matches = int(d.get('supplier_matches', 0))
-                        ori_matches = int(d.get('orion_matches', 0))
+                        h = str(d.get('highlight', 'none')).lower()
                         fill = None
-                        if not matched:
+                        if h == 'red':
                             fill = red
-                        elif sup_matches > 1:
+                        elif h == 'yellow':
                             fill = yellow
-                        elif ori_matches > 1:
+                        elif h == 'green':
                             fill = green
                         if fill is not None:
                             ws.cell(row=i, column=13).fill = fill
                             ws.cell(row=i, column=14).fill = fill
+
+                # DEBUG/LOG sheet intentionally removed per request
 
                 # Create COMPONENT UPLOAD sheet with only the header row
                 component_headers = [
