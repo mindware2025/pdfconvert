@@ -5,6 +5,10 @@ import pdfplumber
 import pandas as pd
 
 from utils.helpers import normalize_line
+from datetime import datetime, timedelta
+
+
+today_plus_10 = (datetime.today() + timedelta(days=10)).strftime("%m/%d/%Y")
 
 
 DELL_INVOICE_COLS = [
@@ -539,13 +543,13 @@ def build_pre_alert_rows(
             headers.get("dell_order_no", ""),
             headers.get("invoice_date", ""),
             headers.get("customer_no", "") or headers.get("ed_order", "") or headers.get("dell_order_no", ""),
-            headers.get("shipping_method", ""),  # AWB per spec
-            "N/A",  # Bill of leading date
+            ""  ,# AWB per spec
+               today_plus_10,  # Bill of leading date
             "N/A",  # Shipping Agent
             "N/A",  # From Port
             "N/A",  # To Port
-            tomorrow_date,  # ETS
-            tomorrow_date,  # ETA (kept the same as ETS)
+               today_plus_10,  # ETS
+               today_plus_10,  # ETA (kept the same as ETS)
             mapped_item_code,  # Item Code (internal)
             mapped_item_desc,  # Item Desc (internal)
             "NOS",  # UOM
