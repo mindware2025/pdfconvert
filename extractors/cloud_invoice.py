@@ -300,7 +300,8 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
     Returns a plain DataFrame with columns CLOUD_INVOICE_HEADER.
     """
     today = datetime.today()
-    today_str = f"{today.month:02d}-{today.day:02d}-{today.year}"
+    today_str = f"{today.month:02d}/{today.day:02d}/{today.year}"
+
     out_rows: list[dict] = []
 
     exchange_rate_map = {
@@ -387,15 +388,18 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
 
         from dateutil import parser as _parser
         def fmt_date(value):
-            try:
-                dt = _parser.parse(str(value), dayfirst=False, fuzzy=True)
-                return f"{dt.month:02d}-{dt.day:02d}-{dt.year}"
-            except Exception:
-                return str(value) if value is not None else ""
+           try:
+               from dateutil import parser as _parser
+               dt = _parser.parse(str(value), dayfirst=False, fuzzy=True)
+               return f"{dt.month:02d}/{dt.day:02d}/{dt.year}"
+           except Exception:
+               return str(value) if value is not None else ""
+
         b_start = row.get("BillingCycleStartDate", "")
         b_end = row.get("BillingCycleEndDate", "")
         out_row["Billing Cycle Start Date"] = fmt_date(b_start)
         out_row["Billing Cycle End Date"] = fmt_date(b_end)
+        
 
         item_code = row.get("ITEMCode", "")
         item_desc = str(row.get("ITEMDescription", "")).lower()
@@ -445,8 +449,8 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         out_row["ITEM Name"] = merged_desc
 
         out_row["UOM"] = row.get("UOM", "")
-        out_row["Grade code-1"] = row.get("Gradecode1", "")
-        out_row["Grade code-2"] = row.get("GradeCode2", "")
+        out_row["Grade code-1"] = "N/A"
+        out_row["Grade code-2"] = "N/A"
         out_row["Quantity"] = row.get("Quantity", "")
         out_row["Qty Loose"] = row.get("QtyLoose", "")
         quantity = row.get("Quantity", 1)
