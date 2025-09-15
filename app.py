@@ -377,7 +377,7 @@ elif tool == "🧾 Cloud Invoice Tool":
         # Build plain DataFrame for splitting
         final_df = build_cloud_invoice_df(df)
 
-        # Split by sign of Gross Value
+        # Split by sign of Gross Value (for display metrics only)
         pos_df = final_df[final_df["Gross Value"].astype(float) >= 0].copy()
         neg_df = final_df[final_df["Gross Value"].astype(float) < 0].copy()
 
@@ -401,16 +401,16 @@ elif tool == "🧾 Cloud Invoice Tool":
         st.subheader("Processed Preview")
         st.dataframe(final_df.head(50))
 
+        # Write a single combined sheet (no separation into Positive/Negative)
         output_buffer = io.BytesIO()
         with pd.ExcelWriter(output_buffer, engine='openpyxl') as writer:
-            pos_df.to_excel(writer, sheet_name='Positive', index=False)
-            neg_df.to_excel(writer, sheet_name='Negative', index=False)
+            final_df.to_excel(writer, sheet_name='CLOUD INVOICE', index=False)
         output_buffer.seek(0)
 
         st.download_button(
-            label="Download Cloud Invoice (Positive & Negative)",
+            label="Download Cloud Invoice (Single Sheet)",
             data=output_buffer,
-            file_name="cloud_invoice_split.xlsx",
+            file_name="cloud_invoice.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 

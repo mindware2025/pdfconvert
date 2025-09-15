@@ -187,8 +187,9 @@ def process_cloud_invoice(df):
             out_row["ITEM Name"] = merged_desc
 
         out_row["UOM"] = row.get("UOM", "")
-        out_row["Grade code-1"] = row.get("Gradecode1", "")
-        out_row["Grade code-2"] = row.get("GradeCode2", "")
+        # Per request: use literal "NA" for both grade columns
+        out_row["Grade code-1"] = "NA"
+        out_row["Grade code-2"] = "NA"
         out_row["Quantity"] = row.get("Quantity", "")
         out_row["Qty Loose"] = row.get("QtyLoose", "")
         quantity = row.get("Quantity", 1)
@@ -449,8 +450,9 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         out_row["ITEM Name"] = merged_desc
 
         out_row["UOM"] = row.get("UOM", "")
-        out_row["Grade code-1"] = "N/A"
-        out_row["Grade code-2"] = "N/A"
+        # Per request: use literal "NA" for both grade columns
+        out_row["Grade code-1"] = "NA"
+        out_row["Grade code-2"] = "NA"
         out_row["Quantity"] = row.get("Quantity", "")
         out_row["Qty Loose"] = row.get("QtyLoose", "")
         quantity = row.get("Quantity", 1)
