@@ -1,12 +1,9 @@
 import streamlit as st
 import pandas as pd
-import pdfplumber
-import re
-import tempfile
-import os
 import io
 from datetime import datetime
 from openpyxl.styles import PatternFill
+from extractors.aws import process_multiple_aws_pdfs, AWS_OUTPUT_COLUMNS
 
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
 from utils.helpers import format_amount, format_invoice_date, format_month_year
@@ -94,11 +91,11 @@ DEFAULTS = {
     "doc_src_locn": "UJ000",
     "location_code": "UJ200"
 }
-#CORRECT_USERNAME = "admin"
-#CORRECT_PASSWORD = "admin"
+CORRECT_USERNAME = "admin"
+CORRECT_PASSWORD = "admin"
 
-CORRECT_USERNAME = os.getenv("NAME")
-CORRECT_PASSWORD = os.getenv("PASSWORD")
+#CORRECT_USERNAME = os.getenv("NAME")
+#CORRECT_PASSWORD = os.getenv("PASSWORD")
 
 
 if "login_state" not in st.session_state:
@@ -214,7 +211,8 @@ TOOL_OPTIONS = [
     "🟩 Google Invoice Extractor",
     "📄 Claims Automation",
     "🧾 Cloud Invoice Tool",
-    "💻 Dell Invoice Extractor", 
+    "💻 Dell Invoice Extractor",
+    "🟨 AWS Invoice Tool",
     "Other"
 ]
 tool = st.selectbox(
@@ -401,14 +399,49 @@ elif tool == "🧾 Cloud Invoice Tool":
         st.subheader("Processed Preview")
         st.dataframe(final_df.head(50))
 
-        # Write a single combined sheet (no separation into Positive/Negative)
+        # Prepare Versions sheet data (A: Invoice, B: LPO, C: End User, D-H with formulas)
+        try:
+            inv_series = final_df["Invoice No."].astype(str).fillna("")
+            lpo_series = final_df["LPO Number"].astype(str).fillna("")
+            end_user_series = final_df["End User"].astype(str).fillna("")
+            versions_rows = []
+            for idx in range(len(final_df)):
+                row_num = idx + 2  # excel row number (headers at row 1)
+                A = inv_series.iloc[idx]
+                B = lpo_series.iloc[idx]
+                C = end_user_series.iloc[idx]
+                combined = f"=A{row_num}&B{row_num}&C{row_num}"
+                v1 = f"=IF(A{row_num}=A{row_num-1},\"\",1)" if row_num >= 2 else "=1"
+                v2 = f"=IFERROR(IF(E{row_num}=\"\",E{row_num-1}+1,\"\"),F{row_num-1}+1)"
+                v3 = f"=\"-\"&E{row_num}&F{row_num}"
+                v4 = f"=A{row_num}&G{row_num}"
+                versions_rows.append({
+                    "Invoice": A,
+                    "LPO": B,
+                    "End User": C,
+                    "Combined (D)": combined,
+                    "Version1 (E)": v1,
+                    "Version2 (F)": v2,
+                    "Version3 (G)": v3,
+                    "Version4 (H)": v4,
+                })
+            versions_df = pd.DataFrame(versions_rows, columns=[
+                "Invoice", "LPO", "End User", "Combined (D)", "Version1 (E)", "Version2 (F)", "Version3 (G)", "Version4 (H)"
+            ])
+        except Exception:
+            versions_df = pd.DataFrame(columns=[
+                "Invoice", "LPO", "End User", "Combined (D)", "Version1 (E)", "Version2 (F)", "Version3 (G)", "Version4 (H)"
+            ])
+
+        # Write a single combined sheet and a Versions helper sheet
         output_buffer = io.BytesIO()
         with pd.ExcelWriter(output_buffer, engine='openpyxl') as writer:
             final_df.to_excel(writer, sheet_name='CLOUD INVOICE', index=False)
+            versions_df.to_excel(writer, sheet_name='VERSIONS', index=False)
         output_buffer.seek(0)
 
         st.download_button(
-            label="Download Cloud Invoice (Single Sheet)",
+            label="Download Cloud Invoice (with Versions Sheet)",
             data=output_buffer,
             file_name="cloud_invoice.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -704,6 +737,38 @@ elif tool == "💻 Dell Invoice Extractor":
             )
         else:
             st.warning("No items found in the uploaded PDF(s).")
+elif tool == "🟨 AWS Invoice Tool":
+    st.title("AWS Invoice Tool")
+    st.write("Upload AWS invoice PDF(s) and download the extracted data as Excel.")
+
+    uploaded_files = st.file_uploader("Choose AWS invoice PDF(s)", type=["pdf"], key="aws_upload", accept_multiple_files=True)
+
+    if uploaded_files:
+        try:
+            rows = process_multiple_aws_pdfs(uploaded_files)
+            if rows:
+                df = pd.DataFrame(rows, columns=AWS_OUTPUT_COLUMNS)
+                st.subheader("Extracted AWS Invoice Data")
+                st.dataframe(df, height=300)
+
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    df.to_excel(writer, sheet_name='AWS_INVOICE', index=False)
+                output.seek(0)
+
+                st.download_button(
+                    label="⬇️ Download finaloutput.xlsx",
+                    data=output.getvalue(),
+                    file_name="finaloutput.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            else:
+                st.warning("No data extracted from the uploaded AWS PDFs.")
+        except Exception as e:
+            st.error(f"Error processing AWS PDFs: {e}")
+    else:
+        st.info("Please upload one or more AWS invoice PDFs to begin.")
+
 
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
