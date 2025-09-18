@@ -98,8 +98,11 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         elif "msaz-cns" in item_desc_lower:
             digits = extract_digits(invoice_desc)
             out_row["Subscription Id"] = digits[-36:] if len(digits) >= 1 else ""
-        elif "msri-cns" in item_desc_lower or "ms-ri-cns" in item_desc_lower:
+        elif out_row.get("ITEM Code", "").strip().upper() == "MSRI-CNS":
             out_row["Subscription Id"] = invoice_desc[:38]
+
+        #elif "msri-cns" in item_desc_lower or "ms-ri-cns" in item_desc_lower:
+            #out_row["Subscription Id"] = invoice_desc[:38]
         elif "reserved vm instance" in item_desc_lower:
             out_row["Subscription Id"] = item_desc_raw[:38]
         else:
@@ -121,7 +124,14 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
             if not matched:
                 out_row["ITEM Code"] = ""
         # ITEM Name merged description
-        out_row["ITEM Name"] = f"{item_desc_raw}-{row.get('ITEMName','')}-{out_row['Subscription Id']}#{out_row['Billing Cycle Start Date']}-{out_row['Billing Cycle End Date']}"
+        if out_row.get("ITEM Code", "").strip().upper() == "MSRI-CNS":
+            item_name_detail = invoice_desc
+        else:
+            item_name_detail = out_row["Subscription Id"]
+
+        out_row["ITEM Name"] = f"{item_desc_raw}-{row.get('ITEMName','')}-{item_name_detail}#{out_row['Billing Cycle Start Date']}-{out_row['Billing Cycle End Date']}"
+
+        #out_row["ITEM Name"] = f"{item_desc_raw}-{row.get('ITEMName','')}-{out_row['Subscription Id']}#{out_row['Billing Cycle Start Date']}-{out_row['Billing Cycle End Date']}"
         out_row["UOM"] = row.get("UOM", "")
         out_row["Grade code-1"] = "NA"
         out_row["Grade code-2"] = "NA"
@@ -152,7 +162,12 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         out_row["LPO Number"] = "" if pd.isna(lpo) or str(lpo).strip().lower() in ["nan", "none"] else str(lpo)[:30]
         end_user = str(row.get("EndUser", ""))
         end_user_country = str(row.get("EndUserCountryCode", ""))
-        out_row["End User"] = f"{end_user} ; {end_user_country}"
+        
+        if end_user.strip().lower() in ["", "nan", "none"] and end_user_country.strip().lower() in ["", "nan", "none"]:
+             out_row["End User"] = ""
+        else:
+             out_row["End User"] = f"{end_user} ; {end_user_country}"
+
         try: out_row["Cost"] = round(float(cost_val), 2)
         except: out_row["Cost"] = cost
         out_rows.append(out_row)
