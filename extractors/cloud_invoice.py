@@ -121,7 +121,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
             if not matched:
                 out_row["ITEM Code"] = ""
         # ITEM Name merged description
-        out_row["ITEM Name"] = f"{item_desc_raw}-{row.get('ITEMName','')}-{out_row['Subscription Id']}-{out_row['Billing Cycle Start Date']}-{out_row['Billing Cycle End Date']}"
+        out_row["ITEM Name"] = f"{item_desc_raw}-{row.get('ITEMName','')}-{out_row['Subscription Id']}#{out_row['Billing Cycle Start Date']}-{out_row['Billing Cycle End Date']}"
         out_row["UOM"] = row.get("UOM", "")
         out_row["Grade code-1"] = "NA"
         out_row["Grade code-2"] = "NA"
