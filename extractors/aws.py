@@ -3,20 +3,9 @@ import re
 from datetime import datetime
 
 AWS_OUTPUT_COLUMNS = [
-    "DATE",
-    "INV NUMBER",
-    "WITHOUT VAT",
-    "WITH VAT",
-    "NARRATION",
-    "Account Period",
-    "A/C",
-    "Due date",
-    "Vat USD",
-    "Vat AED",
-    "Total USD",
-    "Inv value",
-    "Check",
-    "Bill to"
+    "DATE", "INV NUMBER", "WITHOUT VAT", "WITH VAT", "NARRATION",
+    "Account Period", "A/C", "Due date", "Vat USD", "Vat AED",
+    "Total USD", "Inv value", "Check", "Bill to"
 ]
 
 def extract_value(pattern, text, default=""):
@@ -56,7 +45,27 @@ def extract_common_fields(text, is_credit_note=False):
     formatted_period = f"{billing_start} - {billing_end}" if billing_start and billing_end else ""
     return invoice_number, net_charges_usd, account_number, formatted_period
 
-def process_template_a(uploaded_file):
+def extract_bill_to(text, template):
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if template == "C" and "Bill to Address" in line:
+            next_line = lines[i + 1].strip() if i + 1 < len(lines) else ""
+        elif template == "D" and "Address:" in line:
+            next_line = lines[i + 1].strip() if i + 1 < len(lines) else ""
+        elif template != "C" and ("Address" in line or "العنوان" in line):
+            next_line = lines[i + 1].strip() if i + 1 < len(lines) else ""
+        else:
+            continue
+
+        upper_line = next_line.upper()
+        if upper_line.startswith("MINDWARE TECHNOLOGY"):
+            return "MINDWARE TECHNOLOGY TRADING L.L.C"
+        elif "MINDWARE FZ" in upper_line:
+            return "Mindware FZ LLC"
+        return next_line
+    return ""
+
+def process_template_a(uploaded_file, template):
     with pdfplumber.open(uploaded_file) as pdf:
         text = "\n".join(page.extract_text() for page in pdf.pages if page.extract_text())
 
@@ -69,7 +78,7 @@ def process_template_a(uploaded_file):
         f"TAX INVOICE#{invoice_number}-AMAZON WEB SERVICES EMEA SARL (AWS) "
         f"THIS INVOICE IS FOR THE BILLING PERIOD {formatted_period} - AC NO: {account_number}"
     )
-    bill_to = "Mindware FZ LLC"
+    bill_to = extract_bill_to(text, template)
 
     try:
         vat_usd = float(net_charges_usd) * 0.05
@@ -82,36 +91,25 @@ def process_template_a(uploaded_file):
         total_with_vat = ""
 
     row = [
-        today_date,
-        invoice_number,
-        "",                 # WITHOUT VAT
-        net_charges_usd,    # WITH VAT
-        narration,
-        formatted_period,
-        account_number,
-        formatted_due_date,
-        vat_usd_str,
-        vat_aed_calculated,
-        total_with_vat,
-        "",
-        "",
-        bill_to
+        today_date, invoice_number, "", net_charges_usd, narration,
+        formatted_period, account_number, formatted_due_date,
+        vat_usd_str, vat_aed_calculated, total_with_vat, "", "", bill_to
     ]
     return [row]
 
-def process_template_b(uploaded_file):
+def process_template_b(uploaded_file, template):
     with pdfplumber.open(uploaded_file) as pdf:
         text = "\n".join(page.extract_text() for page in pdf.pages if page.extract_text())
 
     credit_note_number, net_charges_usd, account_number, formatted_period = extract_common_fields(text, is_credit_note=True)
-    formatted_due_date = ""  # Always empty for credit notes
+    formatted_due_date = ""
     today_date = datetime.today().strftime("%d/%m/%Y")
 
     narration = (
         f"TAX CREDIT NOTE#{credit_note_number}-AMAZON WEB SERVICES EMEA SARL (AWS) "
         f"THIS CREDIT NOTE IS FOR THE BILLING PERIOD {formatted_period} - AC NO: {account_number}"
     )
-    bill_to = "Mindware FZ LLC"
+    bill_to = extract_bill_to(text, template)
 
     try:
         vat_usd = float(net_charges_usd) * 0.05
@@ -124,24 +122,13 @@ def process_template_b(uploaded_file):
         total_with_vat = ""
 
     row = [
-        today_date,
-        credit_note_number,
-        "",                 # WITHOUT VAT
-        net_charges_usd,    # WITH VAT
-        narration,
-        formatted_period,
-        account_number,
-        formatted_due_date,
-        vat_usd_str,
-        vat_aed_calculated,
-        total_with_vat,
-        "",
-        "",
-        bill_to
+        today_date, credit_note_number, "", net_charges_usd, narration,
+        formatted_period, account_number, formatted_due_date,
+        vat_usd_str, vat_aed_calculated, total_with_vat, "", "", bill_to
     ]
     return [row]
 
-def process_template_c(uploaded_file):
+def process_template_c(uploaded_file, template):
     with pdfplumber.open(uploaded_file) as pdf:
         text = "\n".join(page.extract_text() for page in pdf.pages if page.extract_text())
 
@@ -151,25 +138,35 @@ def process_template_c(uploaded_file):
     narration = f"INVOICE#{invoice_number}-AMAZON WEB SERVICES, INC. INVOICE - THIS INVOICE IS FOR THE BILLING PERIOD"
     billing_period = extract_value(r"This invoice is for the billing period\s*([A-Za-z]+\s+\d{1,2}\s*-\s*[A-Za-z]+\s+\d{1,2}\s*,\s*\d{4})", text)
     account_number = extract_value(r"Account number:\s*(\d+)", text)
-    due_date = extract_value(r"TOTAL AMOUNT DUE ON\s*([A-Za-z]+\s+\d{1,2}\s*,\s*\d{4})", text)
+    due_date = extract_value(r"TOTAL AMOUNT DUE ON\s*([A-Za-z]+\s+\d{1,2},\s*\d{4})", text)
     formatted_due_date = format_date(due_date)
-    bill_to = "Mindware FZ LLC"
+    bill_to = extract_bill_to(text, template)
 
     row = [
-        today_date,
-        invoice_number,
-        total_due,
-        "",                 # WITH VAT
-        narration,
-        billing_period,
-        account_number,
-        formatted_due_date,
-        "",
-        "",             # Vat USD, Vat AED
-        total_due,
-        "",
-        "",
-        bill_to
+        today_date, invoice_number, total_due, "", narration,
+        billing_period, account_number, formatted_due_date,
+        "", "", total_due, "", "", bill_to
+    ]
+    return [row]
+
+def process_template_d(uploaded_file, template):
+    with pdfplumber.open(uploaded_file) as pdf:
+        text = "\n".join(page.extract_text() for page in pdf.pages if page.extract_text())
+
+    today_date = datetime.today().strftime("%d/%m/%Y")
+    document_number = extract_value(r"Document Number:\s*(\S+)", text)
+    total_due = extract_value(r"TOTAL AMOUNT DUE ON\s*[A-Za-z]+\s+\d{1,2},\s*\d{4}\s*USD\s*([0-9,]+\.[0-9]{2})", text).replace(",", "")
+    narration = f"INVOICE#{document_number} - AWS MARKETPLACE INVOICE - THIS INVOICE IS FOR THE BILLING PERIOD"
+    billing_period = extract_value(r"This Document is for the billing period\s*([A-Za-z]+\s+\d{1,2}\s*-\s*[A-Za-z]+\s+\d{1,2},\s*\d{4})", text)
+    account_number = extract_value(r"Account number:\s*(\d+)", text)
+    due_date = extract_value(r"TOTAL AMOUNT DUE ON\s*([A-Za-z]+\s+\d{1,2},\s*\d{4})", text)
+    formatted_due_date = format_date(due_date)
+    bill_to = extract_bill_to(text, template)
+
+    row = [
+        today_date, document_number, total_due, "", narration,
+        billing_period, account_number, formatted_due_date,
+        "", "", total_due, "", "", bill_to
     ]
     return [row]
 
@@ -180,6 +177,8 @@ def detect_template(text):
         return "A"
     elif "Amazon Web Services, Inc. Invoice" in text and "Invoice Number:" in text:
         return "C"
+    elif "AWS Marketplace Invoice" in text or "Marketplace Operator Invoicing" in text:
+        return "D"
     return "Unknown"
 
 def process_pdf_by_template(uploaded_file):
@@ -189,11 +188,13 @@ def process_pdf_by_template(uploaded_file):
     template = detect_template(text)
 
     if template == "A":
-        return process_template_a(uploaded_file)
+        return process_template_a(uploaded_file, template)
     elif template == "B":
-        return process_template_b(uploaded_file)
+        return process_template_b(uploaded_file, template)
     elif template == "C":
-        return process_template_c(uploaded_file)
+        return process_template_c(uploaded_file, template)
+    elif template == "D":
+        return process_template_d(uploaded_file, template)
     else:
         return []
 

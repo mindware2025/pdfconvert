@@ -1,8 +1,11 @@
+import os
 import streamlit as st
 import pandas as pd
 import io
 from datetime import datetime
 from openpyxl.styles import PatternFill
+from openpyxl import Workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
 from extractors.aws import process_multiple_aws_pdfs, AWS_OUTPUT_COLUMNS
 
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
@@ -18,7 +21,7 @@ from extractors.dell_invoice import (
     build_pre_alert_rows,
     read_master_mapping,
 )
-from extractors.cloud_invoice import process_cloud_invoice, build_cloud_invoice_df
+from extractors.cloud_invoice import create_summary_sheet, build_cloud_invoice_df, map_invoice_numbers
 from claims_automation import (
     build_output_rows_from_source1,
     write_output_excel,
@@ -91,11 +94,11 @@ DEFAULTS = {
     "doc_src_locn": "UJ000",
     "location_code": "UJ200"
 }
-CORRECT_USERNAME = "admin"
-CORRECT_PASSWORD = "admin"
+#CORRECT_USERNAME = "admin"
+#CORRECT_PASSWORD = "admin"
 
-#CORRECT_USERNAME = os.getenv("NAME")
-#CORRECT_PASSWORD = os.getenv("PASSWORD")
+CORRECT_USERNAME = os.getenv("NAME")
+CORRECT_PASSWORD = os.getenv("PASSWORD")
 
 
 if "login_state" not in st.session_state:
@@ -365,87 +368,85 @@ elif tool == "🧾 Cloud Invoice Tool":
         """,
         unsafe_allow_html=True,
     )
+
     confirmed = st.checkbox("I confirm I opened the CB file and clicked Convert ✅", key="cloud_cb_confirm")
     if not confirmed:
         st.warning("Please confirm the IMPORTANT notice steps above to proceed.")
         st.stop()
+
     uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"], key="cloud_invoice_upload")
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
-        # Build plain DataFrame for splitting
+
+        # Process invoice data
         final_df = build_cloud_invoice_df(df)
 
-        # Split by sign of Gross Value (for display metrics only)
-        pos_df = final_df[final_df["Gross Value"].astype(float) >= 0].copy()
-        neg_df = final_df[final_df["Gross Value"].astype(float) < 0].copy()
+        # Map new Updated Invoice No.
+        final_df = map_invoice_numbers(final_df)
 
-        # Show counts (excluding headers by definition) BEFORE previews
-        pos_count = int(len(pos_df.index))
-        neg_count = int(len(neg_df.index))
-        total_count = pos_count + neg_count
-        st.success(f"{pos_count} invoice positive , {neg_count} invoice negative , total invoices : {total_count}")
+        # Sort alphabetically
+        sorted_df = final_df.sort_values(by=final_df.columns.tolist()).reset_index(drop=True)
 
-        # VIP-style prominent summary
+        # Create unique version rows based on Combined (D)
+        unique_rows = sorted_df[["Invoice No.", "Updated Invoice No.", "LPO Number", "End User"]].copy()
+        unique_rows["Combined (D)"] = (
+            unique_rows["Invoice No."].astype(str) +
+            unique_rows["LPO Number"].astype(str) +
+            unique_rows["End User"].astype(str)
+        )
+        unique_rows = unique_rows.drop_duplicates(subset=["Combined (D)"]).reset_index(drop=True)
+
+        # Display metrics
+        pos_df = sorted_df[sorted_df["Gross Value"].astype(float) >= 0]
+        neg_df = sorted_df[sorted_df["Gross Value"].astype(float) < 0]
+        st.success(f"{len(pos_df)} positive, {len(neg_df)} negative, total: {len(sorted_df)}")
         c1, c2, c3 = st.columns(3)
-        with c1:
-            st.metric(label="✅ Positive invoices", value=pos_count)
-        with c2:
-            st.metric(label="❌ Negative invoices", value=neg_count)
-        with c3:
-            st.metric(label="🧮 Total invoices", value=total_count)
+        c1.metric("✅ Positive invoices", len(pos_df))
+        c2.metric("❌ Negative invoices", len(neg_df))
+        c3.metric("🧮 Total invoices", len(sorted_df))
 
-        # Now show previews
-        st.write("Preview of uploaded file:", df.head())
+        # DataFrame previews
         st.subheader("Processed Preview")
-        st.dataframe(final_df.head(50))
+        st.dataframe(sorted_df.head(50))
 
-        # Prepare Versions sheet data (A: Invoice, B: LPO, C: End User, D-H with formulas)
-        try:
-            inv_series = final_df["Invoice No."].astype(str).fillna("")
-            lpo_series = final_df["LPO Number"].astype(str).fillna("")
-            end_user_series = final_df["End User"].astype(str).fillna("")
-            versions_rows = []
-            for idx in range(len(final_df)):
-                row_num = idx + 2  # excel row number (headers at row 1)
-                A = inv_series.iloc[idx]
-                B = lpo_series.iloc[idx]
-                C = end_user_series.iloc[idx]
-                combined = f"=A{row_num}&B{row_num}&C{row_num}"
-                v1 = f"=IF(A{row_num}=A{row_num-1},\"\",1)" if row_num >= 2 else "=1"
-                v2 = f"=IFERROR(IF(E{row_num}=\"\",E{row_num-1}+1,\"\"),F{row_num-1}+1)"
-                v3 = f"=\"-\"&E{row_num}&F{row_num}"
-                v4 = f"=A{row_num}&G{row_num}"
-                versions_rows.append({
-                    "Invoice": A,
-                    "LPO": B,
-                    "End User": C,
-                    "Combined (D)": combined,
-                    "Version1 (E)": v1,
-                    "Version2 (F)": v2,
-                    "Version3 (G)": v3,
-                    "Version4 (H)": v4,
-                })
-            versions_df = pd.DataFrame(versions_rows, columns=[
-                "Invoice", "LPO", "End User", "Combined (D)", "Version1 (E)", "Version2 (F)", "Version3 (G)", "Version4 (H)"
-            ])
-        except Exception:
-            versions_df = pd.DataFrame(columns=[
-                "Invoice", "LPO", "End User", "Combined (D)", "Version1 (E)", "Version2 (F)", "Version3 (G)", "Version4 (H)"
-            ])
+        st.subheader("Versions Sheet Preview")
+        st.dataframe(unique_rows.head(50))
 
-        # Write a single combined sheet and a Versions helper sheet
+        # Create Excel workbook with formulas
+        wb = Workbook()
+        ws_invoice = wb.active
+        ws_invoice.title = "CLOUD INVOICE"
+        for r in dataframe_to_rows(sorted_df, index=False, header=True):
+            ws_invoice.append(r)
+
+        # Create VERSIONS sheet with formulas
+        ws_versions = wb.create_sheet(title="VERSIONS")
+        headers = ["Invoice", "Updated Invoice", "LPO", "End User", "Combined (D)", "Version1 (E)", "Version2 (F)", "Version3 (G)", "Version4 (H)"]
+        ws_versions.append(headers)
+        for i, row in enumerate(unique_rows.itertuples(index=False), start=2):
+            invoice, updated_invoice, lpo, end_user, _ = row
+            ws_versions.cell(row=i, column=1, value=invoice)
+            ws_versions.cell(row=i, column=2, value=updated_invoice)
+            ws_versions.cell(row=i, column=3, value=lpo)
+            ws_versions.cell(row=i, column=4, value=end_user)
+            ws_versions.cell(row=i, column=5, value=f"=A{i}&C{i}&D{i}")
+            ws_versions.cell(row=i, column=6, value=f'=IF(A{i}=A{i-1},"",1)' if i > 2 else "=1")
+            ws_versions.cell(row=i, column=7, value=f'=IFERROR(IF(F{i}="",F{i-1}+1,""),F{i-1}+1)' if i > 2 else "=1")
+            ws_versions.cell(row=i, column=8, value=f'="-"&F{i}&G{i}')
+            ws_versions.cell(row=i, column=9, value=f'=A{i}&H{i}')
+
+        # Save to buffer
         output_buffer = io.BytesIO()
-        with pd.ExcelWriter(output_buffer, engine='openpyxl') as writer:
-            final_df.to_excel(writer, sheet_name='CLOUD INVOICE', index=False)
-            versions_df.to_excel(writer, sheet_name='VERSIONS', index=False)
+        wb.save(output_buffer)
         output_buffer.seek(0)
 
         st.download_button(
-            label="Download Cloud Invoice (with Versions Sheet)",
-            data=output_buffer,
-            file_name="cloud_invoice.xlsx",
+            label="⬇️ Download Cloud Invoice (with Formulas)",
+            data=output_buffer.getvalue(),
+            file_name="cloud_invoice_with_formulas.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
 
 elif tool == "💻 Dell Invoice Extractor":
     st.title("Dell Invoice Extractor (Pre-Alert Upload)")
