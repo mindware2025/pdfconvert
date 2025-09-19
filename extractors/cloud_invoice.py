@@ -1,3 +1,4 @@
+import re
 import pandas as pd
 from datetime import datetime
 from dateutil import parser as _parser
@@ -89,24 +90,31 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         out_row["Credit Card Transaction No."] = ""
         for field in CLOUD_INVOICE_HEADER[16:26]:
             out_row[field] = ""
+        item_code = str(row.get("ITEMCode", "")).strip().lower()
         item_desc_raw = str(row.get("ITEMDescription", ""))
         item_desc_lower = item_desc_raw.lower()
-        invoice_desc = str(row.get("InvoiceDescription", ""))
-        sub_id = row.get("SubscriptionId", "")
-        if pd.notna(sub_id) and str(sub_id).strip():
-            out_row["Subscription Id"] = str(sub_id).strip()
-        elif "msaz-cns" in item_desc_lower:
-            digits = extract_digits(invoice_desc)
-            out_row["Subscription Id"] = digits[-36:] if len(digits) >= 1 else ""
-        elif out_row.get("ITEM Code", "").strip().upper() == "MSRI-CNS":
-            out_row["Subscription Id"] = invoice_desc[:38]
-
-        #elif "msri-cns" in item_desc_lower or "ms-ri-cns" in item_desc_lower:
-            #out_row["Subscription Id"] = invoice_desc[:38]
+        invoice_desc = str(row.get("InvoiceDescription", "")).strip()
+        sub_id_raw = row.get("SubscriptionId", "")
+        sub_id = str(sub_id_raw).strip() if pd.notna(sub_id_raw) else ""
+        
+        
+        invoice_desc_clean = re.sub(r"^[#\s]+", "", invoice_desc)
+        
+        
+        sub_id_clean = sub_id[:38] if sub_id else "Sub"
+        
+       
+        if item_code == "az-cns":
+            digits = extract_digits(invoice_desc_clean)
+            out_row["Subscription Id"] = digits[-36:] if digits else sub_id_clean
+        
+        elif item_code == "msri-cns":
+            out_row["Subscription Id"] = invoice_desc_clean[:38] if invoice_desc_clean else sub_id_clean
         elif "reserved vm instance" in item_desc_lower:
-            out_row["Subscription Id"] = item_desc_raw[:38]
+            out_row["Subscription Id"] = item_desc_raw[:38] if item_desc_raw else sub_id_clean
+        
         else:
-            out_row["Subscription Id"] = "Sub"
+            out_row["Subscription Id"] = sub_id_clean
         out_row["Billing Cycle Start Date"] = fmt_date(row.get("BillingCycleStartDate", ""))
         out_row["Billing Cycle End Date"] = fmt_date(row.get("BillingCycleEndDate", ""))
         item_code = row.get("ITEMCode", "")
@@ -120,17 +128,34 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                         out_row["ITEM Code"] = code
                         matched = True
                         break
-                if matched: break
+                if matched:
+                    break
             if not matched:
                 out_row["ITEM Code"] = ""
+        
         # ITEM Name merged description
-        if out_row.get("ITEM Code", "").strip().upper() == "MSRI-CNS":
-            item_name_detail = invoice_desc
-        else:
-            item_name_detail = out_row["Subscription Id"]
-
-        out_row["ITEM Name"] = f"{item_desc_raw}-{row.get('ITEMName','')}-{item_name_detail}#{out_row['Billing Cycle Start Date']}-{out_row['Billing Cycle End Date']}"
-
+        item_desc_raw = str(row.get("ITEMDescription", "")).strip()
+        item_name_raw = str(row.get("ITEMName", "")).strip()
+        item_name_detail = invoice_desc if out_row.get("ITEM Code", "").strip().upper() == "MSRI-CNS" else out_row.get("Subscription Id", "").strip()
+        billing_start = out_row.get("Billing Cycle Start Date", "").strip()
+        billing_end = out_row.get("Billing Cycle End Date", "").strip()
+        
+        # Build parts list and skip empty or NaN values
+        parts = [
+            item_desc_raw,
+            item_name_raw,
+            item_name_detail,
+        ]
+        
+        # Add billing cycle only if both dates are present
+        if billing_start and billing_end and billing_start.lower() != "nan" and billing_end.lower() != "nan":
+            parts.append(f"{billing_start}-{billing_end}")
+        
+        # Join non-empty parts with hyphen
+        item_name = "-".join([p for p in parts if p and p.lower() != "nan"])
+        
+        # Assign to output
+        out_row["ITEM Name"] = item_name
         #out_row["ITEM Name"] = f"{item_desc_raw}-{row.get('ITEMName','')}-{out_row['Subscription Id']}#{out_row['Billing Cycle Start Date']}-{out_row['Billing Cycle End Date']}"
         out_row["UOM"] = row.get("UOM", "")
         out_row["Grade code-1"] = "NA"
@@ -163,7 +188,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         end_user = str(row.get("EndUser", ""))
         end_user_country = str(row.get("EndUserCountryCode", ""))
         
-        if end_user.strip().lower() in ["", "nan", "none"] and end_user_country.strip().lower() in ["", "nan", "none"]:
+        if end_user.strip().lower() in ["", "nan", "none"] or end_user_country.strip().lower() in ["", "nan", "none"]:
              out_row["End User"] = ""
         else:
              out_row["End User"] = f"{end_user} ; {end_user_country}"
