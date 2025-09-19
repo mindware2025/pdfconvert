@@ -154,6 +154,15 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         billing_start = out_row.get("Billing Cycle Start Date", "").strip()
         billing_end = out_row.get("Billing Cycle End Date", "").strip()
         
+        # Format billing_end as MM/YYYY if applicable
+        billing_info = ""
+        if billing_end and billing_end.lower() != "nan":
+            try:
+                billing_end_dt = pd.to_datetime(billing_end)
+                billing_info = billing_end_dt.strftime("%m/%Y")
+            except Exception:
+                billing_info = billing_end  # fallback to raw if parsing fails
+        
         # Build parts list and skip empty or NaN values
         parts = [
             item_desc_raw,
@@ -161,7 +170,10 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
             item_name_detail,
         ]
         
-        if billing_start and billing_end and billing_start.lower() != "nan" and billing_end.lower() != "nan":
+        # Append billing info based on item code
+        if item_code_upper == "MSAZ-CNS" and billing_info:
+            parts.append(billing_info)
+        elif billing_start and billing_end and billing_start.lower() != "nan" and billing_end.lower() != "nan":
             parts.append(f"{billing_start}-{billing_end}")
         
         # Join non-empty parts with hyphen
