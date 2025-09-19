@@ -136,7 +136,7 @@ def build_dnts_cnts_rows(rows, template_map):
     output_files = {}
     for bill_to, group_rows in grouped.items():
         template_type = template_map.get(bill_to, "A")
-        is_cnts = template_type == "C"
+        is_cnts = template_type == "B"
         today = datetime.today().strftime("%d/%m/%Y")
         if bill_to == "Mindware FZ LLC":
             supp_code = "SDIA035"
