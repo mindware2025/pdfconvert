@@ -374,9 +374,15 @@ elif tool == "🧾 Cloud Invoice Tool":
         st.warning("Please confirm the IMPORTANT notice steps above to proceed.")
         st.stop()
 
-    uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"], key="cloud_invoice_upload")
+    uploaded_file = st.file_uploader("Upload your CSV file", type=["csv", "xlsx"], key="cloud_invoice_upload")
     if uploaded_file:
-        df = pd.read_csv(uploaded_file)
+        if uploaded_file.name.endswith(".csv"):
+            df = pd.read_csv(uploaded_file)
+        elif uploaded_file.name.endswith(".xlsx"):
+            df = pd.read_excel(uploaded_file)
+        else:
+            st.error("Unsupported file format. Please upload a CSV or Excel file.")
+            st.stop()
 
         # Process invoice data
         final_df = build_cloud_invoice_df(df)
