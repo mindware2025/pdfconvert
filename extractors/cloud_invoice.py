@@ -145,7 +145,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         # Choose item_name_detail based on ITEM Code
         if item_code_upper == "MSRI-CNS":
             item_name_detail = invoice_desc_clean
-        elif item_code_upper == "MSAZ-CNS":
+        elif item_code_upper in ["MSAZ-CNS", "AS-CNS", "AWS-UTILITIES-CNS"]:
             item_name_detail = sub_id_full  # full SubscriptionId
         else:
             item_name_detail = out_row.get("Subscription Id", "").strip()
@@ -171,7 +171,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         ]
         
         # Append billing info based on item code
-        if item_code_upper == "MSAZ-CNS" and billing_info:
+        if item_code_upper in ["MSAZ-CNS", "AS-CNS", "AWS-UTILITIES-CNS"] and billing_info:
             parts.append(billing_info)
         elif billing_start and billing_end and billing_start.lower() != "nan" and billing_end.lower() != "nan":
             parts.append(f"{billing_start}-{billing_end}")
