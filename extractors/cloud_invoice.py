@@ -134,9 +134,23 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                 out_row["ITEM Code"] = ""
         
         # ITEM Name merged description
+        # Clean and prepare values
+        item_code_upper = out_row.get("ITEM Code", "").strip().upper()
         item_desc_raw = str(row.get("ITEMDescription", "")).strip()
         item_name_raw = str(row.get("ITEMName", "")).strip()
-        item_name_detail = invoice_desc if out_row.get("ITEM Code", "").strip().upper() == "MSRI-CNS" else out_row.get("Subscription Id", "").strip()
+        invoice_desc_clean = re.sub(r"^[#\s]+", "", str(row.get("InvoiceDescription", "")).strip())
+        sub_id_raw = row.get("SubscriptionId", "")
+        sub_id_full = str(sub_id_raw).strip() if pd.notna(sub_id_raw) else ""
+        
+        # Choose item_name_detail based on ITEM Code
+        if item_code_upper == "MSRI-CNS":
+            item_name_detail = invoice_desc_clean
+        elif item_code_upper == "MSAZ-CNS":
+            item_name_detail = sub_id_full  # full SubscriptionId
+        else:
+            item_name_detail = out_row.get("Subscription Id", "").strip()
+        
+        # Billing cycle dates
         billing_start = out_row.get("Billing Cycle Start Date", "").strip()
         billing_end = out_row.get("Billing Cycle End Date", "").strip()
         
@@ -147,15 +161,12 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
             item_name_detail,
         ]
         
-        # Add billing cycle only if both dates are present
         if billing_start and billing_end and billing_start.lower() != "nan" and billing_end.lower() != "nan":
             parts.append(f"{billing_start}-{billing_end}")
         
         # Join non-empty parts with hyphen
-        item_name = "-".join([p for p in parts if p and p.lower() != "nan"])
+        out_row["ITEM Name"] = "-".join([p for p in parts if p and p.lower() != "nan"])
         
-        # Assign to output
-        out_row["ITEM Name"] = item_name
         #out_row["ITEM Name"] = f"{item_desc_raw}-{row.get('ITEMName','')}-{out_row['Subscription Id']}#{out_row['Billing Cycle Start Date']}-{out_row['Billing Cycle End Date']}"
         out_row["UOM"] = row.get("UOM", "")
         out_row["Grade code-1"] = "NA"
