@@ -7,8 +7,7 @@ from openpyxl.styles import PatternFill
 from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 
-from extractors.aws import build_dnts_cnts_rows, process_multiple_aws_pdfs, AWS_OUTPUT_COLUMNS
-
+from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_multiple_aws_pdfs
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
