@@ -135,6 +135,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         
         # ITEM Name merged description
         # Clean and prepare values
+        # Clean and prepare values
         item_code_upper = out_row.get("ITEM Code", "").strip().upper()
         item_desc_raw = str(row.get("ITEMDescription", "")).strip()
         item_name_raw = str(row.get("ITEMName", "")).strip()
@@ -144,7 +145,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         
         # Choose item_name_detail based on ITEM Code
         if item_code_upper == "MSRI-CNS":
-            item_name_detail = invoice_desc_clean
+            item_name_detail = sub_id_full[:34]  # first 34 characters of SubscriptionId
         elif item_code_upper in ["MSAZ-CNS", "AS-CNS", "AWS-UTILITIES-CNS"]:
             item_name_detail = sub_id_full  # full SubscriptionId
         else:
@@ -173,11 +174,14 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         # Append billing info based on item code
         if item_code_upper in ["MSAZ-CNS", "AS-CNS", "AWS-UTILITIES-CNS"] and billing_info:
             parts.append(billing_info)
+        elif item_code_upper == "MSRI-CNS" and billing_info:
+            parts.append(billing_info)
         elif billing_start and billing_end and billing_start.lower() != "nan" and billing_end.lower() != "nan":
             parts.append(f"{billing_start}-{billing_end}")
         
         # Join non-empty parts with hyphen
         out_row["ITEM Name"] = "-".join([p for p in parts if p and p.lower() != "nan"])
+        
         
         #out_row["ITEM Name"] = f"{item_desc_raw}-{row.get('ITEMName','')}-{out_row['Subscription Id']}#{out_row['Billing Cycle Start Date']}-{out_row['Billing Cycle End Date']}"
         out_row["UOM"] = row.get("UOM", "")
