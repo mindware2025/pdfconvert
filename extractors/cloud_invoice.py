@@ -101,7 +101,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         invoice_desc_clean = re.sub(r"^[#\s]+", "", invoice_desc)
         
         
-        sub_id_clean = sub_id[:38] if sub_id else "Sub"
+        sub_id_clean = sub_id[:36] if sub_id else "Sub"
         
        
         if item_code == "az-cns":
