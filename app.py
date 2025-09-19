@@ -7,7 +7,7 @@ from openpyxl.styles import PatternFill
 from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 
-from extractors.aws import process_multiple_aws_pdfs, AWS_OUTPUT_COLUMNS
+from extractors.aws import build_dnts_cnts_rows, process_multiple_aws_pdfs, AWS_OUTPUT_COLUMNS
 
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
 from utils.helpers import format_amount, format_invoice_date, format_month_year
@@ -743,33 +743,56 @@ elif tool == "🟨 AWS Invoice Tool":
     st.title("AWS Invoice Tool")
     st.write("Upload AWS invoice PDF(s) and download the extracted data as Excel.")
 
-    uploaded_files = st.file_uploader("Choose AWS invoice PDF(s)", type=["pdf"], key="aws_upload", accept_multiple_files=True)
+    uploaded_files = st.file_uploader(
+        "Choose AWS invoice PDF(s)", type=["pdf"], key="aws_upload", accept_multiple_files=True
+    )
 
     if uploaded_files:
-        try:
-            rows = process_multiple_aws_pdfs(uploaded_files)
-            if rows:
-                df = pd.DataFrame(rows, columns=AWS_OUTPUT_COLUMNS)
-                st.subheader("Extracted AWS Invoice Data")
-                st.dataframe(df, height=300)
+        rows, template_map = process_multiple_aws_pdfs(uploaded_files)
+        if rows:
+            df = pd.DataFrame(rows, columns=AWS_OUTPUT_COLUMNS)
+            st.subheader("Extracted AWS Invoice Data")
+            st.dataframe(df, height=300)
 
+            # ✅ Download button for original AWS invoice data
+            output_original = io.BytesIO()
+            with pd.ExcelWriter(output_original, engine='openpyxl') as writer:
+                df.to_excel(writer, sheet_name='AWS_INVOICE', index=False)
+            output_original.seek(0)
+            st.download_button(
+                label="⬇️ Download Extracted AWS Invoice Data",
+                data=output_original.getvalue(),
+                file_name="aws_invoice_data.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+            # ✅ Generate DNTS/CNTS files
+            output_files = build_dnts_cnts_rows(rows, template_map)
+            for bill_to, data in output_files.items():
+                file_type = "CNTS" if data["is_cnts"] else "DNTS"
+                file_name = f"{file_type}_{bill_to.replace(' ', '_')}.xlsx"
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    df.to_excel(writer, sheet_name='AWS_INVOICE', index=False)
+                    pd.DataFrame(data["header"], columns=[
+                        "S.No", "Date - (dd/MM/yyyy)", "Supp_Code", "Curr_Code", "Form_Code",
+                        "Doc_Src_Locn", "Location_Code", "Remarks", "Supplier_Ref", "Supplier_Ref_Date - (dd/MM/yyyy)"
+                    ]).to_excel(writer, sheet_name=f"{file_type}_HEADER", index=False)
+                    pd.DataFrame(data["item"], columns=[
+                        "S.No", "Ref. Key", "Item_Code", "Item_Name", "Grade1", "Grade2", "UOM",
+                        "Qty", "Qty_Ls", "Rate", "Main_Account", "Sub_Account", "Division", "Department", "Analysis2"
+                    ]).to_excel(writer, sheet_name=f"{file_type}_ITEM", index=False)
                 output.seek(0)
-
                 st.download_button(
-                    label="⬇️ Download finaloutput.xlsx",
+                    label=f"⬇️ Download {file_name}",
                     data=output.getvalue(),
-                    file_name="finaloutput.xlsx",
+                    file_name=file_name,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
-            else:
-                st.warning("No data extracted from the uploaded AWS PDFs.")
-        except Exception as e:
-            st.error(f"Error processing AWS PDFs: {e}")
+        else:
+            st.warning("No data extracted from the uploaded AWS PDFs.")
     else:
         st.info("Please upload one or more AWS invoice PDFs to begin.")
+
 
 
 elif tool == "Other":
