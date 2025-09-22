@@ -1,4 +1,5 @@
 import os
+import zipfile
 import streamlit as st
 import pandas as pd
 import io
@@ -94,11 +95,11 @@ DEFAULTS = {
     "doc_src_locn": "UJ000",
     "location_code": "UJ200"
 }
-#CORRECT_USERNAME = "admin"
-#CORRECT_PASSWORD = "admin"
+CORRECT_USERNAME = "admin"
+CORRECT_PASSWORD = "admin"
 
-CORRECT_USERNAME = os.getenv("NAME")
-CORRECT_PASSWORD = os.getenv("PASSWORD")
+#CORRECT_USERNAME = os.getenv("NAME")
+#CORRECT_PASSWORD = os.getenv("PASSWORD")
 
 
 if "login_state" not in st.session_state:
@@ -753,7 +754,7 @@ elif tool == "🟨 AWS Invoice Tool":
         )
     
         if uploaded_files:
-            rows, template_map = process_multiple_aws_pdfs(uploaded_files)
+            rows, template_map, text_map = process_multiple_aws_pdfs(uploaded_files)
             if rows:
                 df = pd.DataFrame(rows, columns=AWS_OUTPUT_COLUMNS)
                 st.subheader("Extracted AWS Invoice Data")
@@ -770,27 +771,32 @@ elif tool == "🟨 AWS Invoice Tool":
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
     
-                output_files = build_dnts_cnts_rows(rows, template_map)
-                for file_key, data in output_files.items():
-                    bill_to, file_type = file_key.split("__")
-                    file_name = f"{file_type}_{bill_to.replace(' ', '_')}.xlsx"
-                    output = io.BytesIO()
-                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                        pd.DataFrame(data["header"], columns=[
-                            "S.No", "Date - (dd/MM/yyyy)", "Supp_Code", "Curr_Code", "Form_Code",
-                            "Doc_Src_Locn", "Location_Code", "Remarks", "Supplier_Ref", "Supplier_Ref_Date - (dd/MM/yyyy)"
-                        ]).to_excel(writer, sheet_name=f"{file_type}_HEADER", index=False)
-                        pd.DataFrame(data["item"], columns=[
-                            "S.No", "Ref. Key", "Item_Code", "Item_Name", "Grade1", "Grade2", "UOM",
-                            "Qty", "Qty_Ls", "Rate", "Main_Account", "Sub_Account", "Division", "Department", "Analysis2"
-                        ]).to_excel(writer, sheet_name=f"{file_type}_ITEM", index=False)
-                    output.seek(0)
-                    st.download_button(
-                        label=f"⬇️ Download {file_name}",
-                        data=output.getvalue(),
-                        file_name=file_name,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+                output_files = build_dnts_cnts_rows(rows, template_map, text_map)
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, "w") as zip_file:
+                    for file_key, data in output_files.items():
+                        bill_to, file_type = file_key.split("__")
+                        file_name = f"{file_type}_{bill_to.replace(' ', '_')}.xlsx"
+                        output = io.BytesIO()
+                        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                            pd.DataFrame(data["header"], columns=[
+                                "S.No", "Date - (dd/MM/yyyy)", "Supp_Code", "Curr_Code", "Form_Code",
+                                "Doc_Src_Locn", "Location_Code", "Remarks", "Supplier_Ref", "Supplier_Ref_Date - (dd/MM/yyyy)"
+                            ]).to_excel(writer, sheet_name=f"{file_type}_HEADER", index=False)
+                            pd.DataFrame(data["item"], columns=[
+                                "S.No", "Ref. Key", "Item_Code", "Item_Name", "Grade1", "Grade2", "UOM",
+                                "Qty", "Qty_Ls", "Rate", "Main_Account", "Sub_Account", "Division", "Department", "Analysis2"
+                            ]).to_excel(writer, sheet_name=f"{file_type}_ITEM", index=False)
+                        output.seek(0)
+                        zip_file.writestr(file_name, output.read())
+                
+                zip_buffer.seek(0)
+                st.download_button(
+                    label="⬇️ Download All DNTS/CNTS Files as ZIP",
+                    data=zip_buffer.getvalue(),
+                    file_name="aws_dnts_cnts_files.zip",
+                    mime="application/zip"
+                )
             else:
                 st.warning("No data extracted from the uploaded AWS PDFs.")
         else:

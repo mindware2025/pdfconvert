@@ -90,6 +90,22 @@ def detect_template(text):
         return "D"
     return "Unknown"
 
+def extract_supp_ref_date(text, template):
+    if template == "A":
+        date_str = extract_value(r"Tax Invoice Date:.*?([A-Za-z]+\s+\d{1,2},?\s+\d{4})", text)
+    elif template == "B":
+        date_str = extract_value(r"Original Tax Invoice Date:.*?([A-Za-z]+\s+\d{1,2},?\s+\d{4})", text)
+    elif template == "C":
+        date_str = extract_value(r"Invoice Date:.*?([A-Za-z]+\s+\d{1,2}\s*,?\s+\d{4})", text)
+    elif template == "D":
+        date_str = extract_value(r"Document Date:.*?([A-Za-z]+\s+\d{1,2},?\s+\d{4})", text)
+    else:
+        date_str = ""
+    try:
+        return datetime.strptime(date_str.replace(',', ''), "%B %d %Y").strftime("%d/%m/%Y")
+    except Exception:
+        return ""
+
 def process_pdf_by_template(pdf_bytes):
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     text = "\n".join(page.get_text() for page in doc)
@@ -137,21 +153,23 @@ def process_pdf_by_template(pdf_bytes):
         formatted_period, account_number, formatted_due_date,
         vat_usd_str, vat_aed_calculated, total_with_vat, "", "", bill_to
     ]
-    return [row], template
+    return [row], template, text
 
 def process_multiple_aws_pdfs(uploaded_files):
     all_rows = []
     template_map = {}
+    text_map = {}
     for file in uploaded_files:
         pdf_bytes = file.read()
-        rows, template = process_pdf_by_template(pdf_bytes)
+        rows, template, text = process_pdf_by_template(pdf_bytes)
         all_rows.extend(rows)
         bill_to = rows[0][-1]
         invoice_number = rows[0][1]
         template_map[f"{bill_to}__{invoice_number}"] = template
-    return all_rows, template_map
+        text_map[f"{bill_to}__{invoice_number}"] = text
+    return all_rows, template_map, text_map
 
-def build_dnts_cnts_rows(rows, template_map):
+def build_dnts_cnts_rows(rows, template_map, text_map):
     grouped = defaultdict(list)
     for row in rows:
         bill_to = row[-1]
@@ -180,9 +198,12 @@ def build_dnts_cnts_rows(rows, template_map):
         header_rows = []
         item_rows = []
         for idx, row in enumerate(group_rows, 1):
+            invoice_number = row[1]
+            text = text_map.get(f"{bill_to}__{invoice_number}", "")
+            supp_ref_date = extract_supp_ref_date(text, template_type)
             header_rows.append([
                 idx, today, supp_code, "USD", 0, doc_src_locn, location_code,
-                row[4], row[1], today
+                row[4], row[1], supp_ref_date
             ])
             rate = row[2] if row[2] else row[3]
             item_rows.append([
