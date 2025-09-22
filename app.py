@@ -95,11 +95,11 @@ DEFAULTS = {
     "doc_src_locn": "UJ000",
     "location_code": "UJ200"
 }
-CORRECT_USERNAME = "admin"
-CORRECT_PASSWORD = "admin"
+#CORRECT_USERNAME = "admin"
+#CORRECT_PASSWORD = "admin"
 
-#CORRECT_USERNAME = os.getenv("NAME")
-#CORRECT_PASSWORD = os.getenv("PASSWORD")
+CORRECT_USERNAME = os.getenv("NAME")
+CORRECT_PASSWORD = os.getenv("PASSWORD")
 
 
 if "login_state" not in st.session_state:
@@ -776,17 +776,21 @@ elif tool == "🟨 AWS Invoice Tool":
                 with zipfile.ZipFile(zip_buffer, "w") as zip_file:
                     for file_key, data in output_files.items():
                         bill_to, file_type = file_key.split("__")
-                        file_name = f"{file_type}_{bill_to.replace(' ', '_')}.xlsx"
+                        safe_bill_to = bill_to.replace(" ", "_").replace(".", "").replace(",", "")
+                        file_name = f"{file_type}_{safe_bill_to}.xlsx"
+                
                         output = io.BytesIO()
                         with pd.ExcelWriter(output, engine='openpyxl') as writer:
                             pd.DataFrame(data["header"], columns=[
                                 "S.No", "Date - (dd/MM/yyyy)", "Supp_Code", "Curr_Code", "Form_Code",
                                 "Doc_Src_Locn", "Location_Code", "Remarks", "Supplier_Ref", "Supplier_Ref_Date - (dd/MM/yyyy)"
                             ]).to_excel(writer, sheet_name=f"{file_type}_HEADER", index=False)
+                
                             pd.DataFrame(data["item"], columns=[
                                 "S.No", "Ref. Key", "Item_Code", "Item_Name", "Grade1", "Grade2", "UOM",
                                 "Qty", "Qty_Ls", "Rate", "Main_Account", "Sub_Account", "Division", "Department", "Analysis2"
                             ]).to_excel(writer, sheet_name=f"{file_type}_ITEM", index=False)
+                
                         output.seek(0)
                         zip_file.writestr(file_name, output.read())
                 

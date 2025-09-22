@@ -1,3 +1,5 @@
+# aws.py
+
 from collections import defaultdict
 import fitz  # PyMuPDF
 import re
@@ -163,28 +165,33 @@ def process_multiple_aws_pdfs(uploaded_files):
         pdf_bytes = file.read()
         rows, template, text = process_pdf_by_template(pdf_bytes)
         all_rows.extend(rows)
-        bill_to = rows[0][-1]
-        invoice_number = rows[0][1]
-        template_map[f"{bill_to}__{invoice_number}"] = template
-        text_map[f"{bill_to}__{invoice_number}"] = text
+
+        bill_to = rows[0][-1].strip().upper()
+        invoice_number = rows[0][1].strip()
+        key = f"{bill_to}__{invoice_number}"
+
+        template_map[key] = template
+        text_map[key] = text
+
     return all_rows, template_map, text_map
 
 def build_dnts_cnts_rows(rows, template_map, text_map):
     grouped = defaultdict(list)
     for row in rows:
-        bill_to = row[-1]
-        invoice_number = row[1]
-        template_type = template_map.get(f"{bill_to}__{invoice_number}", "A")
-        group_key = f"{bill_to}__{template_type}"
+        bill_to = row[-1].strip().upper()
+        invoice_number = row[1].strip()
+        key = f"{bill_to}__{invoice_number}"
+        template_type = template_map.get(key, "A")
+        group_key = f"{bill_to}__{'CNTS' if template_type == 'B' else 'DNTS'}"
         grouped[group_key].append(row)
 
     output_files = {}
     for group_key, group_rows in grouped.items():
-        bill_to, template_type = group_key.split("__")
-        is_cnts = template_type == "B"
+        bill_to, file_type = group_key.split("__")
+        is_cnts = file_type == "CNTS"
         today = datetime.today().strftime("%d/%m/%Y")
 
-        if bill_to == "Mindware FZ LLC":
+        if bill_to == "MINDWARE FZ LLC":
             supp_code = "SDIA035"
             doc_src_locn = "UJ000"
             location_code = "UJ200"
@@ -198,12 +205,12 @@ def build_dnts_cnts_rows(rows, template_map, text_map):
         header_rows = []
         item_rows = []
         for idx, row in enumerate(group_rows, 1):
-            invoice_number = row[1]
+            invoice_number = row[1].strip()
             text = text_map.get(f"{bill_to}__{invoice_number}", "")
-            supp_ref_date = extract_supp_ref_date(text, template_type)
+            supp_ref_date = extract_supp_ref_date(text, template_map.get(f"{bill_to}__{invoice_number}", "A"))
             header_rows.append([
                 idx, today, supp_code, "USD", 0, doc_src_locn, location_code,
-                row[4], row[1], supp_ref_date
+                row[4], invoice_number, supp_ref_date
             ])
             rate = row[2] if row[2] else row[3]
             item_rows.append([
@@ -211,10 +218,11 @@ def build_dnts_cnts_rows(rows, template_map, text_map):
                 14807, "", division, "GEN" if not is_cnts else "ZZ-COMM", ""
             ])
 
-        output_files[f"{bill_to}__{'CNTS' if is_cnts else 'DNTS'}"] = {
+        output_files[f"{bill_to}__{file_type}"] = {
             "header": header_rows,
             "item": item_rows,
             "is_cnts": is_cnts
         }
 
     return output_files
+
