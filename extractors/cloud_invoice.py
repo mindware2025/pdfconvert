@@ -290,6 +290,5 @@ def map_invoice_numbers(processed_df: pd.DataFrame) -> pd.DataFrame:
         processed_df["LPO Number"].astype(str) +
         processed_df["End User"].astype(str)
     )
-    processed_df["Updated Invoice No."] = processed_df["Combined (D)"].map(mapping)
     processed_df.drop(columns=["Combined (D)"], inplace=True)
     return processed_df

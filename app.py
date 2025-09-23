@@ -387,21 +387,48 @@ elif tool == "🧾 Cloud Invoice Tool":
 
         # Process invoice data
         final_df = build_cloud_invoice_df(df)
-
-        # Map new Updated Invoice No.
         final_df = map_invoice_numbers(final_df)
-
-        # Sort alphabetically
         sorted_df = final_df.sort_values(by=final_df.columns.tolist()).reset_index(drop=True)
 
         # Create unique version rows based on Combined (D)
-        unique_rows = sorted_df[["Invoice No.", "Updated Invoice No.", "LPO Number", "End User"]].copy()
+        unique_rows = sorted_df[["Invoice No.","LPO Number", "End User"]].copy()
         unique_rows["Combined (D)"] = (
             unique_rows["Invoice No."].astype(str) +
             unique_rows["LPO Number"].astype(str) +
             unique_rows["End User"].astype(str)
         )
         unique_rows = unique_rows.drop_duplicates(subset=["Combined (D)"]).reset_index(drop=True)
+
+        # Versioning logic
+        # Versioning logic: always increment Version2 (F) for each group, never blank!
+        unique_rows["Version1 (E)"] = (unique_rows["Invoice No."].ne(unique_rows["Invoice No."].shift()).astype(int))
+        v2 = []
+        for i, v1 in enumerate(unique_rows["Version1 (E)"]):
+            if v1 == 1:
+                v2.append(1)
+            else:
+                prev_v2 = v2[-1]
+                v2.append(prev_v2 + 1)
+        unique_rows["Version2 (F)"] = v2
+        
+        # Version3 and Version4 use only Version2 (F) for the suffix
+        unique_rows["Version3 (G)"] = unique_rows.apply(lambda row: f'-{row["Version2 (F)"]}', axis=1)
+        unique_rows["Version4 (H)"] = unique_rows.apply(lambda row: f'{row["Invoice No."]}-{row["Version2 (F)"]}', axis=1)
+
+        # --- MAP Version 4 back to main DataFrame ---
+        version_map = dict(zip(unique_rows["Combined (D)"], unique_rows["Version4 (H)"]))
+        sorted_df["Combined (D)"] = (
+            sorted_df["Invoice No."].astype(str) +
+            sorted_df["LPO Number"].astype(str) +
+            sorted_df["End User"].astype(str)
+        )
+        sorted_df["Versioned Invoice No."] = sorted_df["Combined (D)"].map(version_map)
+        # Move the new column to the end
+        cols = list(sorted_df.columns)
+        cols.append(cols.pop(cols.index("Versioned Invoice No.")))
+        sorted_df = sorted_df[cols]
+        # Drop Combined (D) if not needed
+        sorted_df = sorted_df.drop(columns=["Combined (D)"])
 
         # Display metrics
         pos_df = sorted_df[sorted_df["Gross Value"].astype(float) >= 0]
@@ -415,44 +442,46 @@ elif tool == "🧾 Cloud Invoice Tool":
         # DataFrame previews
         st.subheader("Processed Preview")
         st.dataframe(sorted_df.head(50))
-
+        
         st.subheader("Versions Sheet Preview")
         st.dataframe(unique_rows.head(50))
-
+        
         # Create Excel workbook with formulas
         wb = Workbook()
         ws_invoice = wb.active
         ws_invoice.title = "CLOUD INVOICE"
         for r in dataframe_to_rows(sorted_df, index=False, header=True):
             ws_invoice.append(r)
-
+        
+        # Create VERSIONS sheet with formulas
         # Create VERSIONS sheet with formulas
         ws_versions = wb.create_sheet(title="VERSIONS")
-        headers = ["Invoice", "Updated Invoice", "LPO", "End User", "Combined (D)", "Version1 (E)", "Version2 (F)", "Version3 (G)", "Version4 (H)"]
+        headers = ["Invoice",  "LPO", "End User", "Combined (D)", "Version1 (E)", "Version2 (F)", "Version3 (G)", "Version4 (H)"]
         ws_versions.append(headers)
-        for i, row in enumerate(unique_rows.itertuples(index=False), start=2):
-            invoice, updated_invoice, lpo, end_user, _ = row
+        for i, row in enumerate(unique_rows.itertuples(index=False, name=None), start=2):
+            invoice, lpo, end_user, combined_d = row[:4]
             ws_versions.cell(row=i, column=1, value=invoice)
-            ws_versions.cell(row=i, column=2, value=updated_invoice)
-            ws_versions.cell(row=i, column=3, value=lpo)
-            ws_versions.cell(row=i, column=4, value=end_user)
-            ws_versions.cell(row=i, column=5, value=f"=A{i}&C{i}&D{i}")
-            ws_versions.cell(row=i, column=6, value=f'=IF(A{i}=A{i-1},"",1)' if i > 2 else "=1")
-            ws_versions.cell(row=i, column=7, value=f'=IFERROR(IF(F{i}="",F{i-1}+1,""),F{i-1}+1)' if i > 2 else "=1")
-            ws_versions.cell(row=i, column=8, value=f'="-"&F{i}&G{i}')
-            ws_versions.cell(row=i, column=9, value=f'=A{i}&H{i}')
-
+            ws_versions.cell(row=i, column=2, value=lpo)
+            ws_versions.cell(row=i, column=3, value=end_user)
+            ws_versions.cell(row=i, column=4, value=combined_d)
+            ws_versions.cell(row=i, column=5, value=f'=IF(A{i}=A{i-1},"",1)')
+            ws_versions.cell(row=i, column=6, value=f'=IFERROR(IF(E{i}="",E{i-1}+1,""),F{i-1}+1)')
+            ws_versions.cell(row=i, column=7, value=f'="-"&E{i}&F{i}')
+            ws_versions.cell(row=i, column=8, value=f'=A{i}&G{i}')
         # Save to buffer
         output_buffer = io.BytesIO()
         wb.save(output_buffer)
         output_buffer.seek(0)
-
+        
         st.download_button(
             label="⬇️ Download Cloud Invoice (with Formulas)",
             data=output_buffer.getvalue(),
             file_name="cloud_invoice_with_formulas.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
+
+        
 
 
 elif tool == "💻 Dell Invoice Extractor":
