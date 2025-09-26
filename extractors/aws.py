@@ -125,7 +125,24 @@ def process_pdf_by_template(pdf_bytes):
         formatted_due_date = extract_due_date_fallback(pdf_bytes)
 
     today_date = datetime.today().strftime("%d/%m/%Y")
-    narration = f"{'TAX CREDIT NOTE' if template == 'B' else 'TAX INVOICE'}#{invoice_number}-AMAZON WEB SERVICES - {formatted_period} - AC NO: {account_number}"
+    #narration = f"{'TAX CREDIT NOTE' if template == 'B' else 'TAX INVOICE'}#{invoice_number}-AMAZON WEB SERVICES - {formatted_period} - AC NO: {account_number}"
+    if template == "A":
+        narration_prefix ="TAX INVOICES#"
+        label="AMAZON WEB SERVICES EMEA SARL (AWS)"
+    elif template == "B":
+        narration_prefix ="TAX CREDIT NOTE#"
+        label="AMAZON WEB SERVICES EMEA SARL (AWS)"
+    elif template == "C":
+        narration_prefix ="TAX CREDIT NOTE#"
+        label="AMAZON WEB SERVICES, INC.INVOICE"
+    elif template == "D":
+        narration_prefix ="INVOICE#"
+        label="AMAZON MARKETPLACE INVOICE"
+    else:
+        narration_prefix ="INVOICE#"
+        label="AMAZON MARKETPLACE INVOICE"
+    narration= f"{narration_prefix}{invoice_number} - {label} - {formatted_period} - AC NO: {account_number}"  
+    #narration = f"{'TAX CREDIT NOTE' if template == 'B' else 'TAX INVOICE'}#{invoice_number}-AMAZON WEB SERVICES - {formatted_period} - AC NO: {account_number}"
     bill_to = extract_bill_to(text, template)
 
     try:

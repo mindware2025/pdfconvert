@@ -133,6 +133,8 @@ if st.session_state.login_state == "login":
 elif st.session_state.login_state == "fail":
     show_fail()
     st.stop()
+else:
+    team = st.radio("👥 Select your team:", ["Finance", "Operations"], horizontal=True)
 
 def extractor_workflow(
     extractor_name,
@@ -209,16 +211,22 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-TOOL_OPTIONS = [
-    "-- Select a tool --",
-    "🟦 Google DNTS Extractor",
-    "🟩 Google Invoice Extractor",
-    "📄 Claims Automation",
-    "🧾 Cloud Invoice Tool",
-    "💻 Dell Invoice Extractor",
-    "🟨 AWS Invoice Tool",
-    "Other"
-]
+if team == "Finance":
+    TOOL_OPTIONS = [
+        "-- Select a tool --",
+        "🟦 Google DNTS Extractor",
+        "🟩 Google Invoice Extractor",
+        "📄 Claims Automation",
+        "🟨 AWS Invoice Tool"
+    ]
+elif team == "Operations":
+    TOOL_OPTIONS = [
+        "-- Select a tool --",
+        "💻 Dell Invoice Extractor",
+        "🧾 Cloud Invoice Tool"
+    ]
+else:
+    TOOL_OPTIONS = ["-- Select a tool --"]
 tool = st.selectbox(
     "Select a tool:",
     TOOL_OPTIONS,
