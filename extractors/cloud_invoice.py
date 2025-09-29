@@ -224,13 +224,25 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         out_row["ITEM Tax Value"] = tax_value
         lpo = row.get("LPONumber", "")
         out_row["LPO Number"] = "" if pd.isna(lpo) or str(lpo).strip().lower() in ["nan", "none"] else str(lpo)[:30]
-        end_user = str(row.get("EndUser", ""))
-        end_user_country = str(row.get("EndUserCountryCode", ""))
+        #end_user = str(row.get("EndUser", ""))
+        #end_user_country = str(row.get("EndUserCountryCode", ""))
         
-        if end_user.strip().lower() in ["", "nan", "none"] or end_user_country.strip().lower() in ["", "nan", "none"]:
-             out_row["End User"] = ""
+        #if end_user.strip().lower() in ["", "nan", "none"] or end_user_country.strip().lower() in ["", "nan", "none"]:
+       #      out_row["End User"] = ""
+        #else:
+        #     out_row["End User"] = f"{end_user} ; {end_user_country}"
+        end_user = str(row.get("EndUser", "")).strip()
+        end_user_country = str(row.get("EndUserCountryCode", "")).strip()
+        
+        if (not end_user or end_user.lower() in ["nan", "none"]) or (not end_user_country or end_user_country.lower() in ["nan", "none"]):
+
+            out_row["End User"] = end_user  # or just empty if you prefer ""
+            out_row["_highlight_end_user"] = True
         else:
-             out_row["End User"] = f"{end_user} ; {end_user_country}"
+    # Both present, no highlight
+            out_row["End User"] = f"{end_user} ; {end_user_country}"
+            out_row["_highlight_end_user"] = False
+        
 
         try: out_row["Cost"] = round(float(cost_val), 2)
         except: out_row["Cost"] = cost

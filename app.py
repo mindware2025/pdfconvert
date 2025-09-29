@@ -7,6 +7,8 @@ from datetime import datetime
 from openpyxl.styles import PatternFill
 from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
+from openpyxl.styles import PatternFill
+from openpyxl.utils import get_column_letter
 
 from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_multiple_aws_pdfs
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
@@ -46,6 +48,8 @@ st.markdown("""
     header {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
+red_fill = PatternFill(start_color="FF9999", end_color="FF9999", fill_type="solid")
+
 
 st.markdown("""
     <style>
@@ -388,7 +392,7 @@ elif tool == "🧾 Cloud Invoice Tool":
         if uploaded_file.name.endswith(".csv"):
             df = pd.read_csv(uploaded_file)
         elif uploaded_file.name.endswith(".xlsx"):
-            df = pd.read_excel(uploaded_file)
+            df = pd.read_excel(uploaded_file, engine="openpyxl")
         else:
             st.error("Unsupported file format. Please upload a CSV or Excel file.")
             st.stop()
@@ -397,6 +401,11 @@ elif tool == "🧾 Cloud Invoice Tool":
         final_df = build_cloud_invoice_df(df)
         final_df = map_invoice_numbers(final_df)
         sorted_df = final_df.sort_values(by=final_df.columns.tolist()).reset_index(drop=True)
+        def highlight_row(row):
+            end_user = str(row.get("End User", "")).strip()
+            return not (" ; " in end_user)
+
+        sorted_df["_highlight_end_user"] = sorted_df.apply(highlight_row, axis=1)
 
         # Create unique version rows based on Combined (D)
         unique_rows = sorted_df[["Invoice No.","LPO Number", "End User"]].copy()
@@ -408,7 +417,6 @@ elif tool == "🧾 Cloud Invoice Tool":
         unique_rows = unique_rows.drop_duplicates(subset=["Combined (D)"]).reset_index(drop=True)
 
         # Versioning logic
-        # Versioning logic: always increment Version2 (F) for each group, never blank!
         unique_rows["Version1 (E)"] = (unique_rows["Invoice No."].ne(unique_rows["Invoice No."].shift()).astype(int))
         v2 = []
         for i, v1 in enumerate(unique_rows["Version1 (E)"]):
@@ -418,8 +426,6 @@ elif tool == "🧾 Cloud Invoice Tool":
                 prev_v2 = v2[-1]
                 v2.append(prev_v2 + 1)
         unique_rows["Version2 (F)"] = v2
-        
-        # Version3 and Version4 use only Version2 (F) for the suffix
         unique_rows["Version3 (G)"] = unique_rows.apply(lambda row: f'-{row["Version2 (F)"]}', axis=1)
         unique_rows["Version4 (H)"] = unique_rows.apply(lambda row: f'{row["Invoice No."]}-{row["Version2 (F)"]}', axis=1)
 
@@ -431,12 +437,13 @@ elif tool == "🧾 Cloud Invoice Tool":
             sorted_df["End User"].astype(str)
         )
         sorted_df["Versioned Invoice No."] = sorted_df["Combined (D)"].map(version_map)
-        # Move the new column to the end
         cols = list(sorted_df.columns)
         cols.append(cols.pop(cols.index("Versioned Invoice No.")))
         sorted_df = sorted_df[cols]
-        # Drop Combined (D) if not needed
         sorted_df = sorted_df.drop(columns=["Combined (D)"])
+
+        # === ADD HIGHLIGHT FLAG HERE ===
+        #sorted_df["_highlight_end_user"] = sorted_df["End User"].astype(str).str.strip() == ""
 
         # Display metrics
         pos_df = sorted_df[sorted_df["Gross Value"].astype(float) >= 0]
@@ -450,18 +457,42 @@ elif tool == "🧾 Cloud Invoice Tool":
         # DataFrame previews
         st.subheader("Processed Preview")
         st.dataframe(sorted_df.head(50))
-        
         st.subheader("Versions Sheet Preview")
         st.dataframe(unique_rows.head(50))
         
         # Create Excel workbook with formulas
+        red_fill = PatternFill(start_color="FF9999", end_color="FF9999", fill_type="solid")
+        
+        # Remove the internal helper column before saving
+        if "_highlight_end_user" in sorted_df.columns:
+            df_to_write = sorted_df.drop(columns=["_highlight_end_user"])
+        else:
+            df_to_write = sorted_df.copy()
+        
+        # Get index of 'End User' column (1-based for Excel)
+        try:
+            end_user_col_idx = df_to_write.columns.get_loc("End User") + 1
+        except:
+            end_user_col_idx = None
+        
+        # Create workbook and write rows
         wb = Workbook()
         ws_invoice = wb.active
         ws_invoice.title = "CLOUD INVOICE"
-        for r in dataframe_to_rows(sorted_df, index=False, header=True):
-            ws_invoice.append(r)
         
-        # Create VERSIONS sheet with formulas
+        for r_idx, row in enumerate(dataframe_to_rows(df_to_write, index=False, header=True), start=1):
+            ws_invoice.append(row)
+            
+            # Skip header row
+            if r_idx == 1 or end_user_col_idx is None:
+                continue
+        
+            # Highlight if flagged
+            highlight = sorted_df.iloc[r_idx - 2].get("_highlight_end_user", False)
+            if highlight:
+                col_letter = get_column_letter(end_user_col_idx)
+                ws_invoice[f"{col_letter}{r_idx}"].fill = red_fill
+        
         # Create VERSIONS sheet with formulas
         ws_versions = wb.create_sheet(title="VERSIONS")
         headers = ["Invoice",  "LPO", "End User", "Combined (D)", "Version1 (E)", "Version2 (F)", "Version3 (G)", "Version4 (H)"]
@@ -476,6 +507,7 @@ elif tool == "🧾 Cloud Invoice Tool":
             ws_versions.cell(row=i, column=6, value=f'=IFERROR(IF(E{i}="",E{i-1}+1,""),F{i-1}+1)')
             ws_versions.cell(row=i, column=7, value=f'="-"&E{i}&F{i}')
             ws_versions.cell(row=i, column=8, value=f'=A{i}&G{i}')
+        
         # Save to buffer
         output_buffer = io.BytesIO()
         wb.save(output_buffer)
@@ -487,7 +519,6 @@ elif tool == "🧾 Cloud Invoice Tool":
             file_name="cloud_invoice.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-
 
         
 
