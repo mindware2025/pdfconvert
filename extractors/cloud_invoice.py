@@ -235,7 +235,20 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
        #      out_row["End User"] = ""
         #else:
         #     out_row["End User"] = f"{end_user} ; {end_user_country}"
+        # Normalize and clean inputs
         end_user = str(row.get("EndUser", "")).strip()
+        end_user_country = str(row.get("EndUserCountryCode", "")).strip()
+        
+        # Define what values are considered invalid
+        invalid_values = ["", "nan", "none"]
+        
+        # Check for invalid End User or Country Code
+        if end_user.lower() in invalid_values or end_user_country.lower() in invalid_values:
+            out_row["End User"] = ""  # Show empty string if missing
+            out_row["_highlight_end_user"] = True  # Flag for red highlight
+        else:
+            out_row["End User"] = f"{end_user} ; {end_user_country}"
+            out_row["_highlight_end_user"] = Falseend_user = str(row.get("EndUser", "")).strip()
         end_user_country = str(row.get("EndUserCountryCode", "")).strip()
         
         if (not end_user or end_user.lower() in ["nan", "none"]) or (not end_user_country or end_user_country.lower() in ["nan", "none"]):
