@@ -163,25 +163,37 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
             except Exception:
                 billing_info = billing_end  # fallback to raw if parsing fails
         
-        # Build parts list and skip empty or NaN values
-        parts = [
-            item_desc_raw,
-            item_name_raw,
-            item_name_detail,
-        ]
+        ## Build parts list and skip empty or NaN values
+        ##parts = [
+         #   item_desc_raw,
+         #   item_name_raw,
+         #   item_name_detail,
+        #]
+        #    parts.append(f"{billing_start}-{billing_end}")
+       # 
+       # 
+       # # Join non-empty parts with hyphen
+       # out_row["ITEM Name"] = "-".join([p for p in parts if p and p.lower() != "nan"])
+        # Special rule for KA000: use only column AE (ITEMName)
+        if doc_loc == "KA000":
+            out_row["ITEM Name"] = item_desc_raw.strip()
+        else:
+            # Build parts list and skip empty or NaN values
+            parts = [
+                item_desc_raw,
+                item_name_raw,
+                item_name_detail,
+            ]
         
-        # Append billing info based on item code
-        # Append billing info based on item code
-        if item_code_upper == "MSRI-CNS" and billing_info:
-            parts.append(billing_info)
-        elif item_code_upper in ["MSAZ-CNS", "AS-CNS", "AWS-UTILITIES-CNS"] and billing_info:
-            parts.append(billing_info)
-        elif billing_start and billing_end and billing_start.lower() != "nan" and billing_end.lower() != "nan":
-            parts.append(f"{billing_start}-{billing_end}")
+            # Append billing info based on item code
+            if item_code_upper == "MSRI-CNS" and billing_info:
+                parts.append(billing_info)
+            elif item_code_upper in ["MSAZ-CNS", "AS-CNS", "AWS-UTILITIES-CNS"] and billing_info:
+                parts.append(billing_info)
+            elif billing_start and billing_end and billing_start.lower() != "nan" and billing_end.lower() != "nan":
+                parts.append(f"{billing_start}-{billing_end}")
         
-        
-        # Join non-empty parts with hyphen
-        out_row["ITEM Name"] = "-".join([p for p in parts if p and p.lower() != "nan"])
+            # Join non-empty parts with hyphen
         
         #out_row["ITEM Name"] = f"{item_desc_raw}-{row.get('ITEMName','')}-{out_row['Subscription Id']}#{out_row['Billing Cycle Start Date']}-{out_row['Billing Cycle End Date']}"
         out_row["UOM"] = row.get("UOM", "")

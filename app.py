@@ -482,9 +482,9 @@ elif tool == "🧾 Cloud Invoice Tool":
         output_buffer.seek(0)
         
         st.download_button(
-            label="⬇️ Download Cloud Invoice (with Formulas)",
+            label="⬇️ Download Cloud Invoice",
             data=output_buffer.getvalue(),
-            file_name="cloud_invoice_with_formulas.xlsx",
+            file_name="cloud_invoice.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
