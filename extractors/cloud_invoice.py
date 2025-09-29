@@ -42,8 +42,9 @@ keyword_map = {
     ("windows server", "window server"): "MSPER-CNS",
     ("ms-azr", "azure subscription"): "MSAZ-CNS",
     ("google workspace",): "GL-WSP-CNS",
-    ("m365", "microsoft 365", "office 365", "exchange online"): "MS-CNS",
+    ("m365", "microsoft 365", "office 365", "exchange online","Microsoft Defender"): "MS-CNS",
     ("acronis",): "AS-CNS",
+    ("windows 11 pro",): "MSPER-CNS",
     ("power bi",): "MS-CNS",
     ("planner", "project plan"): "MS-CNS",
     ("power automate premium",): "MS-CNS",
@@ -192,7 +193,10 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                 parts.append(billing_info)
             elif billing_start and billing_end and billing_start.lower() != "nan" and billing_end.lower() != "nan":
                 parts.append(f"{billing_start}-{billing_end}")
-        
+            
+                # Join non-empty parts with hyphen
+            out_row["ITEM Name"] = "-".join([p for p in parts if p and p.lower() != "nan"])
+
             # Join non-empty parts with hyphen
         
         #out_row["ITEM Name"] = f"{item_desc_raw}-{row.get('ITEMName','')}-{out_row['Subscription Id']}#{out_row['Billing Cycle Start Date']}-{out_row['Billing Cycle End Date']}"

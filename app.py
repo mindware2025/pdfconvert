@@ -474,6 +474,11 @@ elif tool == "🧾 Cloud Invoice Tool":
             end_user_col_idx = df_to_write.columns.get_loc("End User") + 1
         except:
             end_user_col_idx = None
+            
+        try:
+            item_code_col_idx = df_to_write.columns.get_loc("ITEM Code") + 1
+        except:
+            item_code_col_idx = None    
         
         # Create workbook and write rows
         wb = Workbook()
@@ -484,14 +489,22 @@ elif tool == "🧾 Cloud Invoice Tool":
             ws_invoice.append(row)
             
             # Skip header row
-            if r_idx == 1 or end_user_col_idx is None:
-                continue
-        
-            # Highlight if flagged
-            highlight = sorted_df.iloc[r_idx - 2].get("_highlight_end_user", False)
-            if highlight:
-                col_letter = get_column_letter(end_user_col_idx)
-                ws_invoice[f"{col_letter}{r_idx}"].fill = red_fill
+            if r_idx == 1:
+              continue
+
+        # Highlight End User
+            if end_user_col_idx is not None:
+                highlight = sorted_df.iloc[r_idx - 2].get("_highlight_end_user", False)
+                if highlight:
+                    col_letter = get_column_letter(end_user_col_idx)
+                    ws_invoice[f"{col_letter}{r_idx}"].fill = red_fill
+ 
+        # Highlight ITEM Code if empty
+            if item_code_col_idx is not None:
+                item_code_val = sorted_df.iloc[r_idx - 2].get("ITEM Code", "")
+                if not item_code_val or str(item_code_val).strip().lower() in ["", "nan", "none"]:
+                   col_letter = get_column_letter(item_code_col_idx)
+                   ws_invoice[f"{col_letter}{r_idx}"].fill = red_fill
         
         # Create VERSIONS sheet with formulas
         ws_versions = wb.create_sheet(title="VERSIONS")
