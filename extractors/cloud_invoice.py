@@ -42,7 +42,7 @@ keyword_map = {
     ("windows server", "window server"): "MSPER-CNS",
     ("ms-azr", "azure subscription"): "MSAZ-CNS",
     ("google workspace",): "GL-WSP-CNS",
-    ("m365", "microsoft 365", "office 365", "exchange online","Microsoft Defender"): "MS-CNS",
+    ("m365", "microsoft 365", "office 365", "exchange online","Microsoft Defender for Endpoint P1"): "MS-CNS",
     ("acronis",): "AS-CNS",
     ("windows 11 pro",): "MSPER-CNS",
     ("power bi",): "MS-CNS",
