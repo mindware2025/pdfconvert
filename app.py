@@ -43,7 +43,7 @@ usage_file = "tool_usage.csv"
 st.set_page_config(
     page_title="Mindware Tool",
     layout="wide",
-    initial_sidebar_state="collapsed"  # <-- THIS collapses the sidebar by default
+    initial_sidebar_state="expanded"  # <-- THIS collapses the sidebar by default
 )
 
 with st.sidebar:
@@ -65,6 +65,7 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
+
 
 
 red_fill = PatternFill(start_color="FF9999", end_color="FF9999", fill_type="solid")
