@@ -43,38 +43,25 @@ usage_file = "tool_usage.csv"
 st.set_page_config(
     page_title="Mindware Tool",
     layout="wide",
-    initial_sidebar_state="expanded"  # <-- THIS collapses the sidebar by default
+    initial_sidebar_state="expanded"  # "auto" also works to make it collapsible
 )
 
+# Sidebar
 with st.sidebar:
     st.markdown("### ⚙️ Admin Panel")
-    # Optional: Admin icon (just for display)
-    st.markdown("""
-    <style>
-    /* Hide only the right header elements (Share, GitHub, etc.) */
-    [data-testid="stHeader"] [data-testid="stToolbar"] {
-        display: none !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-    
     admin_mode = st.checkbox("Show Tool Usage Analytics", value=False)
 
+# CSS: hide only top-right toolbar
 st.markdown("""
     <style>
-    /* Hide only the right header elements (Share, GitHub, etc.) */
+    /* Hide Share, GitHub, etc. on top-right */
     [data-testid="stHeader"] [data-testid="stToolbar"] {
         display: none !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
-
-
-red_fill = PatternFill(start_color="FF9999", end_color="FF9999", fill_type="solid")
-
-
+# Other styling
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap');
