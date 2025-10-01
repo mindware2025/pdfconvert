@@ -56,10 +56,11 @@ with st.sidebar:
     """, unsafe_allow_html=True)
     
     admin_mode = st.checkbox("Show Tool Usage Analytics", value=False)
+
 st.markdown("""
     <style>
-    /* Hide the top right header (Share, GitHub, etc.) */
-    header [data-testid="stToolbar"] {
+    /* Hide only the right header elements (Share, GitHub, etc.) */
+    [data-testid="stHeader"] [data-testid="stToolbar"] {
         display: none !important;
     }
     </style>
