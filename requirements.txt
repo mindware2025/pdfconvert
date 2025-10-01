@@ -7,3 +7,4 @@ pdf2image
 Pillow
 python-dotenv 
 PyMuPDF==1.25.5
+plotly

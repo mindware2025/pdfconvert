@@ -6,7 +6,7 @@ import pandas as pd
 import io
 from datetime import datetime
 from openpyxl.styles import PatternFill
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import PatternFill
 from openpyxl.utils import get_column_letter
@@ -36,22 +36,26 @@ from claims_automation import (
     read_master2_entries,
     derive_defaults_from_source1,
 )
+import plotly.express as px
+
 usage_file = "tool_usage.csv"
-def log_tool_usage(tool_name: str):
-    now = datetime.now()
-    new_row = pd.DataFrame([{"tool": tool_name, "timestamp": now}])
-    if os.path.exists(usage_file):
-        existing = pd.read_csv(usage_file)
-        updated = pd.concat([existing, new_row], ignore_index=True)
-    else:
-        updated = new_row
-    updated.to_csv(usage_file, index=False)
 
 st.set_page_config(
-    page_title="Google DNTS upload file",
-    layout="wide"
+    page_title="Mindware Tool",
+    layout="wide",
+    initial_sidebar_state="collapsed"  # <-- THIS collapses the sidebar by default
 )
 
+with st.sidebar:
+    st.markdown("### ⚙️ Admin Panel")
+    # Optional: Admin icon (just for display)
+    st.markdown("""
+    <a href='#' style='text-decoration:none;'>
+    <img src='https://cdn-icons-png.flaticon.com/512/1828/1828817.png' width='25' title='Admin Panel'>
+    </a>
+    """, unsafe_allow_html=True)
+    
+    admin_mode = st.checkbox("Show Tool Usage Analytics", value=False)
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -148,8 +152,99 @@ elif st.session_state.login_state == "fail":
     show_fail()
     st.stop()
 else:
-    team = st.radio("👥 Select your team:", ["Finance", "Operations"], horizontal=True)
+    if admin_mode:
+        st.title("📊 Tool Usage Analytics (Admin Mode)")
+        
+        if os.path.exists("tool_usage.xlsx"):
+            wb = load_workbook("tool_usage.xlsx")
+            if "USAGE_REPORT" in wb.sheetnames:
+                ws = wb["USAGE_REPORT"]
+                
+                # --- READ ONLY, no incrementing ---
+                usage_data = [row for row in ws.iter_rows(min_row=2, values_only=True)]
+                usage_df = pd.DataFrame(usage_data, columns=["tool", "Month", "Usage Count"])
+                st.dataframe(usage_df)
+                
+                # --- DOWNLOAD BUTTON ---
+                excel_io = io.BytesIO()
+                with pd.ExcelWriter(excel_io, engine="openpyxl") as writer:
+                    usage_df.to_excel(writer, index=False, sheet_name="Tool Usage")
+                excel_io.seek(0)
+                st.download_button(
+                    "⬇️ Download Tool Usage Report",
+                    data=excel_io.getvalue(),
+                    file_name="tool_usage_report.xlsx"
+                )
+                
+                # --- PLOTLY CHARTS ---
+                import plotly.express as px
+                
+                st.subheader("📈 Tool Usage per Month")
+                fig_bar = px.bar(
+                    usage_df, 
+                    x="Month", 
+                    y="Usage Count", 
+                    color="tool",
+                    barmode="group",
+                    text="Usage Count",
+                    title="Tool Usage per Month"
+                )
+                fig_bar.update_layout(xaxis_tickangle=-45)
+                st.plotly_chart(fig_bar, use_container_width=True)
+                
+                st.subheader("📊 Overall Tool Usage Share")
+                pie_data = usage_df.groupby("tool")["Usage Count"].sum().reset_index()
+                fig_pie = px.pie(
+                    pie_data, 
+                    values="Usage Count", 
+                    names="tool", 
+                    title="Overall Tool Usage Share", 
+                    hole=0.3
+                )
+                st.plotly_chart(fig_pie, use_container_width=True)
+                
+                st.subheader("📉 Monthly Trend per Tool")
+                trend_data = usage_df.pivot_table(
+                    index="Month", columns="tool", values="Usage Count", fill_value=0
+                ).reset_index()
+                fig_line = px.line(
+                    trend_data, 
+                    x="Month", 
+                    y=trend_data.columns[1:],  # all tools
+                    markers=True,
+                    title="Monthly Usage Trend per Tool"
+                )
+                st.plotly_chart(fig_line, use_container_width=True)
+                
+        else:
+            st.info("No usage data found yet.")
+        st.stop()
+    else:
+        team = st.radio("👥 Select your team:", ["Finance", "Operations"], horizontal=True)
 
+def update_tool_usage(tool_name):
+    month = datetime.today().strftime("%b-%Y")
+    if os.path.exists("tool_usage.xlsx"):
+        wb = load_workbook("tool_usage.xlsx")
+        if "USAGE_REPORT" not in wb.sheetnames:
+            ws = wb.create_sheet("USAGE_REPORT")
+            ws.append(["tool", "Month", "Usage Count"])
+        else:
+            ws = wb["USAGE_REPORT"]
+    else:
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "USAGE_REPORT"
+        ws.append(["tool", "Month", "Usage Count"])
+    # Check if entry exists
+    found = False
+    for row in ws.iter_rows(min_row=2):
+        if row[0].value == tool_name and row[1].value == month:
+            row[2].value = (row[2].value or 0) + 1
+            found = True
+            break
+    if not found: ws.append([tool_name, month, 1])
+    wb.save("tool_usage.xlsx")
 def extractor_workflow(
     extractor_name,
     extractor_info,
@@ -193,11 +288,13 @@ def extractor_workflow(
                     header_df.to_excel(writer, sheet_name='DNTS_HEADER', index=False)
                     dnts_item_df.to_excel(writer, sheet_name='DNTS_ITEM', index=False)
                 output.seek(0)
+                
                 st.download_button(
                     label=f"⬇️ Download DNTS Excel",
                     data=output.getvalue(),
                     file_name=file_name,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    on_click=lambda: update_tool_usage("google Automation"),
                     key=f"download_{extractor_name}"
                 )
             else:
@@ -336,12 +433,12 @@ elif tool == "📄 Claims Automation":
             output_buffer = io.BytesIO()
             write_output_excel(output_buffer, out_rows)
             output_buffer.seek(0)
-
             st.download_button(
                 label="Download claims_output.xlsx",
                 data=output_buffer,
                 file_name="claims_output.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                on_click=lambda: update_tool_usage("Claims Automation"),
                 key="claims_download"
             )
         except Exception as e:
@@ -535,12 +632,12 @@ elif tool == "🧾 Cloud Invoice Tool":
         output_buffer = io.BytesIO()
         wb.save(output_buffer)
         output_buffer.seek(0)
-        log_tool_usage("Cloud Invoice")
         st.download_button(
             label="⬇️ Download Cloud Invoice",
             data=output_buffer.getvalue(),
             file_name="cloud_invoice.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            on_click=lambda: update_tool_usage("Cloud Automation")
         )
 
         
@@ -827,13 +924,13 @@ elif tool == "💻 Dell Invoice Extractor":
                     except Exception:
                         pass
             output.seek(0)
-            log_tool_usage("dell")
             st.download_button(
                 label="⬇️ Download PRE ALERT UPLOAD",
                 data=output.getvalue(),
                 file_name="pre_alert_upload.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="download_dell_pre_alert"
+                key="download_dell_pre_alert",
+                on_click=lambda: update_tool_usage("DEll Automation")
             )
         else:
             st.warning("No items found in the uploaded PDF(s).")
@@ -861,6 +958,7 @@ elif tool == "🟨 AWS Invoice Tool":
                     data=output_original.getvalue(),
                     file_name="aws_invoice_data.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    
                 )
     
                 output_files = build_dnts_cnts_rows(rows, template_map, text_map)
@@ -887,12 +985,13 @@ elif tool == "🟨 AWS Invoice Tool":
                         zip_file.writestr(file_name, output.read())
                 
                 zip_buffer.seek(0)
-                log_tool_usage("AWS")
+                
                 st.download_button(
                     label="⬇️ Download All DNTS/CNTS Files as ZIP",
                     data=zip_buffer.getvalue(),
                     file_name="aws_dnts_cnts_files.zip",
-                    mime="application/zip"
+                    mime="application/zip",
+                    on_click=lambda: update_tool_usage("AWS Automation")
                 )
             else:
                 st.warning("No data extracted from the uploaded AWS PDFs.")
@@ -903,28 +1002,9 @@ elif tool == "🟨 AWS Invoice Tool":
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
     st.info("Currently, only the Google DNTS Extractor tool is available. More tools can be added based on your requirements.")
-if os.path.exists("tool_usage.csv"):
-    usage_df = pd.read_csv("tool_usage.csv")
-    usage_df["timestamp"] = pd.to_datetime(usage_df["timestamp"])
-    usage_df["Month"] = usage_df["timestamp"].dt.strftime("%b-%Y")
-    
-    report_df = usage_df.groupby(["tool", "Month"]).size().reset_index(name="Usage Count")
-    
-    st.subheader("📊 Monthly Tool Usage Report")
-    st.dataframe(report_df)
-    
-    # Download Excel button
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        report_df.to_excel(writer, index=False, sheet_name="Tool Usage")
-    output.seek(0)
-    
-    st.download_button(
-        label="⬇️ Download Tool Usage Report",
-        data=output.getvalue(),
-        file_name="tool_usage_report.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+
+
+
 
 st.markdown("""
 <footer style='text-align:center; margin-top:3rem; color:#1a73e8; font-size:20px; font-weight:bold; font-family: Google Sans, sans-serif;'>
