@@ -50,10 +50,14 @@ with st.sidebar:
     st.markdown("### ⚙️ Admin Panel")
     # Optional: Admin icon (just for display)
     st.markdown("""
-    <a href='#' style='text-decoration:none;'>
-    <img src='https://cdn-icons-png.flaticon.com/512/1828/1828817.png' width='25' title='Admin Panel'>
-    </a>
-    """, unsafe_allow_html=True)
+    <style>
+    /* Hide only the right header elements (Share, GitHub, etc.) */
+    [data-testid="stHeader"] [data-testid="stToolbar"] {
+        display: none !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
     
     admin_mode = st.checkbox("Show Tool Usage Analytics", value=False)
 
