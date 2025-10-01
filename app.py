@@ -58,17 +58,18 @@ with st.sidebar:
     admin_mode = st.checkbox("Show Tool Usage Analytics", value=False)
 st.markdown("""
     <style>
-    /* Hide only Streamlit's top-right header toolbar */
-    header [data-testid="stToolbar"] {
-        display: none;
+    /* Hide the top-right menu (3 dots, GitHub, etc.) */
+    [data-testid="stHeaderActions"] {
+        display: none !important;
     }
 
-    /* Keep sidebar toggle (top-left) visible */
+    /* Keep the sidebar toggle (top-left) visible */
     [data-testid="collapsedControl"] {
         display: block !important;
     }
     </style>
 """, unsafe_allow_html=True)
+
 
 red_fill = PatternFill(start_color="FF9999", end_color="FF9999", fill_type="solid")
 
