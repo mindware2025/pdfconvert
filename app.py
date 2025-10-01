@@ -43,7 +43,7 @@ usage_file = "tool_usage.csv"
 st.set_page_config(
     page_title="Mindware Tool",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 # Sidebar content
