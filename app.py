@@ -46,27 +46,31 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Ensure sidebar has content
+# Sidebar content
 with st.sidebar:
     st.markdown("### ⚙️ Admin Panel")
     admin_mode = st.checkbox("Show Tool Usage Analytics", value=False)
 
-# Optional: CSS for deployed mode to ensure sidebar visible
+# CSS: hide top-right icons but keep sidebar visible
 st.markdown("""
     <style>
-    /* Force sidebar to be visible and wide enough */
+    /* Hide Share, GitHub, Settings icons on top-right */
+    [data-testid="stToolbar"] {
+        display: none !important;
+    }
+
+    /* Ensure sidebar is always visible */
     [data-testid="stSidebar"] {
         visibility: visible !important;
-        min-width: 300px !important;
+        min-width: 280px !important;
     }
-    </style>
-""", unsafe_allow_html=True)
 
+    /* Optional: adjust sidebar content font */
+    [data-testid="stSidebar"] * {
+        font-family: 'Google Sans', sans-serif !important;
+    }
 
-# Other styling
-st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap');
+    /* General styling */
     html, body, [class*="css"] {
         font-family: 'Google Sans', sans-serif !important;
         background: #f6f8fa;
@@ -103,7 +107,6 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
-
 # ----------- Constants -----------
 DEFAULTS = {
     "supp_code": "SDIG005",
