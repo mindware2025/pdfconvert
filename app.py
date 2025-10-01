@@ -58,8 +58,9 @@ with st.sidebar:
     admin_mode = st.checkbox("Show Tool Usage Analytics", value=False)
 st.markdown("""
     <style>
-    #MainMenu {visibility: hidden;}
-    header {visibility: hidden;}
+    #MainMenu {visibility: hidden;}   /* hides Streamlit menu */
+    footer {visibility: hidden;}      /* hides footer */
+    /* DO NOT hide the whole header, so sidebar toggle stays visible */
     </style>
 """, unsafe_allow_html=True)
 red_fill = PatternFill(start_color="FF9999", end_color="FF9999", fill_type="solid")
