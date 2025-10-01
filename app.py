@@ -58,14 +58,9 @@ with st.sidebar:
     admin_mode = st.checkbox("Show Tool Usage Analytics", value=False)
 st.markdown("""
     <style>
-    /* Hide the top-right menu (3 dots, GitHub, etc.) */
-    [data-testid="stHeaderActions"] {
+    /* Hide the top right header (Share, GitHub, etc.) */
+    header [data-testid="stToolbar"] {
         display: none !important;
-    }
-
-    /* Keep the sidebar toggle (top-left) visible */
-    [data-testid="collapsedControl"] {
-        display: block !important;
     }
     </style>
 """, unsafe_allow_html=True)
