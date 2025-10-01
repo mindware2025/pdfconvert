@@ -43,23 +43,25 @@ usage_file = "tool_usage.csv"
 st.set_page_config(
     page_title="Mindware Tool",
     layout="wide",
-    initial_sidebar_state="expanded"  # "auto" also works to make it collapsible
+    initial_sidebar_state="expanded"
 )
 
-# Sidebar
+# Ensure sidebar has content
 with st.sidebar:
     st.markdown("### ⚙️ Admin Panel")
     admin_mode = st.checkbox("Show Tool Usage Analytics", value=False)
 
-# CSS: hide only top-right toolbar
+# Optional: CSS for deployed mode to ensure sidebar visible
 st.markdown("""
     <style>
-    /* Hide Share, GitHub, etc. on top-right */
-    [data-testid="stHeader"] [data-testid="stToolbar"] {
-        display: none !important;
+    /* Force sidebar to be visible and wide enough */
+    [data-testid="stSidebar"] {
+        visibility: visible !important;
+        min-width: 300px !important;
     }
     </style>
 """, unsafe_allow_html=True)
+
 
 # Other styling
 st.markdown("""
