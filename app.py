@@ -1,3 +1,4 @@
+import csv
 import os
 import zipfile
 import streamlit as st
@@ -35,7 +36,16 @@ from claims_automation import (
     read_master2_entries,
     derive_defaults_from_source1,
 )
-
+usage_file = "tool_usage.csv"
+def log_tool_usage(tool_name: str):
+    now = datetime.now()
+    new_row = pd.DataFrame([{"tool": tool_name, "timestamp": now}])
+    if os.path.exists(usage_file):
+        existing = pd.read_csv(usage_file)
+        updated = pd.concat([existing, new_row], ignore_index=True)
+    else:
+        updated = new_row
+    updated.to_csv(usage_file, index=False)
 
 st.set_page_config(
     page_title="Google DNTS upload file",
@@ -525,7 +535,7 @@ elif tool == "🧾 Cloud Invoice Tool":
         output_buffer = io.BytesIO()
         wb.save(output_buffer)
         output_buffer.seek(0)
-        
+        log_tool_usage("Cloud Invoice")
         st.download_button(
             label="⬇️ Download Cloud Invoice",
             data=output_buffer.getvalue(),
@@ -817,6 +827,7 @@ elif tool == "💻 Dell Invoice Extractor":
                     except Exception:
                         pass
             output.seek(0)
+            log_tool_usage("dell")
             st.download_button(
                 label="⬇️ Download PRE ALERT UPLOAD",
                 data=output.getvalue(),
@@ -876,6 +887,7 @@ elif tool == "🟨 AWS Invoice Tool":
                         zip_file.writestr(file_name, output.read())
                 
                 zip_buffer.seek(0)
+                log_tool_usage("AWS")
                 st.download_button(
                     label="⬇️ Download All DNTS/CNTS Files as ZIP",
                     data=zip_buffer.getvalue(),
@@ -891,6 +903,28 @@ elif tool == "🟨 AWS Invoice Tool":
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
     st.info("Currently, only the Google DNTS Extractor tool is available. More tools can be added based on your requirements.")
+if os.path.exists("tool_usage.csv"):
+    usage_df = pd.read_csv("tool_usage.csv")
+    usage_df["timestamp"] = pd.to_datetime(usage_df["timestamp"])
+    usage_df["Month"] = usage_df["timestamp"].dt.strftime("%b-%Y")
+    
+    report_df = usage_df.groupby(["tool", "Month"]).size().reset_index(name="Usage Count")
+    
+    st.subheader("📊 Monthly Tool Usage Report")
+    st.dataframe(report_df)
+    
+    # Download Excel button
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        report_df.to_excel(writer, index=False, sheet_name="Tool Usage")
+    output.seek(0)
+    
+    st.download_button(
+        label="⬇️ Download Tool Usage Report",
+        data=output.getvalue(),
+        file_name="tool_usage_report.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 st.markdown("""
 <footer style='text-align:center; margin-top:3rem; color:#1a73e8; font-size:20px; font-weight:bold; font-family: Google Sans, sans-serif;'>
