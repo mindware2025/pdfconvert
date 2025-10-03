@@ -39,24 +39,28 @@ from claims_automation import (
 import plotly.express as px
 
 usage_file = "tool_usage.csv"
-def inject_google_analytics():
-    ga_code = """
-    <!-- Google Analytics -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-4736Z2ETEN"></script>
+def inject_google_tag_manager():
+    gtm_code = """
+    <!-- Google Tag Manager -->
     <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-4736Z2ETEN');
+    (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','GTM-NJSJFZ5L');
     </script>
+    <!-- End Google Tag Manager -->
     """
-    st.markdown(ga_code, unsafe_allow_html=True)
+    st.markdown(gtm_code, unsafe_allow_html=True)
+
+    
 st.set_page_config(
     page_title="Mindware Tool",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
-inject_google_analytics()
+inject_google_tag_manager()
+
 
 # Sidebar content
 with st.sidebar:
@@ -127,11 +131,11 @@ DEFAULTS = {
     "doc_src_locn": "UJ000",
     "location_code": "UJ200"
 }
-#CORRECT_USERNAME = "admin"
-#CORRECT_PASSWORD = "admin"
+CORRECT_USERNAME = "admin"
+CORRECT_PASSWORD = "admin"
 
-CORRECT_USERNAME = os.getenv("NAME")
-CORRECT_PASSWORD = os.getenv("PASSWORD")
+#CORRECT_USERNAME = os.getenv("NAME")
+#CORRECT_PASSWORD = os.getenv("PASSWORD")
 
 
 if "login_state" not in st.session_state:
