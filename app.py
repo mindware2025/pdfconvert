@@ -39,12 +39,24 @@ from claims_automation import (
 import plotly.express as px
 
 usage_file = "tool_usage.csv"
-
+def inject_google_analytics():
+    ga_code = """
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-4736Z2ETEN"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-4736Z2ETEN');
+    </script>
+    """
+    st.markdown(ga_code, unsafe_allow_html=True)
 st.set_page_config(
     page_title="Mindware Tool",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+inject_google_analytics()
 
 # Sidebar content
 with st.sidebar:
