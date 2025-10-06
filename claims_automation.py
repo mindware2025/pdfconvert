@@ -517,6 +517,8 @@ def build_output_rows_from_source1(
         dept = r.get("MIDIS Department", "")
         anly1 = ""
         anly2 = r.get("Anly2", "")
+        acty2_value = "OMOBIL" if str(division).strip().upper() in ["POMN", "PKWT"] else "NET ETSL"
+
 
         row = [""] * len(OUTPUT_HEADERS)
 
@@ -534,6 +536,7 @@ def build_output_rows_from_source1(
         set_col("Dept", "GEN")
         set_col("Anly1", anly1)
         set_col("Anly2", anly2)
+        set_col("Acty2", acty2_value)
         set_col("Currency", currency)
         set_col("FC Amt", fc_amt)
         set_col("LC Amt", None)
@@ -639,7 +642,7 @@ def build_debit_rows_from_source2(
 
         keywords = ["telephone", "phone", "communication"]
 
-        if main_ac_val == "54901":
+        if main_ac_val in ["54901", "54902"]:
             acty1_value = orion_id
         else:
             haystack = f"{benefit_type} {benefit_item}".lower()
