@@ -287,6 +287,14 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                 merged["Quantity"] = 1
                 merged["Rate Per Qty"] = merged["Gross Value"]
                 merged["Cost"] = merged["Gross Value"]
+    
+                # <-- FIX: recalculate ITEM Tax Value based on summed Gross Value -->
+                tax_rate_map = {"TC000": 0.05, "OM000": 0.05, "KA000": 0.15, "UJ000": 0}
+                merged["ITEM Tax Value"] = merged.apply(
+                    lambda x: round(x["Gross Value"] * tax_rate_map.get(x["Document Location"], 0), 2),
+                    axis=1
+                )
+    
                 result_df = pd.concat([df_other, merged], ignore_index=True)[CLOUD_INVOICE_HEADER]
     except Exception:
         pass
