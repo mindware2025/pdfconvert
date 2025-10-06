@@ -48,8 +48,10 @@ scope = ["https://www.googleapis.com/auth/spreadsheets", "https://spreadsheets.g
          "https://www.googleapis.com/auth/drive"]
 
 # Read credentials from Streamlit secrets
-service_account_info = st.secrets["google"]
+service_account_info = st.secrets["gcp_service_account"]
 creds = Credentials.from_service_account_info(service_account_info, scopes=scope)
+
+# ✅ Authorize and open sheet
 gc = gspread.authorize(creds)
 
 sheet = gc.open_by_url(SHEET_NAME).worksheet("Sheet1")
