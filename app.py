@@ -11,6 +11,8 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import PatternFill
 from openpyxl.utils import get_column_letter
+import gspread
+from google.oauth2.service_account import Credentials
 from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_multiple_aws_pdfs
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
 from utils.helpers import format_amount, format_invoice_date, format_month_year
@@ -25,6 +27,7 @@ from extractors.dell_invoice import (
     build_pre_alert_rows,
     read_master_mapping,
 )
+from oauth2client.service_account import ServiceAccountCredentials
 from extractors.cloud_invoice import create_summary_sheet, build_cloud_invoice_df, map_invoice_numbers
 from claims_automation import (
     build_output_rows_from_source1,
@@ -37,7 +40,35 @@ from claims_automation import (
     derive_defaults_from_source1,
 )
 import plotly.express as px
-usage_file = "tool_usage.csv"
+
+SHEET_JSON = "tool-mindware-7596713f2b86.json"  # Path to your downloaded JSON
+SHEET_NAME = "Mindware tool usage"
+
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name(SHEET_JSON, scope)
+gc = gspread.authorize(creds)
+sheet = gc.open(SHEET_NAME).worksheet("Sheet1") 
+
+def update_tool_usage(tool_name):
+    month = datetime.today().strftime("%b-%Y")
+    
+    # Read all existing rows
+    all_rows = sheet.get_all_records()
+    
+    # Check if entry exists
+    found = False
+    for i, row in enumerate(all_rows, start=2):  # skip header row
+        if row["tool"] == tool_name and row["Month"] == month:
+            current_count = row.get("Usage Count", 0) or 0
+            sheet.update_cell(i, 3, current_count + 1)  # Usage Count column
+            found = True
+            break
+    
+    # If not found, append a new row
+    if not found:
+        sheet.append_row([tool_name, month, 1])
+
+
 st.set_page_config(
     page_title="Mindware Tool",
     layout="wide",
@@ -47,6 +78,8 @@ st.set_page_config(
 with st.sidebar:
     st.markdown("### ⚙️ Admin Panel")
     admin_mode = st.checkbox("Show Tool Usage Analytics", value=False)
+
+
 # CSS: hide top-right icons but keep sidebar visible
 st.markdown("""
     <style>
@@ -211,29 +244,29 @@ else:
         st.stop()
     else:
         team = st.radio("👥 Select your team:", ["Finance", "Operations"], horizontal=True)
-def update_tool_usage(tool_name):
-    month = datetime.today().strftime("%b-%Y")
-    if os.path.exists("tool_usage.xlsx"):
-        wb = load_workbook("tool_usage.xlsx")
-        if "USAGE_REPORT" not in wb.sheetnames:
-            ws = wb.create_sheet("USAGE_REPORT")
-            ws.append(["tool", "Month", "Usage Count"])
-        else:
-            ws = wb["USAGE_REPORT"]
-    else:
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "USAGE_REPORT"
-        ws.append(["tool", "Month", "Usage Count"])
-    # Check if entry exists
-    found = False
-    for row in ws.iter_rows(min_row=2):
-        if row[0].value == tool_name and row[1].value == month:
-            row[2].value = (row[2].value or 0) + 1
-            found = True
-            break
-    if not found: ws.append([tool_name, month, 1])
-    wb.save("tool_usage.xlsx")
+# def update_tool_usage(tool_name):
+#     month = datetime.today().strftime("%b-%Y")
+#     if os.path.exists("tool_usage.xlsx"):
+#         wb = load_workbook("tool_usage.xlsx")
+#         if "USAGE_REPORT" not in wb.sheetnames:
+#             ws = wb.create_sheet("USAGE_REPORT")
+#             ws.append(["tool", "Month", "Usage Count"])
+#         else:
+#             ws = wb["USAGE_REPORT"]
+#     else:
+#         wb = Workbook()
+#         ws = wb.active
+#         ws.title = "USAGE_REPORT"
+#         ws.append(["tool", "Month", "Usage Count"])
+#     # Check if entry exists
+#     found = False
+#     for row in ws.iter_rows(min_row=2):
+#         if row[0].value == tool_name and row[1].value == month:
+#             row[2].value = (row[2].value or 0) + 1
+#             found = True
+#             break
+#     if not found: ws.append([tool_name, month, 1])
+#     wb.save("tool_usage.xlsx")
 def extractor_workflow(
     extractor_name,
     extractor_info,
@@ -605,6 +638,7 @@ elif tool == "🧾 Cloud Invoice Tool":
             file_name="cloud_invoice.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             on_click=lambda: update_tool_usage("Cloud Automation")
+            
         )
         
 
