@@ -44,34 +44,13 @@ from claims_automation import (
 )
 import plotly.express as px
 
-SHEET_JSON = "tool-mindware-7596713f2b86.json"  # Path to your downloaded JSON
-SHEET_NAME = "Mindware tool usage"
-json_base64 = """
-ewogICJ0eXBlIjogInNlcnZpY2VfYWNjb3VudCIsCiAgInByb2plY3RfaWQiOiAidG9vbC1taW5kd2FyZSIsCiAgInByaXZhdGVfa2V5X2lkIjogIjc1OTY3MTNmMmI4NjUzN2E3MjAyMTBjNjA0MWMyNDU2MzFlMTY1NGEiLAogICJwcml2YXRlX2tleSI6ICItLS0tLUJFR0lOIFBSSVZBVEUgS0VZLS0tLS1cbk1JSUV2Z0lCQURBTkJna3Foa2lHOXcwQkFRRUZBQVNDQktnd2dnU2tBZ0VBQW9JQkFRQzFMOEJMUHdwYml0V1VcbnRsdGV2ektKZ3Y4ZThlQk5NQndCd25iRVlOSko4Vk5pb2NrRStVSHhzU2xPNk85VzNpN2ZTSlpsSzUvR3Z3d0lcbkloZU5Nc1kwT291anBIWUk0bUU4dk41MzJQZmNFa3J1aTRrQmUvYXBhSGFFRTQ5Z0w3V3dRM0I1MGM2STNVaGhcbnJIMFdqSWJ1aGpmWEw0NkhLbGdqdVIwRGl6YTQyVTV3ZkR3cERLMFhxaGNvYWpQRDZFUFdhblhJV0NicXd0aVRcbm1MRzIxQ0luM1FZNzA5UFRMQ0FHdEVka2ExWEs1ejEvMjFROHNmRDFndWx1OU04ODhBYVptUEVHQW5aVnVBQjlcbkc4QVNWcGpXT0pJVUtKTjU0QVNqZllHYUk3NjVkcnJ4dWprU3QvbjhDT2l3TlFId0hOZGtlSnFub1pQLzlNcndcblI3a0h1Yy9aQWdNQkFBRUNnZ0VBQXA4L05lK1BmWlpOMXRFN3JRWUVFbU50ODJOMzNGaUJBNmZPQkVCNDgyY0tcbmU0SXo2OEdIeWpRTlhjK2FVQmtXeXVtVEx3SEg3NkdORzJZZjU1UXVEY1grQm1RY0xVaDh6alNqMEVHKzhGSW5cbldZQ29tR1M2ZldBVXFaaG0rSEwwVGlNODZTTE4rbU1HYXc3WG1hNnA0KzN3M3ErNDRFblZLY0ZpSCs2SGdCUkFcbkZ3K29HZ3ZKQnN2QTNZYW5FcU5GSVJtUFRFWFd6TWZBZEdab1IvQlRSc29Yb1NOSEZSaHNJZDJtUDZ1L2xGK2JcbjdTSmxJWHgzSWFiY2NDSjYxT1dZTVBYTzdVMklmUTJqVC9YWk1yU29sdHhSUG9EY3NDU2NOc01lM3ZZbjBEbCtcbmRSUER1SkRTRU1FbjF6anpJWDl0MXFteFRjaEFCKzQ0YmEweWZvdS9zUUtCZ1FENlhhaS9BVDVYT3BtT0crVlFcbjhYOW92bmJMQlVVMjRUMUZsWlRpVzZEYklldDZZbUQwWGNnSVlUMkhLazZvY1dlemNyQ3R0VHVlN3F3ZEE2dmdcbkVXUmJqRmtoc2gyZ1Q0a28yKzBVT0dMY0FOWE1IbDBwVmZjTFlzaE5hK2dqeHorOFZqUDBhVHhBSnI0TFJBQVdcbm1QUFhxd0VoYmlSNnJPZThtZm5CZ0lGc3FRS0JnUUM1UTQzMTRJUStJUWxDQ0EzRkowWlZ4aXpuaUdCYUJmVldcbjBCV2t0YkpJNDNGSnc3dE0vL1hpQUxCTkNGd045SXRDdWYzSzBZQ3F5U0ZkOHI4czhxY1RPN3JVZGI3N1h4VEZcblBDWGM0MkNYYVJreEJNNnBxSG0rZHZJb0ZoRlhwWXhveEwvQlV0L256cmJUOUZFcWFJRzBtZEVZcXNSTE44TDNcbml3aVNQN2FYc1FLQmdRRFNOeCsvdUppU2Z6WjlWcmpWbk9BZ240TjQ5YVRtN25vVzJnQ1hpdDNtQUhZS1hWNFFcbjhFbExsL0lrY29aMjhqbGpOOUpYR0F2R1o1b0dCcFlpM2hlSXNyQUlGZGpBU09mZWNjSi9MdFQ2Nm95WkJZbXRcbmNtdXFtTGVjSWhWWkxTdzd3NWwrQjNvNlZ3MU13anpjdkhKSlRHRDNvOVpuVnBTQkREdmptRFdUZVFLQmdBTC9cbkdMaTFYTzQwVXBZQzAxWXhBRzQ2dWxjMFdYcWJSaENWWlFRNC9CMDVzSWRrNXc2anhUSldtSU5tY3phMmtkb09cbmNCQnJ1dzBJRzhZTk94SmJDbURCUXBCVkp6V2hvQkJnbkt3cDhWSUJuU3F4elRYcFI2N1E5Ykc0U2FlRlFmUWZcbjJvb2g4UVVxenNJMjNXazJMNExnU2dXQUhaU3Azamxxd2tTN1N4VEJBb0dCQU5wcVltZEZFWFFMOWZvNTIwNzVcbmsyUTdVRmdCSnhsZUZXc1VmbG84YmdXbmtXazcweVMwSW1vWEFwcHhzbWZvRjNmMnlBcHJWWGRIbHZ5Rm03aG5cbkpGQUp0anZIc21xM25uWlN3WE4xTFFyaFlqQVJrdmxNdUpBNllKbDk2UndybDl2dER0Zk5DVmp5blBNNzR3dk9cbnhndy9aR2dMcUQwTU5BZHRNVlhnNitwUFxuLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLVxuIiwKICAiY2xpZW50X2VtYWlsIjogInN0cmVhbWxpdC11c2FnZUB0b29sLW1pbmR3YXJlLmlhbS5nc2VydmljZWFjY291bnQuY29tIiwKICAiY2xpZW50X2lkIjogIjExNTU1MjA4NzI5MzczMjA3NzgyOCIsCiAgImF1dGhfdXJpIjogImh0dHBzOi8vYWNjb3VudHMuZ29vZ2xlLmNvbS9vL29hdXRoMi9hdXRoIiwKICAidG9rZW5fdXJpIjogImh0dHBzOi8vb2F1dGgyLmdvb2dsZWFwaXMuY29tL3Rva2VuIiwKICAiYXV0aF9wcm92aWRlcl94NTA5X2NlcnRfdXJsIjogImh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92MS9jZXJ0cyIsCiAgImNsaWVudF94NTA5X2NlcnRfdXJsIjogImh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL3JvYm90L3YxL21ldGFkYXRhL3g1MDkvc3RyZWFtbGl0LXVzYWdlJTQwdG9vbC1taW5kd2FyZS5pYW0uZ3NlcnZpY2VhY2NvdW50LmNvbSIsCiAgInVuaXZlcnNlX2RvbWFpbiI6ICJnb29nbGVhcGlzLmNvbSIKfQo=
-"""  # paste the full Base64 string here
+creds_dict = st.secrets["gcp_service_account"]
 
-creds_dict = json.loads(base64.b64decode(json_base64))
-
-# Fix private_key line breaks (very important!)
-creds_dict['private_key'] = creds_dict['private_key'].replace('\\n', '\n')
-
-# -----------------------------
-# 3️⃣ Define the scopes
-# -----------------------------
-scope = ["https://spreadsheets.google.com/feeds",
-         "https://www.googleapis.com/auth/drive"]
-
-# -----------------------------
-# 4️⃣ Authorize gspread
-# -----------------------------
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 gc = gspread.authorize(creds)
 
-# -----------------------------
-# 5️⃣ Open your sheet
-# -----------------------------
-SHEET_NAME = "Mindware tool usage"
-sheet = gc.open(SHEET_NAME).worksheet("Sheet1")
+sheet = gc.open("Mindware tool usage").worksheet("Sheet1")
 def update_tool_usage(tool_name):
     month = datetime.today().strftime("%b-%Y")
     
