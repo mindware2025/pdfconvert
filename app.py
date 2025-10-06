@@ -46,20 +46,20 @@ import plotly.express as px
 SHEET_JSON = "tool-mindware-7596713f2b86.json"  # Path to your downloaded JSON
 SHEET_NAME = "Mindware tool usage"
 
-# 1️⃣ Load JSON string from secrets
-creds_text = st.secrets["gcp"]["json"]
+SHEET_JSON = "tool-mindware-7596713f2b86.json"  # Path to your downloaded JSON
 
-# 2️⃣ Parse it to dict
-creds_dict = json.loads(creds_text)
 
-# 3️⃣ Ensure private key newlines are correct
-creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+# Load the credentials
+with open(SHEET_JSON, "r") as f:
+    creds_dict = json.load(f)
 
-# 4️⃣ Build credentials
 creds = service_account.Credentials.from_service_account_info(
     creds_dict,
-    scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    scopes=["https://www.googleapis.com/auth/spreadsheets"]
 )
+
+gc = gspread.authorize(creds)
+sheet = gc.open("Mindware tool usage").worksheet("Sheet1")
 
 # 5️⃣ Authorize and open
 gc = gspread.authorize(creds)
