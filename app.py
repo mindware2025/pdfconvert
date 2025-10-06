@@ -11,6 +11,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import PatternFill
 from openpyxl.utils import get_column_letter
+from google.oauth2 import service_account
 import gspread
 from google.oauth2.service_account import Credentials
 from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_multiple_aws_pdfs
@@ -44,13 +45,20 @@ import plotly.express as px
 SHEET_JSON = "tool-mindware-7596713f2b86.json"  # Path to your downloaded JSON
 SHEET_NAME = "Mindware tool usage"
 
-scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-creds_dict = st.secrets["gcp"]
-creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+# Load credentials from Streamlit secrets
+creds_dict = dict(st.secrets["gcp"])
 
+# Create credentials object with proper scopes
+creds = service_account.Credentials.from_service_account_info(
+    creds_dict,
+    scopes=["https://www.googleapis.com/auth/drive"]
+)
+
+# Authorize gspread with these credentials
 gc = gspread.authorize(creds)
-sheet = gc.open(SHEET_NAME).worksheet("Sheet1") 
 
+# Open the sheet and select worksheet
+sheet = gc.open(SHEET_NAME).worksheet("Sheet1")
 def update_tool_usage(tool_name):
     month = datetime.today().strftime("%b-%Y")
     
