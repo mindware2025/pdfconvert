@@ -44,14 +44,50 @@ from claims_automation import (
 )
 import plotly.express as px
 
+creds_dict = {
+    "type": "service_account",
+    "project_id": "tool-mindware",
+    "private_key_id": "7596713f2b86537a720210c6041c245631e1654a",
+    "private_key": """-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQ...
+...rest of key...
+...last line...
+-----END PRIVATE KEY-----""",
+    "client_email": "streamlit-usage@tool-mindware.iam.gserviceaccount.com",
+    "client_id": "115552087293732077828",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/streamlit-usage@tool-mindware.iam.gserviceaccount.com",
+    "universe_domain": "googleapis.com"
+}
 
-creds_dict = st.secrets["google_service_account"]
-scope = ["https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_dict(dict(creds_dict), scope)
+# -----------------------------
+# 2️⃣ Define the scopes
+# -----------------------------
+scope = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
 
+# -----------------------------
+# 3️⃣ Create Credentials object
+# -----------------------------
+# Ensure that all \n are real newlines
+creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+
+# -----------------------------
+# 4️⃣ Authorize gspread
+# -----------------------------
 gc = gspread.authorize(creds)
 
-sheet = gc.open("Mindware tool usage").worksheet("Sheet1")
+# -----------------------------
+# 5️⃣ Open the Google Sheet
+# -----------------------------
+SHEET_NAME = "Mindware tool usage"
+sheet = gc.open(SHEET_NAME).worksheet("Sheet1")
+
 def update_tool_usage(tool_name):
     month = datetime.today().strftime("%b-%Y")
     
