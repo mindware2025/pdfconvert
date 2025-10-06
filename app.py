@@ -54,7 +54,7 @@ creds = Credentials.from_service_account_info(service_account_info, scopes=scope
 # ✅ Authorize and open sheet
 gc = gspread.authorize(creds)
 
-sheet = gc.open_by_url(SHEET_NAME).worksheet("Sheet1")
+sheet = gc.open(SHEET_NAME).worksheet("Sheet1")
 
 def update_tool_usage(tool_name):
     month = datetime.today().strftime("%b-%Y")
