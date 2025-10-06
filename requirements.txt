@@ -5,10 +5,9 @@ pdfplumber
 pytesseract
 pdf2image
 Pillow
-python-dotenv 
+python-dotenv
 PyMuPDF==1.25.5
 plotly
 gspread
 google-auth
 oauth2client
-google.oauth2
