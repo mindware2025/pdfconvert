@@ -533,6 +533,7 @@ def build_output_rows_from_source1(
         set_col("Main A/C", "12501")
         set_col("Sub A/C", sub_acct)
         set_col("Div", division)
+        #logger.debug("Division value = '%s'", division)
         set_col("Dept", "GEN")
         set_col("Anly1", anly1)
         set_col("Anly2", anly2)
