@@ -517,8 +517,7 @@ def build_output_rows_from_source1(
         dept = r.get("MIDIS Department", "")
         anly1 = ""
         anly2 = r.get("Anly2", "")
-        acty2_value = "OMOBIL" if str(division).strip().upper() in ["POMN", "PKWT"] else "NET ETSL"
-
+       
 
         row = [""] * len(OUTPUT_HEADERS)
 
@@ -537,7 +536,7 @@ def build_output_rows_from_source1(
         set_col("Dept", "GEN")
         set_col("Anly1", anly1)
         set_col("Anly2", anly2)
-        set_col("Acty2", acty2_value)
+        
         set_col("Currency", currency)
         set_col("FC Amt", fc_amt)
         set_col("LC Amt", None)
@@ -571,6 +570,7 @@ def build_debit_rows_from_source2(
     default_anly2: Optional[str] = None,
     default_currency: Optional[str] = None,
     doc_ref: Optional[str] = None,
+    division_map: Optional[Dict[str, str]] = None
 ) -> List[List[Any]]:
     """Build debit rows where the number of rows equals the number of Source File 2 rows.
 
@@ -652,6 +652,11 @@ def build_debit_rows_from_source2(
 
         if acty1_value:
             set_col("Acty1", acty1_value)
+            
+        division = division_map.get(orion_id, "").strip().upper() if division_map else ""
+        acty2_value = "OMOBIL" if division in ["POMN", "PKWT"] else "NET ETSL"
+        set_col("Acty2", acty2_value)
+
         if default_div is not None and str(default_div).strip() != "":
             set_col("Div", str(default_div).strip())
         set_col("Dept", "GEN")
@@ -684,7 +689,7 @@ def build_debit_rows_from_source2(
 
         rows_out.append(row)
 
-    logger.info("Built %d debit rows from Source File 2", len(rows_out))
+    #logger.info("Built %d debit rows from Source File 2", len(rows_out))
     return rows_out
 
 
@@ -812,6 +817,7 @@ def run(
     source2_path: Optional[str] = None,
     user_id_col: Optional[str] = None,
     master2_path: Optional[str] = None,
+    division_map: Optional[Dict[str, str]] = None,  # ✅ Add this
 ) -> None:
     """CLI runner for building the Excel output from files on disk."""
     logger.info("Starting build: source1=%s, master1=%s, source2=%s", source1_path, master1_path, source2_path)
@@ -823,7 +829,13 @@ def run(
     credit_rows = build_output_rows_from_source1(
         src_rows, master1_map=master1_map, source2_rows=source2_rows, user_id_col=user_id_col
     )
-    debit_rows = build_debit_rows_from_source2(source2_rows, master2_entries=master2_entries, master1_map=master1_map)
+    debit_rows = build_debit_rows_from_source2(
+    source2_rows,
+    master2_entries=master2_entries,
+    master1_map=master1_map,
+    division_map=division_map  # ✅ Pass it here
+)
+
     out_rows = credit_rows + debit_rows
     write_output_excel(output_path, out_rows)
     logger.info("Output written to %s with %d rows", output_path, len(out_rows))
@@ -856,8 +868,14 @@ def main() -> None:
         print(f"Template written to {args.template_out}.")
         return
 
-    run(args.source1, args.output, master1_path=args.master1, source2_path=args.source2, user_id_col=args.user_id_col, master2_path=args.master2)
-
+    run(
+    args.source1,
+    args.output,
+    master1_path=args.master1,
+    source2_path=args.source2,
+    user_id_col=args.user_id_col,
+    master2_path=args.master2
+)
 
 if __name__ == "__main__":
     main()
