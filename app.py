@@ -28,7 +28,7 @@ from extractors.dell_invoice import (
     read_master_mapping,
 )
 from oauth2client.service_account import ServiceAccountCredentials
-from extractors.cloud_invoice import create_summary_sheet, build_cloud_invoice_df, map_invoice_numbers
+from extractors.cloud_invoice import create_srcl_file, create_summary_sheet, build_cloud_invoice_df, map_invoice_numbers
 from claims_automation import (
     build_output_rows_from_source1,
     write_output_excel,
@@ -552,7 +552,15 @@ elif tool == "🧾 Cloud Invoice Tool":
             on_click=lambda: update_tool_usage("Cloud Automation")
             
         )
-        
+        # --- Download SRCL File ---
+        srcl_buffer = create_srcl_file(sorted_df)  # pass the processed DF
+
+        st.download_button(
+           label="⬇️ Download SRCL File",
+           data=srcl_buffer.getvalue(),
+           file_name="srcl_file.xlsx",
+           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
 
 elif tool == "💻 Dell Invoice Extractor":
     st.title("Dell Invoice Extractor (Pre-Alert Upload)")

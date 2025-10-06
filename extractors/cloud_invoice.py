@@ -341,3 +341,110 @@ def map_invoice_numbers(processed_df: pd.DataFrame) -> pd.DataFrame:
     )
     processed_df.drop(columns=["Combined (D)"], inplace=True)
     return processed_df
+
+
+import io
+from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
+
+def create_srcl_file(neg_df: pd.DataFrame) -> io.BytesIO:
+    """
+    Create a separate SRCL file with two sheets:
+    1. SALES_RET_HEAD
+    2. SALES_RETURN_ITEM
+    Returns an in-memory BytesIO object ready for download.
+    """
+    # === Sheet 1 headers ===
+    headers_head = [
+        "S.No",
+        "Date - (dd/MM/yyyy)",
+        "Cust_Code",
+        "Curr_Code",
+        "FORM_CODE",
+        "Doc_Src_Locn",
+        "Location_Code",
+        "Delivery_Location",
+        "SalesmanID"
+    ]
+
+    # === Sheet 2 headers ===
+    headers_item = [
+        "S.No",
+        "Ref. Key",
+        "Item_Code",
+        "Item_Name",
+        "Grade1",
+        "Grade2",
+        "UOM",
+        "Qty",
+        "Qty_Ls",
+        "Rate",
+        "Total",
+        "CI Number CL",
+        "End User CL",
+        "Subs ID CL",
+        "MPC Billdate CL",
+        "Unit Cost CL"
+    ]
+
+    wb = Workbook()
+    # --- Sheet 1 ---
+    ws_head = wb.active
+    ws_head.title = "SALES_RET_HEAD"
+    ws_head.append(headers_head)
+
+    today_str = pd.Timestamp.today().strftime("%d/%m/%Y")
+
+    for i, row in neg_df.iterrows():
+        ws_head.append([
+            i + 1,              # S.No
+            today_str,          # Current date
+            row.get("Customer Code", ""),  # Cust_Code
+            row.get("Currency Code", ""),  # Curr_Code
+            "",                 # FORM_CODE placeholder
+            row.get("Document Location", ""), # Doc_Src_Locn
+            row.get("Delivery Location Code", ""), # Location_Code
+            "",                 # Delivery_Location placeholder
+            ""                  # SalesmanID placeholder
+        ])
+
+    # --- Sheet 2 ---
+    ws_item = wb.create_sheet(title="SALES_RETURN_ITEM")
+    ws_item.append(headers_item)
+
+    # S.No mapping logic for repeated Versioned Invoice No.
+    ref_key_series = neg_df.get("Versioned Invoice No.", neg_df.get("Invoice No.", ""))
+    s_no_map = {}
+    current_s_no = 1
+    for v in ref_key_series:
+        if v not in s_no_map:
+            s_no_map[v] = current_s_no
+            current_s_no += 1
+
+    for _, row in neg_df.iterrows():
+        versioned_inv = row.get("Versioned Invoice No.", row.get("Invoice No.", ""))
+        ws_item.append([
+            s_no_map.get(versioned_inv, ""),   # S.No
+            versioned_inv,                     # Ref. Key
+            row.get("ITEM Code", ""),          # Item_Code
+            row.get("ITEM Name", ""),          # Item_Name
+            row.get("Grade code-1", ""),       # Grade1
+            row.get("Grade code-2", ""),       # Grade2
+            row.get("UOM", ""),                # UOM
+            row.get("Quantity", ""),           # Qty
+            row.get("Qty Loose", ""),          # Qty_Ls
+            row.get("Rate Per Qty", ""),       # Rate
+            row.get("Gross Value", ""),        # Total
+            versioned_inv,                     # CI Number CL
+            row.get("End User", ""),           # End User CL
+            row.get("Subscription Id", ""),    # Subs ID CL
+            "",                                # MPC Billdate CL (blank)
+            row.get("Cost", "")                # Unit Cost CL
+        ])
+
+    # Save to BytesIO
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
+
