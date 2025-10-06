@@ -9,3 +9,5 @@ python-dotenv
 PyMuPDF==1.25.5
 plotly
 gspread
+google-auth
+oauth2client
