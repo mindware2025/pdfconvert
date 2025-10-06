@@ -1,7 +1,5 @@
 
-import base64
 import csv
-import json
 import os
 import zipfile
 import streamlit as st
@@ -13,7 +11,6 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import PatternFill
 from openpyxl.utils import get_column_letter
-from google.oauth2 import service_account
 import gspread
 from google.oauth2.service_account import Credentials
 from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_multiple_aws_pdfs
@@ -44,36 +41,14 @@ from claims_automation import (
 )
 import plotly.express as px
 
-creds_dict = {
-  "type": "service_account",
-  "project_id": "tool-mindware",
-  "private_key_id": "7596713f2b86537a720210c6041c245631e1654a",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC1L8BLPwpbitWU\ntltevzKJgv8e8eBNMBwBwnbEYNJJ8VNiockE+UHxsSlO6O9W3i7fSJZlK5/GvwwI\nIheNMsY0OoujpHYI4mE8vN532PfcEkrui4kBe/apaHaEE49gL7WwQ3B50c6I3Uhh\nrH0WjIbuhjfXL46HKlgjuR0Diza42U5wfDwpDK0XqhcoajPD6EPWanXIWCbqwtiT\nmLG21CIn3QY709PTLCAGtEdka1XK5z1/21Q8sfD1gulu9M888AaZmPEGAnZVuAB9\nG8ASVpjWOJIUKJN54ASjfYGaI765drrxujkSt/n8COiwNQHwHNdkeJqnoZP/9Mrw\nR7kHuc/ZAgMBAAECggEAAp8/Ne+PfZZN1tE7rQYEEmNt82N33FiBA6fOBEB482cK\ne4Iz68GHyjQNXc+aUBkWyumTLwHH76GNG2Yf55QuDcX+BmQcLUh8zjSj0EG+8FIn\nWYComGS6fWAUqZhm+HL0TiM86SLN+mMGaw7Xma6p4+3w3q+44EnVKcFiH+6HgBRA\nFw+oGgvJBsvA3YanEqNFIRmPTEXWzMfAdGZoR/BTRsoXoSNHFRhsId2mP6u/lF+b\n7SJlIXx3IabccCJ61OWYMPXO7U2IfQ2jT/XZMrSoltxRPoDcsCScNsMe3vYn0Dl+\ndRPDuJDSEMEn1zjzIX9t1qmxTchAB+44ba0yfou/sQKBgQD6Xai/AT5XOpmOG+VQ\n8X9ovnbLBUU24T1FlZTiW6DbIet6YmD0XcgIYT2HKk6ocWezcrCttTue7qwdA6vg\nEWRbjFkhsh2gT4ko2+0UOGLcANXMHl0pVfcLYshNa+gjxz+8VjP0aTxAJr4LRAAW\nmPPXqwEhbiR6rOe8mfnBgIFsqQKBgQC5Q4314IQ+IQlCCA3FJ0ZVxizniGBaBfVW\n0BWktbJI43FJw7tM//XiALBNCFwN9ItCuf3K0YCqySFd8r8s8qcTO7rUdb77XxTF\nPCXc42CXaRkxBM6pqHm+dvIoFhFXpYxoxL/BUt/nzrbT9FEqaIG0mdEYqsRLN8L3\niwiSP7aXsQKBgQDSNx+/uJiSfzZ9VrjVnOAgn4N49aTm7noW2gCXit3mAHYKXV4Q\n8ElLl/IkcoZ28jljN9JXGAvGZ5oGBpYi3heIsrAIFdjASOfeccJ/LtT66oyZBYmt\ncmuqmLecIhVZLSw7w5l+B3o6Vw1MwjzcvHJJTGD3o9ZnVpSBDDvjmDWTeQKBgAL/\nGLi1XO40UpYC01YxAG46ulc0WXqbRhCVZQQ4/B05sIdk5w6jxTJWmINmcza2kdoO\ncBBruw0IG8YNOxJbCmDBQpBVJzWhoBBgnKwp8VIBnSqxzTXpR67Q9bG4SaeFQfQf\n2ooh8QUqzsI23Wk2L4LgSgWAHZSp3jlqwkS7SxTBAoGBANpqYmdFEXQL9fo52075\nk2Q7UFgBJxleFWsUflo8bgWnkWk70yS0ImoXAppxsmfoF3f2yAprVXdHlvyFm7hn\nJFAJtjvHsmq3nnZSwXN1LQrhYjARkvlMuJA6YJl96Rwrl9vtDtfNCVjynPM74wvO\nxgw/ZGgLqD0MNAdtMVXg6+pP\n-----END PRIVATE KEY-----\n",
-  "client_email": "streamlit-usage@tool-mindware.iam.gserviceaccount.com",
-  "client_id": "115552087293732077828",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/streamlit-usage%40tool-mindware.iam.gserviceaccount.com",
-  "universe_domain": "googleapis.com"
-}
+SHEET_JSON = "tool-mindware-0d87ca5562ad.json"  # Path to your downloaded JSON
+SHEET_NAME = "mindware tool"
 
-# ✅ Fix the private key formatting
-creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
-
-# 2️⃣ Define scopes
-scope = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
-
-# 3️⃣ Create credentials and authorize gspread
-creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name(SHEET_JSON, scope)
 gc = gspread.authorize(creds)
+sheet = gc.open(SHEET_NAME).worksheet("Sheet1") 
 
-# 4️⃣ Open the Google Sheet
-SHEET_NAME = "Mindware tool usage"
-sheet = gc.open(SHEET_NAME).worksheet("Sheet1")
 def update_tool_usage(tool_name):
     month = datetime.today().strftime("%b-%Y")
     
@@ -166,10 +141,10 @@ DEFAULTS = {
     "doc_src_locn": "UJ000",
     "location_code": "UJ200"
 }
-#CORRECT_USERNAME = "admin"
-#CORRECT_PASSWORD = "admin"
-CORRECT_USERNAME = os.getenv("NAME")
-CORRECT_PASSWORD = os.getenv("PASSWORD")
+CORRECT_USERNAME = "admin"
+CORRECT_PASSWORD = "admin"
+#CORRECT_USERNAME = os.getenv("NAME")
+#CORRECT_PASSWORD = os.getenv("PASSWORD")
 
 if "login_state" not in st.session_state:
     st.session_state.login_state = "login" 
