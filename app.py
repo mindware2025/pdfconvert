@@ -81,10 +81,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
-# Sidebar content
-with st.sidebar:
-    st.markdown("### ⚙️ Admin Panel")
-    admin_mode = st.checkbox("Show Tool Usage Analytics", value=False)
 
 
 # CSS: hide top-right icons but keep sidebar visible
@@ -181,99 +177,8 @@ if st.session_state.login_state == "login":
 elif st.session_state.login_state == "fail":
     show_fail()
     st.stop()
-else:
-    if admin_mode:
-        st.title("📊 Tool Usage Analytics (Admin Mode)")
-        
-        if os.path.exists("tool_usage.xlsx"):
-            wb = load_workbook("tool_usage.xlsx")
-            if "USAGE_REPORT" in wb.sheetnames:
-                ws = wb["USAGE_REPORT"]
-                
-                # --- READ ONLY, no incrementing ---
-                usage_data = [row for row in ws.iter_rows(min_row=2, values_only=True)]
-                usage_df = pd.DataFrame(usage_data, columns=["tool", "Month", "Usage Count"])
-                st.dataframe(usage_df)
-                
-                # --- DOWNLOAD BUTTON ---
-                excel_io = io.BytesIO()
-                with pd.ExcelWriter(excel_io, engine="openpyxl") as writer:
-                    usage_df.to_excel(writer, index=False, sheet_name="Tool Usage")
-                excel_io.seek(0)
-                st.download_button(
-                    "⬇️ Download Tool Usage Report",
-                    data=excel_io.getvalue(),
-                    file_name="tool_usage_report.xlsx"
-                )
-                
-                # --- PLOTLY CHARTS ---
-                import plotly.express as px
-                
-                st.subheader("📈 Tool Usage per Month")
-                fig_bar = px.bar(
-                    usage_df, 
-                    x="Month", 
-                    y="Usage Count", 
-                    color="tool",
-                    barmode="group",
-                    text="Usage Count",
-                    title="Tool Usage per Month"
-                )
-                fig_bar.update_layout(xaxis_tickangle=-45)
-                st.plotly_chart(fig_bar, use_container_width=True)
-                
-                st.subheader("📊 Overall Tool Usage Share")
-                pie_data = usage_df.groupby("tool")["Usage Count"].sum().reset_index()
-                fig_pie = px.pie(
-                    pie_data, 
-                    values="Usage Count", 
-                    names="tool", 
-                    title="Overall Tool Usage Share", 
-                    hole=0.3
-                )
-                st.plotly_chart(fig_pie, use_container_width=True)
-                
-                st.subheader("📉 Monthly Trend per Tool")
-                trend_data = usage_df.pivot_table(
-                    index="Month", columns="tool", values="Usage Count", fill_value=0
-                ).reset_index()
-                fig_line = px.line(
-                    trend_data, 
-                    x="Month", 
-                    y=trend_data.columns[1:],  # all tools
-                    markers=True,
-                    title="Monthly Usage Trend per Tool"
-                )
-                st.plotly_chart(fig_line, use_container_width=True)
-                
-        else:
-            st.info("No usage data found yet.")
-        st.stop()
-    else:
-        team = st.radio("👥 Select your team:", ["Finance", "Operations"], horizontal=True)
-# def update_tool_usage(tool_name):
-#     month = datetime.today().strftime("%b-%Y")
-#     if os.path.exists("tool_usage.xlsx"):
-#         wb = load_workbook("tool_usage.xlsx")
-#         if "USAGE_REPORT" not in wb.sheetnames:
-#             ws = wb.create_sheet("USAGE_REPORT")
-#             ws.append(["tool", "Month", "Usage Count"])
-#         else:
-#             ws = wb["USAGE_REPORT"]
-#     else:
-#         wb = Workbook()
-#         ws = wb.active
-#         ws.title = "USAGE_REPORT"
-#         ws.append(["tool", "Month", "Usage Count"])
-#     # Check if entry exists
-#     found = False
-#     for row in ws.iter_rows(min_row=2):
-#         if row[0].value == tool_name and row[1].value == month:
-#             row[2].value = (row[2].value or 0) + 1
-#             found = True
-#             break
-#     if not found: ws.append([tool_name, month, 1])
-#     wb.save("tool_usage.xlsx")
+team = st.radio("👥 Select your team:", ["Finance", "Operations"], horizontal=True)
+
 def extractor_workflow(
     extractor_name,
     extractor_info,
@@ -982,6 +887,7 @@ elif tool == "🟨 AWS Invoice Tool":
                     data=zip_buffer.getvalue(),
                     file_name="aws_dnts_cnts_files.zip",
                     mime="application/zip",
+             
                     on_click=lambda: update_tool_usage("AWS Automation")
                 )
             else:
