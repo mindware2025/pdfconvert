@@ -65,6 +65,9 @@ creds = service_account.Credentials.from_service_account_info(
 
 gc = gspread.authorize(creds)
 sheet = gc.open("Mindware tool usage").sheet1
+files = gc.list_spreadsheet_files()
+st.write(files)
+
 def update_tool_usage(tool_name):
     month = datetime.today().strftime("%b-%Y")
     
