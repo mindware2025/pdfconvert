@@ -48,17 +48,20 @@ SHEET_NAME = "Mindware tool usage"
 # Load credentials from Streamlit secrets
 creds_dict = dict(st.secrets["gcp"])
 
-# Create credentials object with proper scopes
+# Fix private_key: replace literal \n with actual newlines
+creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+
+# Create credentials
 creds = service_account.Credentials.from_service_account_info(
     creds_dict,
     scopes=["https://www.googleapis.com/auth/drive"]
 )
 
-# Authorize gspread with these credentials
+# Authorize gspread
 gc = gspread.authorize(creds)
 
-# Open the sheet and select worksheet
-sheet = gc.open(SHEET_NAME).worksheet("Sheet1")
+# Open the sheet
+sheet = gc.open("Mindware tool usage").worksheet("Sheet1")
 def update_tool_usage(tool_name):
     month = datetime.today().strftime("%b-%Y")
     
