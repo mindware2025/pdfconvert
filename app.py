@@ -44,10 +44,15 @@ import plotly.express as px
 SHEET_JSON = "tool-mindware-0d87ca5562ad.json"  # Path to your downloaded JSON
 SHEET_NAME = "mindware tool"
 
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name(SHEET_JSON, scope)
+scope = ["https://www.googleapis.com/auth/spreadsheets", "https://spreadsheets.google.com/feeds",
+         "https://www.googleapis.com/auth/drive"]
+
+# Read credentials from Streamlit secrets
+service_account_info = st.secrets["google"]
+creds = Credentials.from_service_account_info(service_account_info, scopes=scope)
 gc = gspread.authorize(creds)
-sheet = gc.open(SHEET_NAME).worksheet("Sheet1") 
+
+sheet = gc.open_by_url(SHEET_NAME).worksheet("Sheet1")
 
 def update_tool_usage(tool_name):
     month = datetime.today().strftime("%b-%Y")
