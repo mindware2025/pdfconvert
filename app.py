@@ -48,18 +48,12 @@ SHEET_NAME = "Mindware tool usage"
  # Path to your downloaded JSON
 
 
-# Load the credentials
-with open(SHEET_JSON, "r") as f:
-    creds_dict = json.load(f)
-
 creds = service_account.Credentials.from_service_account_info(
-    creds_dict,
+    st.secrets["gcp"],
     scopes=["https://www.googleapis.com/auth/spreadsheets"]
 )
-
 gc = gspread.authorize(creds)
 sheet = gc.open("Mindware tool usage").worksheet("Sheet1")
-
 # 5️⃣ Authorize and open
 gc = gspread.authorize(creds)
 sheet = gc.open(SHEET_NAME).sheet1
