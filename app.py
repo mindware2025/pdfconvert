@@ -44,10 +44,11 @@ from claims_automation import (
 )
 import plotly.express as px
 
-creds_dict = st.secrets["gcp_service_account"]
 
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+creds_dict = st.secrets["google_service_account"]
+scope = ["https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_dict(dict(creds_dict), scope)
+
 gc = gspread.authorize(creds)
 
 sheet = gc.open("Mindware tool usage").worksheet("Sheet1")
