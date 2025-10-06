@@ -44,8 +44,10 @@ import plotly.express as px
 SHEET_JSON = "tool-mindware-7596713f2b86.json"  # Path to your downloaded JSON
 SHEET_NAME = "Mindware tool usage"
 
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name(SHEET_JSON, scope)
+scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+creds_dict = st.secrets["gcp"]
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+
 gc = gspread.authorize(creds)
 sheet = gc.open(SHEET_NAME).worksheet("Sheet1") 
 
