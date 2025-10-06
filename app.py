@@ -45,8 +45,7 @@ import plotly.express as px
 
 SHEET_JSON = "tool-mindware-7596713f2b86.json"  # Path to your downloaded JSON
 SHEET_NAME = "Mindware tool usage"
-
-SHEET_JSON = "tool-mindware-7596713f2b86.json"  # Path to your downloaded JSON
+ # Path to your downloaded JSON
 
 
 # Load the credentials
