@@ -1,5 +1,6 @@
 
 import csv
+import json
 import os
 import zipfile
 import streamlit as st
@@ -46,7 +47,7 @@ SHEET_JSON = "tool-mindware-7596713f2b86.json"  # Path to your downloaded JSON
 SHEET_NAME = "Mindware tool usage"
 
 # Load credentials from Streamlit secrets
-creds_dict = dict(st.secrets["gcp"])
+creds_dict = json.loads(st.secrets["gcp"]["json"])
 
 creds = service_account.Credentials.from_service_account_info(
     creds_dict,
