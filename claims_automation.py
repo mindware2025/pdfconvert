@@ -450,6 +450,7 @@ def _extract_duplicate_header_values(row: Dict[str, Any], header_label: str) -> 
         if base == target:
             values.append(row.get(key, ""))
     return values
+
 def build_detail_narration_for_credit(
     src_row: Dict[str, Any],
     user_id_col: Optional[str],
@@ -487,6 +488,7 @@ def build_detail_narration_for_credit(
 
     combined = " ".join(snippet(r) for r in matches)
     return combined
+
 
 
 def build_output_rows_from_source1(
