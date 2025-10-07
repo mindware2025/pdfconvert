@@ -54,35 +54,28 @@ creds = Credentials.from_service_account_info(service_account_info, scopes=scope
 # ✅ Authorize and open sheet
 gc = gspread.authorize(creds)
 
-sheet = gc.open(SHEET_NAME).worksheet("Sheet1")
+tool_sheet = gc.open(SHEET_NAME).worksheet("Usage")     # Main usage sheet
+feedback_sheet = gc.open(SHEET_NAME).worksheet("Feedback")  # Feedback sheet
 
-def update_tool_usage(tool_name, team, feedback="", user=""):
+
+def update_usage(tool_name, team):
     month = datetime.today().strftime("%b-%Y")
-    
-    # Read all existing rows
-    all_rows = sheet.get_all_records()
+    all_rows = tool_sheet.get_all_records()
     found = False
 
-    # Check if a row exists for same tool, month, team
     for i, row in enumerate(all_rows, start=2):
-        if (
-            row.get("Tool") == tool_name
-            and row.get("Month") == month
-            and row.get("Team") == team
-        ):
-            # Increment usage count
+        if row.get("Tool") == tool_name and row.get("Month") == month and row.get("Team") == team:
             current_count = row.get("Usage Count", 0) or 0
-            sheet.update_cell(i, 3, current_count + 1)
+            tool_sheet.update_cell(i, 3, current_count + 1)
             found = True
             break
 
-    # Append new row if not found
     if not found:
-        sheet.append_row([tool_name, month, 1, team, feedback, user])
-    else:
-        # Optional: Add feedback as a separate row even if usage already exists
-        if feedback.strip():  # only if feedback is not empty
-            sheet.append_row([tool_name, month, "", team, feedback, user])
+        tool_sheet.append_row([tool_name, month, 1, team])
+def log_feedback(tool_name, team, user="", feedback=""):
+    if feedback.strip():  # Only log if user wrote something
+        feedback_sheet.append_row([tool_name, datetime.today().strftime("%b-%Y"), team, user, feedback, datetime.now().strftime("%Y-%m-%d %H:%M")])
+
 
 
 
@@ -242,7 +235,10 @@ def extractor_workflow(
                     data=output.getvalue(),
                     file_name=file_name,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    on_click=lambda: update_tool_usage("google Automation", team, feedback, user_name),
+                    on_click=lambda: (
+                            update_usage("Google Automation", team),
+                            log_feedback("google Automation", team, user_name, feedback)
+                        ),
                     key=f"download_{extractor_name}"
                 )
             else:
@@ -376,7 +372,10 @@ elif tool == "📄 Claims Automation":
                 data=output_buffer,
                 file_name="claims_output.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                on_click=lambda: update_tool_usage("Claims Automation", team, feedback, user_name),
+                on_click=lambda: (
+                            update_usage("Claims Automation", team),
+                            log_feedback("Claims Automation", team, user_name, feedback)
+                        ),
                 key="claims_download"
             )
         except Exception as e:
@@ -562,7 +561,10 @@ elif tool == "🧾 Cloud Invoice Tool":
             data=output_buffer.getvalue(),
             file_name="cloud_invoice.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            on_click=lambda: update_tool_usage("Cloud Automation", team, feedback, user_name)
+            on_click=lambda: (
+                            update_usage("Cloud Automation", team),
+                            log_feedback("Cloud Automation", team, user_name, feedback)
+                        ),
             
         )
         # --- Download SRCL File ---
@@ -848,7 +850,10 @@ elif tool == "💻 Dell Invoice Extractor":
                 file_name="pre_alert_upload.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="download_dell_pre_alert",
-                on_click=lambda: update_tool_usage("DEll Automation", team, feedback, user_name)
+                on_click=lambda: (
+                            update_usage("Dell Automation", team),
+                            log_feedback("DELL Automation", team, user_name, feedback)
+                        ),
             )
         else:
             st.warning("No items found in the uploaded PDF(s).")
@@ -910,7 +915,10 @@ elif tool == "🟨 AWS Invoice Tool":
                     file_name="aws_dnts_cnts_files.zip",
                     mime="application/zip",
              
-                    on_click=lambda: update_tool_usage("AWS Automation", team, feedback, user_name)
+                    on_click=lambda: (
+                            update_usage("AWS Automation", team),
+                            log_feedback("AWS Automation", team, user_name, feedback)
+                        ),
                 )
             else:
                 st.warning("No data extracted from the uploaded AWS PDFs.")
