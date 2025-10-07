@@ -218,12 +218,9 @@ def extractor_workflow(
                 header_df = pd.DataFrame([
                     show_header_df_func(invoice_num, invoice_date, today_str, remarks)
                 ], columns=header_columns)
-                st.subheader("DNTS Header Preview")
-                st.dataframe(header_df, height=120)
                 dnts_item_data = [item_row_builder(idx, *row, invoice_num) for idx, row in enumerate(rows, 1)]
                 dnts_item_df = pd.DataFrame(dnts_item_data, columns=item_columns)
-                st.subheader("DNTS Items Preview")
-                st.dataframe(dnts_item_df)
+               
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     header_df.to_excel(writer, sheet_name='DNTS_HEADER', index=False)
@@ -242,8 +239,7 @@ def extractor_workflow(
                     key=f"download_{extractor_name}"
                 )
             else:
-                st.subheader("Extracted Table")
-                st.dataframe(df, height=300)
+                
                 towrite = io.BytesIO()
                 df.to_excel(towrite, index=False, engine='openpyxl')
                 towrite.seek(0)
@@ -487,11 +483,7 @@ elif tool == "🧾 Cloud Invoice Tool":
         c1.metric("✅ Positive invoices", len(pos_df))
         c2.metric("❌ Negative invoices", len(neg_df))
         c3.metric("🧮 Total invoices", len(sorted_df))
-        # DataFrame previews
-        st.subheader("Processed Preview")
-        st.dataframe(sorted_df.head(50))
-        st.subheader("Versions Sheet Preview")
-        st.dataframe(unique_rows.head(50))
+       
         
         # Create Excel workbook with formulas
         red_fill = PatternFill(start_color="FF9999", end_color="FF9999", fill_type="solid")
@@ -617,8 +609,7 @@ elif tool == "💻 Dell Invoice Extractor":
                 st.warning(f"Failed to parse {getattr(f, 'name', 'file')}: {e}")
         if all_rows:
             df = pd.DataFrame(all_rows, columns=PRE_ALERT_HEADERS)
-            st.subheader("PRE ALERT UPLOAD Preview")
-            st.dataframe(df, height=300)
+            
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df.to_excel(writer, sheet_name='PRE ALERT UPLOAD', index=False)
@@ -869,8 +860,7 @@ elif tool == "🟨 AWS Invoice Tool":
             rows, template_map, text_map = process_multiple_aws_pdfs(uploaded_files)
             if rows:
                 df = pd.DataFrame(rows, columns=AWS_OUTPUT_COLUMNS)
-                st.subheader("Extracted AWS Invoice Data")
-                st.dataframe(df, height=300)
+                
     
                 output_original = io.BytesIO()
                 with pd.ExcelWriter(output_original, engine='openpyxl') as writer:
