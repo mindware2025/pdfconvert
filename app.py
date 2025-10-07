@@ -56,28 +56,34 @@ gc = gspread.authorize(creds)
 
 sheet = gc.open(SHEET_NAME).worksheet("Sheet1")
 
-def update_tool_usage(tool_name, team):
+def update_tool_usage(tool_name, team, feedback="", user=""):
     month = datetime.today().strftime("%b-%Y")
     
     # Read all existing rows
     all_rows = sheet.get_all_records()
-    
-    # Check if entry exists (same tool, month, and team)
     found = False
-    for i, row in enumerate(all_rows, start=2):  # skip header row
+
+    # Check if a row exists for same tool, month, team
+    for i, row in enumerate(all_rows, start=2):
         if (
-            row.get("tool") == tool_name 
-            and row.get("Month") == month 
+            row.get("Tool") == tool_name
+            and row.get("Month") == month
             and row.get("Team") == team
         ):
+            # Increment usage count
             current_count = row.get("Usage Count", 0) or 0
-            sheet.update_cell(i, 3, current_count + 1)  # Update usage count
+            sheet.update_cell(i, 3, current_count + 1)
             found = True
             break
-    
-    # If not found, append a new row
+
+    # Append new row if not found
     if not found:
-        sheet.append_row([tool_name, month, 1, team])
+        sheet.append_row([tool_name, month, 1, team, feedback, user])
+    else:
+        # Optional: Add feedback as a separate row even if usage already exists
+        if feedback.strip():  # only if feedback is not empty
+            sheet.append_row([tool_name, month, "", team, feedback, user])
+
 
 
 
@@ -183,6 +189,9 @@ elif st.session_state.login_state == "fail":
     show_fail()
     st.stop()
 team = st.radio("👥 Select your team:", ["Finance", "Operations"], horizontal=True)
+user_name = st.text_input("👤 Enter your name (optional):")
+feedback = st.text_area("💬 Any feedback about this tool? (optional)")
+
 
 def extractor_workflow(
     extractor_name,
@@ -233,7 +242,7 @@ def extractor_workflow(
                     data=output.getvalue(),
                     file_name=file_name,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    on_click=lambda: update_tool_usage("google Automation"),
+                    on_click=lambda: update_tool_usage("google Automation", team, feedback, user_name),
                     key=f"download_{extractor_name}"
                 )
             else:
@@ -367,7 +376,7 @@ elif tool == "📄 Claims Automation":
                 data=output_buffer,
                 file_name="claims_output.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                on_click=lambda: update_tool_usage("Claims Automation",team),
+                on_click=lambda: update_tool_usage("Claims Automation", team, feedback, user_name),
                 key="claims_download"
             )
         except Exception as e:
@@ -553,7 +562,7 @@ elif tool == "🧾 Cloud Invoice Tool":
             data=output_buffer.getvalue(),
             file_name="cloud_invoice.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            on_click=lambda: update_tool_usage("Cloud Automation",team)
+            on_click=lambda: update_tool_usage("Cloud Automation", team, feedback, user_name)
             
         )
         # --- Download SRCL File ---
@@ -839,7 +848,7 @@ elif tool == "💻 Dell Invoice Extractor":
                 file_name="pre_alert_upload.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="download_dell_pre_alert",
-                on_click=lambda: update_tool_usage("DEll Automation",team)
+                on_click=lambda: update_tool_usage("DEll Automation", team, feedback, user_name)
             )
         else:
             st.warning("No items found in the uploaded PDF(s).")
@@ -901,7 +910,7 @@ elif tool == "🟨 AWS Invoice Tool":
                     file_name="aws_dnts_cnts_files.zip",
                     mime="application/zip",
              
-                    on_click=lambda: update_tool_usage("AWS Automation",team)
+                    on_click=lambda: update_tool_usage("AWS Automation", team, feedback, user_name)
                 )
             else:
                 st.warning("No data extracted from the uploaded AWS PDFs.")
