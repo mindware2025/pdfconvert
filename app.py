@@ -54,7 +54,7 @@ creds = Credentials.from_service_account_info(service_account_info, scopes=scope
 # ✅ Authorize and open sheet
 gc = gspread.authorize(creds)
 
-tool_sheet = gc.open(SHEET_NAME).worksheet("Usage")     # Main usage sheet
+tool_sheet = gc.open(SHEET_NAME).worksheet("Sheet1")     # Main usage sheet
 feedback_sheet = gc.open(SHEET_NAME).worksheet("Feedback")  # Feedback sheet
 
 
