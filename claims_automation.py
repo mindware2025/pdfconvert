@@ -450,7 +450,6 @@ def _extract_duplicate_header_values(row: Dict[str, Any], header_label: str) -> 
         if base == target:
             values.append(row.get(key, ""))
     return values
-
 def build_detail_narration_for_credit(
     src_row: Dict[str, Any],
     user_id_col: Optional[str],
@@ -477,7 +476,6 @@ def build_detail_narration_for_credit(
     matches = [r for r in source2_rows if str(r.get("Employee", "")).strip() == employee_name]
     if not matches:
         return fallback_detail
-        
 
     def snippet(r: Dict[str, Any]) -> str:
         c = str(r.get("Employee", "")).strip()
@@ -485,9 +483,9 @@ def build_detail_narration_for_credit(
         k = str(r.get("Benefit Item", "")).strip()
         l = str(r.get("Benefit Amount", "")).strip()
         parts = [p for p in [f, k, l, c] if p]
-        return " - ".join(parts)
+        return "-".join(parts)
 
-    combined = EXCEL_DOUBLE_LF.join(snippet(r) for r in matches)
+    combined = " ".join(snippet(r) for r in matches)
     return combined
 
 
