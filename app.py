@@ -56,24 +56,29 @@ gc = gspread.authorize(creds)
 
 sheet = gc.open(SHEET_NAME).worksheet("Sheet1")
 
-def update_tool_usage(tool_name):
+def update_tool_usage(tool_name, team):
     month = datetime.today().strftime("%b-%Y")
     
     # Read all existing rows
     all_rows = sheet.get_all_records()
     
-    # Check if entry exists
+    # Check if entry exists (same tool, month, and team)
     found = False
     for i, row in enumerate(all_rows, start=2):  # skip header row
-        if row["tool"] == tool_name and row["Month"] == month and row["Team"] == team:
+        if (
+            row.get("tool") == tool_name 
+            and row.get("Month") == month 
+            and row.get("Team") == team
+        ):
             current_count = row.get("Usage Count", 0) or 0
-            sheet.update_cell(i, 3, current_count + 1)  # Usage Count column
+            sheet.update_cell(i, 3, current_count + 1)  # Update usage count
             found = True
             break
     
     # If not found, append a new row
     if not found:
-        sheet.append_row([tool_name, month, 1])
+        sheet.append_row([tool_name, month, 1, team])
+
 
 
 st.set_page_config(
