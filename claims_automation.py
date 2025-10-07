@@ -451,6 +451,7 @@ def _extract_duplicate_header_values(row: Dict[str, Any], header_label: str) -> 
             values.append(row.get(key, ""))
     return values
 
+
 def build_detail_narration_for_credit(
     src_row: Dict[str, Any],
     user_id_col: Optional[str],
@@ -479,16 +480,20 @@ def build_detail_narration_for_credit(
         return fallback_detail
 
     def snippet(r: Dict[str, Any]) -> str:
-        c = str(r.get("Employee", "")).strip()
         f = str(r.get("Purpose/Description", "")).strip()
         k = str(r.get("Benefit Item", "")).strip()
         l = str(r.get("Benefit Amount", "")).strip()
-        parts = [p for p in [f, k, l, c] if p]
+        parts = [p for p in [f, k, l] if p]
         return "-".join(parts)
 
-    combined = " ".join(snippet(r) for r in matches)
-    return combined
+    body = " ".join(snippet(r) for r in matches)
+    result = f"{body} {employee_name}".strip()
 
+    # Ensure the final result does not exceed 240 characters
+    if len(result) > 240:
+        result = result[:237] + "..."
+
+    return result
 
 
 def build_output_rows_from_source1(
