@@ -65,7 +65,7 @@ def update_tool_usage(tool_name):
     # Check if entry exists
     found = False
     for i, row in enumerate(all_rows, start=2):  # skip header row
-        if row["tool"] == tool_name and row["Month"] == month:
+        if row["tool"] == tool_name and row["Month"] == month and row["Team"] == team:
             current_count = row.get("Usage Count", 0) or 0
             sheet.update_cell(i, 3, current_count + 1)  # Usage Count column
             found = True
@@ -362,7 +362,7 @@ elif tool == "📄 Claims Automation":
                 data=output_buffer,
                 file_name="claims_output.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                on_click=lambda: update_tool_usage("Claims Automation"),
+                on_click=lambda: update_tool_usage("Claims Automation",team),
                 key="claims_download"
             )
         except Exception as e:
@@ -548,7 +548,7 @@ elif tool == "🧾 Cloud Invoice Tool":
             data=output_buffer.getvalue(),
             file_name="cloud_invoice.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            on_click=lambda: update_tool_usage("Cloud Automation")
+            on_click=lambda: update_tool_usage("Cloud Automation",team)
             
         )
         # --- Download SRCL File ---
@@ -834,7 +834,7 @@ elif tool == "💻 Dell Invoice Extractor":
                 file_name="pre_alert_upload.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="download_dell_pre_alert",
-                on_click=lambda: update_tool_usage("DEll Automation")
+                on_click=lambda: update_tool_usage("DEll Automation",team)
             )
         else:
             st.warning("No items found in the uploaded PDF(s).")
@@ -896,7 +896,7 @@ elif tool == "🟨 AWS Invoice Tool":
                     file_name="aws_dnts_cnts_files.zip",
                     mime="application/zip",
              
-                    on_click=lambda: update_tool_usage("AWS Automation")
+                    on_click=lambda: update_tool_usage("AWS Automation",team)
                 )
             else:
                 st.warning("No data extracted from the uploaded AWS PDFs.")
