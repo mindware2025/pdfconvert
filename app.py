@@ -557,7 +557,7 @@ elif tool == "🧾 Cloud Invoice Tool":
                             update_usage("Cloud Automation", team),
                             log_feedback("Cloud Automation", team, user_name, feedback)
                         ),
-            
+
         )
         # --- Download SRCL File ---
         srcl_buffer = create_srcl_file(neg_df)  # only negative invoices
@@ -567,7 +567,11 @@ elif tool == "🧾 Cloud Invoice Tool":
            label="⬇️ Download SRCL File",
            data=srcl_buffer.getvalue(),
            file_name="srcl_file.xlsx",
-           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+           on_click=lambda: (
+                            update_usage("Cloud Automation (SRCL)", team),
+                            log_feedback("Cloud Automation (SRCL)", team, user_name, feedback)
+                        ),
 )
 
 elif tool == "💻 Dell Invoice Extractor":
