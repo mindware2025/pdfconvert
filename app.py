@@ -13,8 +13,8 @@ from openpyxl.styles import PatternFill
 from openpyxl.utils import get_column_letter
 import gspread
 from google.oauth2.service_account import Credentials
-from barcode import barcode_tool
-from barcodeper50 import barcode_tooll
+from extractors.barcode import barcode_tool
+from extractors.barcodeper50 import barcode_tooll
 from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_multiple_aws_pdfs
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
 from utils.helpers import format_amount, format_invoice_date, format_month_year
