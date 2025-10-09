@@ -591,10 +591,7 @@ elif tool == "📦 Barcode PDF Generator":
             data=pdf_bytes,
             file_name="pallet_barcodes_fullpage.pdf",
             mime="application/pdf",
-            on_click=lambda: (
-                            update_usage("Barcode Automation", team),
-                            log_feedback("Barcode Automation", team, user_name, feedback)
-                        )
+          
         )
 elif tool == "📦 Barcode PDF Generator grouped":
     st.title("📦 Barcode PDF Generator grouped")
@@ -609,10 +606,7 @@ elif tool == "📦 Barcode PDF Generator grouped":
             data=pdf_bytes,
             file_name="pallet_barcodes_fullpage.pdf",
             mime="application/pdf",
-            on_click=lambda: (
-                            update_usage("Barcode Automation group", team),
-                            log_feedback("Barcode Automation group", team, user_name, feedback)
-                        )
+          
         )
 
 elif tool == "💻 Dell Invoice Extractor":
