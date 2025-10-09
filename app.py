@@ -13,6 +13,7 @@ from openpyxl.styles import PatternFill
 from openpyxl.utils import get_column_letter
 import gspread
 from google.oauth2.service_account import Credentials
+from barcode import barcode_tool
 from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_multiple_aws_pdfs
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
 from utils.helpers import format_amount, format_invoice_date, format_month_year
@@ -272,7 +273,8 @@ elif team == "Operations":
     TOOL_OPTIONS = [
         "-- Select a tool --",
         "💻 Dell Invoice Extractor",
-        "🧾 Cloud Invoice Tool"
+        "🧾 Cloud Invoice Tool",
+        "📦 Barcode PDF Generator"
     ]
 else:
     TOOL_OPTIONS = ["-- Select a tool --"]
@@ -573,6 +575,25 @@ elif tool == "🧾 Cloud Invoice Tool":
                             log_feedback("Cloud Automation (SRCL)", team, user_name, feedback)
                         ),
 )
+        
+elif tool == "📦 Barcode PDF Generator":
+    st.title("📦 Barcode PDF Generator")
+    st.write("Upload a CSV file with PalletID and IMEIs to generate barcode PDF.")
+
+    pdf_bytes, success = barcode_tool()
+
+    if success and pdf_bytes:
+        st.success("✅ Barcode PDF is ready!")
+        st.download_button(
+            label="📥 Download Full-Page Barcode PDF",
+            data=pdf_bytes,
+            file_name="pallet_barcodes_fullpage.pdf",
+            mime="application/pdf",
+            on_click=lambda: (
+                            update_usage("Barcode Automation", team),
+                            log_feedback("Barcode Automation", team, user_name, feedback)
+                        )
+        )
 
 elif tool == "💻 Dell Invoice Extractor":
     st.title("Dell Invoice Extractor (Pre-Alert Upload)")
