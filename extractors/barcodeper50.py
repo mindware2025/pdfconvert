@@ -4,8 +4,6 @@ import pdf417
 from PIL import Image
 import fitz  # PyMuPDF
 import io
-
-st.title("📦 Barcode PDF Generator")
 def barcode_tooll():
     group_size = st.selectbox("Choose how many IMEIs to group per barcode (must be 5 or 50):", [5, 50])
 
