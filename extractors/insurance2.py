@@ -34,7 +34,6 @@ def process_grouped_customer_files(file):
             with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
                 output_df.to_excel(writer, index=False, sheet_name='Formatted Output')
             excel_buffer.seek(0)
-            zip_file.writestr(f"{cust_code}.xlsx", excel_buffer.read())
 
             # Save to CSV
             csv_buffer = BytesIO()
