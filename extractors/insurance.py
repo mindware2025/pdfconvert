@@ -1,4 +1,3 @@
-from turtle import st
 import pandas as pd
 from datetime import datetime
 from io import BytesIO
@@ -12,7 +11,7 @@ def sanitize_filename(name):
 def process_insurance_excel(file, ageing_threshold=200):
     # Read the Excel file
     df = pd.read_excel(file, engine="openpyxl")
-    st.write("Detected columns:", df.columns.tolist())
+    
     # Ensure date columns are parsed correctly
     df['Document Date'] = pd.to_datetime(df['Document Date'], errors='coerce')
     df['Document Due Date'] = pd.to_datetime(df['Document Due Date'], errors='coerce')
