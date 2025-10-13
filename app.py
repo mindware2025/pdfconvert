@@ -183,7 +183,7 @@ if st.session_state.login_state == "login":
 elif st.session_state.login_state == "fail":
     show_fail()
     st.stop()
-team = st.radio("👥 Select your team:", ["Finance", "Operations"], horizontal=True)
+team = st.radio("👥 Select your team:", ["Finance", "Operations", "Credit"], horizontal=True)
 user_name = st.text_input("👤 Enter your name (optional):")
 feedback = st.text_area("💬 Any feedback about this tool? (optional)")
 
@@ -276,6 +276,10 @@ elif team == "Operations":
         "💻 Dell Invoice Extractor",
         "🧾 Cloud Invoice Tool",
         "📦 Barcode PDF Generator grouped"
+    ]
+elif team == "Credit":
+    TOOL_OPTIONS = [
+        "🟩 Insurance Exposure Tool"
     ]
 else:
     TOOL_OPTIONS = ["-- Select a tool --"]
@@ -947,7 +951,27 @@ elif tool == "🟨 AWS Invoice Tool":
                 st.warning("No data extracted from the uploaded AWS PDFs.")
         else:
             st.info("Please upload one or more AWS invoice PDFs to begin.")
+elif tool == "🟩 Insurance Exposure Tool":
+    st.title("Insurance Exposure Tool")
+    st.write("Upload the insurance Excel file (starting from row 16) to filter and extract relevant data.")
 
+    uploaded_file = st.file_uploader(
+        "Choose Insurance Excel File", type=["xlsx"], key="insurance_upload"
+    )
+
+    apply_ageing_filter = st.checkbox("Apply Ageing > 200 days filter", value=True)
+
+    if uploaded_file:
+        from insurance import process_insurance_excel
+
+        output_excel = process_insurance_excel(uploaded_file, ageing_filter=apply_ageing_filter)
+
+        st.download_button(
+            label="⬇️ Download Filtered Insurance Data",
+            data=output_excel.getvalue(),
+            file_name="filtered_insurance_data.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
     st.info("Currently, only the Google DNTS Extractor tool is available. More tools can be added based on your requirements.")
