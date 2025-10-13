@@ -1,29 +1,15 @@
 import pandas as pd
-from datetime import datetime
+import os
 from io import BytesIO
 from zipfile import ZipFile
-import re
 
-def sanitize_filename(name):
-    # Replace invalid characters with underscores
-    return re.sub(r'[\\/:*?"<>|]', '_', str(name))
-
-def process_grouped_customer_files(file, ageing_threshold=200):
+def process_grouped_customer_files(file):
     # Read the Excel file
     df = pd.read_excel(file, engine="openpyxl")
 
     # Ensure date columns are parsed correctly
     df['Document Date'] = pd.to_datetime(df['Document Date'], errors='coerce')
     df['Document Due Date'] = pd.to_datetime(df['Document Due Date'], errors='coerce')
-
-    # Calculate ageing
-    today = pd.to_datetime(datetime.today())
-    if 'Document Date' in df.columns:
-        df['Ageing'] = (today - df['Document Date']).dt.days
-
-    # Filter by ageing threshold
-    if 'Ageing' in df.columns:
-        df = df[df['Ageing'] > ageing_threshold]
 
     # Generate formatted output per row
     df['Formatted Output'] = df.apply(lambda row: f"{row['Document Number']};"
@@ -42,17 +28,20 @@ def process_grouped_customer_files(file, ageing_threshold=200):
     with ZipFile(zip_buffer, 'w') as zip_file:
         for cust_code, group in grouped:
             output_df = group[['Formatted Output']]
-            cust_name = group['Cust Name'].iloc[0] if 'Cust Name' in group.columns else 'Unknown'
-
-            # Sanitize filename
-            filename = sanitize_filename(f"{cust_code}_{cust_name}.csv")
-
+        
+            # Save to Excel
+            excel_buffer = BytesIO()
+            with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                output_df.to_excel(writer, index=False, sheet_name='Formatted Output')
+            excel_buffer.seek(0)
+        
             # Save to CSV
             csv_buffer = BytesIO()
             output_df.to_csv(csv_buffer, index=False, header=False)
             csv_buffer.seek(0)
-
-            # Write to ZIP
+        
+            # Write to ZIP with custom filename
+            filename = f"{cust_code}.csv"
             zip_file.writestr(filename, csv_buffer.read())
 
     zip_buffer.seek(0)

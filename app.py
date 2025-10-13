@@ -957,23 +957,13 @@ elif tool == "🟨 AWS Invoice Tool":
 elif tool == "📦 Customer Invoice Formatter":
     
     st.write("Upload an Excel file with customer invoice data to generate grouped outputs by customer code.")
-
-    # Add ageing threshold input
-    ageing_threshold = st.number_input(
-        label="📅 Minimum Ageing Threshold (days)",
-        min_value=0,
-        value=200,
-        step=10,
-        help="Only include records with ageing greater than this number"
-    )
-
-    # File uploader
+    
     uploaded_file = st.file_uploader("📤 Upload Excel File", type=["xlsx"])
     
     if uploaded_file:
         st.success("✅ File uploaded successfully.")
-        zip_output = process_grouped_customer_files(uploaded_file, ageing_threshold=ageing_threshold)
-
+        zip_output = process_grouped_customer_files(uploaded_file)
+    
         st.download_button(
             label="⬇️ Download All Customer Files (ZIP)",
             data=zip_output.getvalue(),
@@ -990,10 +980,20 @@ elif tool == "🟩 Insurance Exposure Tool":
 
     apply_ageing_filter = st.checkbox("Apply Ageing > 200 days filter", value=True)
 
-    if uploaded_file:
-        
+    ageing_threshold = st.number_input(
+        label="📅 Minimum Ageing Threshold (days)",
+        min_value=0,
+        value=200,
+        step=10,
+        help="Only include records with ageing greater than this number"
+    )
 
-        output_excel = process_insurance_excel(uploaded_file, ageing_filter=apply_ageing_filter)
+    if uploaded_file:
+        output_excel = process_insurance_excel(
+            uploaded_file,
+            ageing_filter=apply_ageing_filter,
+            ageing_threshold=ageing_threshold
+        )
 
         st.download_button(
             label="⬇️ Download Filtered Insurance Data",
