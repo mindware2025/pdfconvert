@@ -953,7 +953,9 @@ elif tool == "🟨 AWS Invoice Tool":
                 st.warning("No data extracted from the uploaded AWS PDFs.")
         else:
             st.info("Please upload one or more AWS invoice PDFs to begin.")
+            
 elif tool == "📦 Customer Invoice Formatter":
+    
     st.write("Upload an Excel file with customer invoice data to generate grouped outputs by customer code.")
 
     # Add ageing threshold input
@@ -967,7 +969,7 @@ elif tool == "📦 Customer Invoice Formatter":
 
     # File uploader
     uploaded_file = st.file_uploader("📤 Upload Excel File", type=["xlsx"])
-
+    
     if uploaded_file:
         st.success("✅ File uploaded successfully.")
         zip_output = process_grouped_customer_files(uploaded_file, ageing_threshold=ageing_threshold)
