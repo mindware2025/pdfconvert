@@ -973,13 +973,6 @@ elif tool == "📦 Customer Invoice Formatter":
 elif tool == "🟩 Insurance Exposure Tool":
     st.title("Insurance Exposure Tool")
     st.write("Upload the insurance Excel file (starting from row 16) to filter and extract relevant data.")
-
-    uploaded_file = st.file_uploader(
-        "Choose Insurance Excel File", type=["xlsx"], key="insurance_upload"
-    )
-
-    apply_ageing_filter = st.checkbox("Apply Ageing > 200 days filter", value=True)
-
     ageing_threshold = st.number_input(
         label="📅 Minimum Ageing Threshold (days)",
         min_value=0,
@@ -987,11 +980,16 @@ elif tool == "🟩 Insurance Exposure Tool":
         step=10,
         help="Only include records with ageing greater than this number"
     )
+    uploaded_file = st.file_uploader(
+        "Choose Insurance Excel File", type=["xlsx"], key="insurance_upload"
+    )
+
+   
+    
 
     if uploaded_file:
         output_excel = process_grouped_customer_files(
             uploaded_file,
-            ageing_filter=apply_ageing_filter,
             ageing_threshold=ageing_threshold
         )
 
