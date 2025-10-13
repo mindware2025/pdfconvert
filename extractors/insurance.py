@@ -8,6 +8,7 @@ def process_insurance_excel(file, ageing_filter=True, ageing_threshold=200):
     df.columns = [str(col).strip() for col in df.columns]
 
     df['Document Date'] = pd.to_datetime(df['Document Date'], errors='coerce')
+    df['Document Date'] = df['Document Date'].dt.date  # This removes the time part
 
     today = datetime.today()
     df['Ageing'] = (today - df['Document Date']).dt.days
@@ -20,8 +21,8 @@ def process_insurance_excel(file, ageing_filter=True, ageing_threshold=200):
         filtered_df = filtered_df[filtered_df['Ageing'] > ageing_threshold]
 
    
-    filtered_df['Status'] = 'Undergoing reconciliation'
-    filtered_df['reason of edd'] = ''
+    filtered_df['Status'] = 'Unpaid'
+    filtered_df['reason of edd'] = 'Undergoing reconciliation'
 
     output_columns = [
         'Cust Code', 'Cust Name', 'Document Number', 'Document Date',
