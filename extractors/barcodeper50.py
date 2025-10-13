@@ -5,7 +5,14 @@ from PIL import Image
 import fitz  # PyMuPDF
 import io
 def barcode_tooll():
-    group_size = st.selectbox("Choose how many IMEIs to group per barcode (must be 5 or 50):", [5, 50])
+    
+    group_size = st.number_input(
+    "🔢 Enter number of IMEIs to group per barcode (1 to 50):",
+    min_value=1,
+    max_value=50,
+    value=5,
+    step=1
+)
 
 # Step 2: Upload CSV file
     uploaded_file = st.file_uploader("Upload CSV file with PalletID and IMEIs", type=["csv"])
