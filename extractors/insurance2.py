@@ -28,18 +28,22 @@ def process_grouped_customer_files(file):
     with ZipFile(zip_buffer, 'w') as zip_file:
         for cust_code, group in grouped:
             output_df = group[['Formatted Output']]
-
+            cust_name = group['Cust Name'].iloc[0]  # Get customer name
+        
             # Save to Excel
             excel_buffer = BytesIO()
             with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
                 output_df.to_excel(writer, index=False, sheet_name='Formatted Output')
             excel_buffer.seek(0)
-
+        
             # Save to CSV
             csv_buffer = BytesIO()
-            output_df.to_csv(csv_buffer, index=False)
+            output_df.to_csv(csv_buffer, index=False, header=False)
             csv_buffer.seek(0)
-            zip_file.writestr(f"{cust_code}.csv", csv_buffer.read())
+        
+            # Write to ZIP with custom filename
+            filename = f"{cust_code}_{cust_name}.csv"
+            zip_file.writestr(filename, csv_buffer.read())
 
     zip_buffer.seek(0)
     return zip_buffer
