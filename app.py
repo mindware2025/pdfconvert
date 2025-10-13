@@ -17,6 +17,7 @@ from extractors.barcodeper50 import barcode_tooll
 from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_multiple_aws_pdfs
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
 from extractors.insurance import process_insurance_excel
+from extractors.insurance2  import process_grouped_customer_files
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 load_dotenv()
@@ -279,7 +280,8 @@ elif team == "Operations":
     ]
 elif team == "Credit":
     TOOL_OPTIONS = [
-        "🟩 Insurance Exposure Tool"
+        "🟩 Insurance Exposure Tool",
+        "📦 Customer Invoice Formatter"
     ]
 else:
     TOOL_OPTIONS = ["-- Select a tool --"]
@@ -951,6 +953,23 @@ elif tool == "🟨 AWS Invoice Tool":
                 st.warning("No data extracted from the uploaded AWS PDFs.")
         else:
             st.info("Please upload one or more AWS invoice PDFs to begin.")
+            
+elif tool == "📦 Customer Invoice Formatter":
+    
+    st.write("Upload an Excel file with customer invoice data to generate grouped outputs by customer code.")
+    
+    uploaded_file = st.file_uploader("📤 Upload Excel File", type=["xlsx"])
+    
+    if uploaded_file:
+        st.success("✅ File uploaded successfully.")
+        zip_output = process_grouped_customer_files(uploaded_file)
+    
+        st.download_button(
+            label="⬇️ Download All Customer Files (ZIP)",
+            data=zip_output.getvalue(),
+            file_name="customer_outputs.zip",
+            mime="application/zip"
+        )
 elif tool == "🟩 Insurance Exposure Tool":
     st.title("Insurance Exposure Tool")
     st.write("Upload the insurance Excel file (starting from row 16) to filter and extract relevant data.")
