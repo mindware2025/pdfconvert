@@ -60,3 +60,5 @@ def process_insurance_excel(file, ageing_filter=True, ageing_threshold=200):
                         cell.style = date_style
 
     output.seek(0)
+
+    return output
