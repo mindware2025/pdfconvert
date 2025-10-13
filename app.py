@@ -584,13 +584,14 @@ elif tool == "📦 Barcode PDF Generator":
 
     pdf_bytes, success = barcode_tool()
 
+    zip_buffer = io.BytesIO()
     if success and pdf_bytes:
         st.success("✅ Barcode PDF is ready!")
         st.download_button(
             label="📥 Download Full-Page Barcode PDF",
-            data=pdf_bytes,
-            file_name="pallet_barcodes_fullpage.pdf",
-            mime="application/pdf",
+            data=zip_buffer.getvalue(),
+            file_name="pallet_barcodes_fullpage.zip",
+            mime="application/zip",
           
         )
 elif tool == "📦 Barcode PDF Generator grouped":
@@ -598,14 +599,14 @@ elif tool == "📦 Barcode PDF Generator grouped":
     st.write("Upload a CSV file with PalletID and IMEIs to generate barcode PDF.")
 
     pdf_bytes, success = barcode_tooll()
-
+    zip_buffer = io.BytesIO()
     if success and pdf_bytes:
         st.success("✅ Barcode PDF is ready!")
         st.download_button(
             label="📥 Download Full-Page Barcode PDF",
-            data=pdf_bytes,
-            file_name="pallet_barcodes_fullpage.pdf",
-            mime="application/pdf",
+            data=zip_buffer.getvalue(),
+            file_name="pallet_barcodes_fullpage.zip",
+            mime="application/zip",
           
         )
 
