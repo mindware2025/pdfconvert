@@ -28,7 +28,6 @@ def process_grouped_customer_files(file):
     with ZipFile(zip_buffer, 'w') as zip_file:
         for cust_code, group in grouped:
             output_df = group[['Formatted Output']]
-            cust_name = group['Cust Name'].iloc[0]  # Get customer name
         
             # Save to Excel
             excel_buffer = BytesIO()
@@ -42,7 +41,7 @@ def process_grouped_customer_files(file):
             csv_buffer.seek(0)
         
             # Write to ZIP with custom filename
-            filename = f"{cust_code}_{cust_name}.csv"
+            filename = f"{cust_code}.csv"
             zip_file.writestr(filename, csv_buffer.read())
 
     zip_buffer.seek(0)
