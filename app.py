@@ -13,10 +13,10 @@ from openpyxl.styles import PatternFill
 from openpyxl.utils import get_column_letter
 import gspread
 from google.oauth2.service_account import Credentials
-from extractors.barcode import barcode_tool
 from extractors.barcodeper50 import barcode_tooll
 from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_multiple_aws_pdfs
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
+from insurance import process_insurance_excel
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 load_dotenv()
@@ -962,7 +962,7 @@ elif tool == "🟩 Insurance Exposure Tool":
     apply_ageing_filter = st.checkbox("Apply Ageing > 200 days filter", value=True)
 
     if uploaded_file:
-        from insurance import process_insurance_excel
+        
 
         output_excel = process_insurance_excel(uploaded_file, ageing_filter=apply_ageing_filter)
 
