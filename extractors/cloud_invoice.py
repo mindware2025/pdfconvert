@@ -432,12 +432,14 @@ def create_srcl_file(df):
                     row.get("UOM", ""),
                     qty,
                     qty_ls,
+                    round(rate, 2),
                     rate,
                     versioned_inv,
                     row.get("End User", ""),
                     row.get("Subscription Id", ""),
                     "",  # MPC Billdate CL
                     row.get("Cost", "")
+                    
                 ])
 
     # Save to BytesIO
