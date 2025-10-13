@@ -989,6 +989,7 @@ elif tool == "🟩 Insurance Exposure Tool":
     if uploaded_file:
         output_excel = process_insurance_excel(
             uploaded_file,
+            ageing_filter=True,
             ageing_threshold=ageing_threshold
         )
 
