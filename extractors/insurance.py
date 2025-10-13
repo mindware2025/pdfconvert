@@ -1,64 +1,59 @@
 import pandas as pd
 from datetime import datetime
 from io import BytesIO
-from openpyxl.styles import NamedStyle
+from zipfile import ZipFile
+import re
 
-def process_insurance_excel(file, ageing_filter=True, ageing_threshold=200):
-    # Read the Excel file, skipping the first 15 rows
-    df = pd.read_excel(file, skiprows=15, engine='openpyxl')
-    df.columns = [str(col).strip() for col in df.columns]
+def sanitize_filename(name):
+    # Replace invalid characters with underscores
+    return re.sub(r'[\\/:*?"<>|]', '_', str(name))
 
-    # Convert all columns with 'date' in their name to datetime format
-    for col in df.columns:
-        if 'date' in col.lower():
-            df[col] = pd.to_datetime(df[col], format='%m/%d/%Y', errors='coerce')
+def process_grouped_customer_files(file, ageing_threshold=200):
+    # Read the Excel file
+    df = pd.read_excel(file, engine="openpyxl")
 
-    # Calculate ageing if 'Document Date' exists
+    # Ensure date columns are parsed correctly
+    df['Document Date'] = pd.to_datetime(df['Document Date'], errors='coerce')
+    df['Document Due Date'] = pd.to_datetime(df['Document Due Date'], errors='coerce')
+
+    # Calculate ageing
     today = pd.to_datetime(datetime.today())
     if 'Document Date' in df.columns:
         df['Ageing'] = (today - df['Document Date']).dt.days
 
-    # Filter rows based on insurance and AR balance
-    filtered_df = df[
-        (df['Total Insurance Limit'] > 0) &
-        (df['Ar Balance'] > 0)
-    ]
-    if ageing_filter and 'Ageing' in filtered_df.columns:
-        filtered_df = filtered_df[filtered_df['Ageing'] > ageing_threshold]
+    # Filter by ageing threshold
+    if 'Ageing' in df.columns:
+        df = df[df['Ageing'] > ageing_threshold]
 
-    # Add status and reason columns
-    filtered_df['Status'] = 'Unpaid'
-    filtered_df['reason of edd'] = 'Undergoing reconciliation'
+    # Generate formatted output per row
+    df['Formatted Output'] = df.apply(lambda row: f"{row['Document Number']};"
+                                                  f"{row['Document Date'].strftime('%d/%m/%Y') if pd.notnull(row['Document Date']) else ''};"
+                                                  f"{row['Document Due Date'].strftime('%d/%m/%Y') if pd.notnull(row['Document Due Date']) else ''};"
+                                                  f"{int(row['Ageing']) if pd.notnull(row['Ageing']) else ''};"
+                                                  f"UNPAID;0;;"
+                                                  f"{row['reason of edd'] if pd.notnull(row['reason of edd']) else ''}",
+                                     axis=1)
 
-    # Define output columns (only include those that exist)
-    output_columns = [
-        'Cust Code', 'Cust Name', 'Document Number', 'Document Date',
-        'Document Due Date', 'Ageing', 'Over Due Days',
-        'Total Insurance Limit', 'Ar Balance', 'Status', 'reason of edd'
-    ]
-    final_df = filtered_df[[col for col in output_columns if col in filtered_df.columns]]
+    # Group by Cust Code
+    grouped = df.groupby('Cust Code')
 
-    # Write to Excel with date formatting
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        final_df.to_excel(writer, index=False, sheet_name='Insurance Filtered')
+    # Create a zip file in memory
+    zip_buffer = BytesIO()
+    with ZipFile(zip_buffer, 'w') as zip_file:
+        for cust_code, group in grouped:
+            output_df = group[['Formatted Output']]
+            cust_name = group['Cust Name'].iloc[0] if 'Cust Name' in group.columns else 'Unknown'
 
-        # Access workbook and worksheet
-        workbook = writer.book
-        worksheet = writer.sheets['Insurance Filtered']
+            # Sanitize filename
+            filename = sanitize_filename(f"{cust_code}_{cust_name}.csv")
 
-        # Create a date style
-        date_style = NamedStyle(name="date_style", number_format='MM/DD/YYYY')
-        if "date_style" not in workbook.named_styles:
-            workbook.add_named_style(date_style)
+            # Save to CSV
+            csv_buffer = BytesIO()
+            output_df.to_csv(csv_buffer, index=False, header=False)
+            csv_buffer.seek(0)
 
-        # Apply date style to all date columns
-        for col_idx, col_name in enumerate(final_df.columns, start=1):
-            if 'date' in col_name.lower():
-                for row in worksheet.iter_rows(min_row=2, min_col=col_idx, max_col=col_idx):
-                    for cell in row:
-                        cell.style = date_style
+            # Write to ZIP
+            zip_file.writestr(filename, csv_buffer.read())
 
-    output.seek(0)
-
-    return output
+    zip_buffer.seek(0)
+    return zip_buffer
