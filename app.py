@@ -16,7 +16,7 @@ from google.oauth2.service_account import Credentials
 from extractors.barcodeper50 import barcode_tooll
 from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_multiple_aws_pdfs
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
-from extractors.insurance import process_insurance_excel
+from extractors.insurance import process_grouped_customer_files
 from extractors.insurance2  import process_grouped_customer_files
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
@@ -989,7 +989,7 @@ elif tool == "🟩 Insurance Exposure Tool":
     )
 
     if uploaded_file:
-        output_excel = process_insurance_excel(
+        output_excel = process_grouped_customer_files(
             uploaded_file,
             ageing_filter=apply_ageing_filter,
             ageing_threshold=ageing_threshold
