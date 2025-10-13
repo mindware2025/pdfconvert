@@ -8,7 +8,7 @@ def sanitize_filename(name):
     # Replace invalid characters with underscores
     return re.sub(r'[\\/:*?"<>|]', '_', str(name))
 
-def process_grouped_customer_files(file, ageing_threshold=200):
+def process_insurance_excel(file, ageing_threshold=200):
     # Read the Excel file
     df = pd.read_excel(file, engine="openpyxl")
 

@@ -16,7 +16,7 @@ from google.oauth2.service_account import Credentials
 from extractors.barcodeper50 import barcode_tooll
 from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_multiple_aws_pdfs
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
-from extractors.insurance import process_grouped_customer_files
+from extractors.insurance import process_insurance_excel
 from extractors.insurance2  import process_grouped_customer_files
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
@@ -973,6 +973,7 @@ elif tool == "📦 Customer Invoice Formatter":
 elif tool == "🟩 Insurance Exposure Tool":
     st.title("Insurance Exposure Tool")
     st.write("Upload the insurance Excel file (starting from row 16) to filter and extract relevant data.")
+
     ageing_threshold = st.number_input(
         label="📅 Minimum Ageing Threshold (days)",
         min_value=0,
@@ -980,16 +981,15 @@ elif tool == "🟩 Insurance Exposure Tool":
         step=10,
         help="Only include records with ageing greater than this number"
     )
+
     uploaded_file = st.file_uploader(
         "Choose Insurance Excel File", type=["xlsx"], key="insurance_upload"
     )
 
-   
-    
-
     if uploaded_file:
-        output_excel = process_grouped_customer_files(
+        output_excel = process_insurance_excel(
             uploaded_file,
+            ageing_filter=True,
             ageing_threshold=ageing_threshold
         )
 
