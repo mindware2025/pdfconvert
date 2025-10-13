@@ -275,7 +275,6 @@ elif team == "Operations":
         "-- Select a tool --",
         "💻 Dell Invoice Extractor",
         "🧾 Cloud Invoice Tool",
-        "📦 Barcode PDF Generator",
         "📦 Barcode PDF Generator grouped"
     ]
 else:
@@ -579,27 +578,7 @@ elif tool == "🧾 Cloud Invoice Tool":
 )
         
 
-elif tool == "📦 Barcode PDF Generator":
-    st.title("📦 Barcode PDF Generator")
-    st.write("Upload a CSV file with PalletID and IMEIs to generate barcode PDF.")
 
-    pdf_bytes, success = barcode_tool()
-
-    if success and pdf_bytes:
-        st.success("✅ Barcode PDF is ready!")
-
-        # Create ZIP buffer and write PDF into it
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            zip_file.writestr("pallet_barcodes_fullpage.pdf", pdf_bytes)
-        zip_buffer.seek(0)
-
-        st.download_button(
-            label="📥 Download Full-Page Barcode PDF (Zipped)",
-            data=zip_buffer,
-            file_name="pallet_barcodes_fullpage.zip",
-            mime="application/zip"
-        )
 
 elif tool == "📦 Barcode PDF Generator grouped":
     st.title("📦 Barcode PDF Generator grouped")
