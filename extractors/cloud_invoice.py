@@ -395,10 +395,10 @@ def create_srcl_file(df):
             today_str,
             row.get("Customer Code", ""),
             row.get("Currency Code", ""),
-            "",  # FORM_CODE placeholder
+            "0",  # FORM_CODE placeholder
+            row.get("Document Location", ""),
             row.get("Document Location", ""),
             row.get("Delivery Location Code", ""),
-            "",  # Delivery_Location placeholder
             "ED068"   # SalesmanID placeholder
         ])
 
@@ -416,25 +416,29 @@ def create_srcl_file(df):
             current_s_no += 1
 
     for _, row in df.iterrows():
+        
         versioned_inv = row.get("Versioned Invoice No.", row.get("Invoice No.", ""))
+        item_name = str(row.get("ITEM Name", ""))[:240]  # Truncate to 240 chars
+        qty = abs(float(row.get("Quantity", 0)))  # Convert to positive
+        qty_ls = row.get("Qty Loose", "")
+        rate = abs(float(row.get("Rate Per Qty", 0)))
         ws_item.append([
-            s_no_map.get(versioned_inv, ""),   # S.No
-            versioned_inv,                     # Ref. Key
-            row.get("ITEM Code", ""),
-            row.get("ITEM Name", ""),
-            row.get("Grade code-1", ""),
-            row.get("Grade code-2", ""),
-            row.get("UOM", ""),
-            row.get("Quantity", ""),
-            row.get("Qty Loose", ""),
-            row.get("Rate Per Qty", ""),
-            row.get("Gross Value", ""),
-            versioned_inv,                     # CI Number CL
-            row.get("End User", ""),
-            row.get("Subscription Id", ""),
-            "",                                # MPC Billdate CL (blank)
-            row.get("Cost", "")
-        ])
+                    s_no_map.get(versioned_inv, ""),
+                    versioned_inv,
+                    row.get("ITEM Code", ""),
+                    item_name,
+                    row.get("Grade code-1", ""),
+                    row.get("Grade code-2", ""),
+                    row.get("UOM", ""),
+                    qty,
+                    qty_ls,
+                    rate,
+                    versioned_inv,
+                    row.get("End User", ""),
+                    row.get("Subscription Id", ""),
+                    "",  # MPC Billdate CL
+                    row.get("Cost", "")
+                ])
 
     # Save to BytesIO
     output = io.BytesIO()
