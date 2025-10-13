@@ -1,4 +1,3 @@
-import streamlit as st
 import pandas as pd
 from datetime import datetime
 from io import BytesIO
@@ -61,29 +60,5 @@ def process_insurance_excel(file, ageing_filter=True, ageing_threshold=200):
                         cell.style = date_style
 
     output.seek(0)
+
     return output
-
-# ──────────────────────────────────────────────────────────────
-
-# Ageing threshold input
-ageing_threshold = st.number_input(
-    label="📅 Minimum Ageing Threshold (days)",
-    min_value=0,
-    value=200,
-    step=10,
-    help="Only include records with ageing greater than this number"
-)
-
-# File uploader
-uploaded_file = st.file_uploader("📤 Upload Excel File", type=["xlsx"])
-
-if uploaded_file:
-    st.success("✅ File uploaded successfully.")
-    output = process_insurance_excel(uploaded_file, ageing_filter=True, ageing_threshold=ageing_threshold)
-
-    st.download_button(
-        label="⬇️ Download Filtered Insurance File",
-        data=output.getvalue(),
-        file_name="insurance_filtered.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
