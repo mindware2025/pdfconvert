@@ -403,7 +403,7 @@ def create_srcl_file(df):
         ])
 
     # --- Sheet 2 ---
-    ws_item = wb.create_sheet(title="SALES_RETURN_ITEM")
+    ws_item = wb.create_sheet(title="SALES_RET_ITEM") 
     ws_item.append(headers_item)
 
     # S.No mapping logic for repeated Versioned Invoice No.
