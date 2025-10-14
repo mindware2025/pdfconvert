@@ -978,8 +978,8 @@ elif tool == "📦 Customer Invoice Formatter":
             file_name="customer_outputs.zip",
             mime="application/zip",
             on_click=lambda: (
-                            update_usage("format by cust", team),
-                            log_feedback("format by cust", team, user_name, feedback)
+                            update_usage("credit format by customer", team),
+                            log_feedback("fredit format by customer", team, user_name, feedback)
                         ),
         )
 elif tool == "🟩 Insurance Exposure Tool":
