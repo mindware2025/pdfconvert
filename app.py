@@ -609,7 +609,11 @@ elif tool == "📦 Barcode PDF Generator grouped":
             label="📥 Download Full-Page Barcode PDF (Zipped)",
             data=zip_buffer,
             file_name="pallet_barcodes_fullpage.zip",
-            mime="application/zip"
+            mime="application/zip",
+            on_click=lambda: (
+                            update_usage("barcode Automation", team),
+                            log_feedback("barcode Automation", team, user_name, feedback)
+                        ),
 
         )
 
