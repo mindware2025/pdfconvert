@@ -250,7 +250,11 @@ def extractor_workflow(
                     label="Download as Excel",
                     data=towrite,
                     file_name=file_name,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    on_click=lambda: (
+                            update_usage("google Automation", team),
+                            log_feedback("google Automation", team, user_name, feedback)
+                        ),
                 )
         else:
             st.warning("No table data found in the uploaded PDF.")
@@ -968,7 +972,11 @@ elif tool == "📦 Customer Invoice Formatter":
             label="⬇️ Download All Customer Files (ZIP)",
             data=zip_output.getvalue(),
             file_name="customer_outputs.zip",
-            mime="application/zip"
+            mime="application/zip",
+            on_click=lambda: (
+                            update_usage("format by cust", team),
+                            log_feedback("format by cust", team, user_name, feedback)
+                        ),
         )
 elif tool == "🟩 Insurance Exposure Tool":
     st.title("Insurance Exposure Tool")
@@ -997,7 +1005,11 @@ elif tool == "🟩 Insurance Exposure Tool":
             label="⬇️ Download Filtered Insurance Data",
             data=output_excel.getvalue(),
             file_name="filtered_insurance_data.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            on_click=lambda: (
+                            update_usage("credit Automation ", team),
+                            log_feedback("credit Automation ", team, user_name, feedback)
+                        ),
         )
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
