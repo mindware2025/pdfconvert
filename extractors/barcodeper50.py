@@ -48,10 +48,14 @@ def barcode_tooll():
         return None, False
 
     total_imeis = len(df)
-    if total_imeis % group_size != 0:
-        st.error(f"❌ Total IMEIs ({total_imeis}) is not divisible by group size ({group_size}). Please adjust and try again.")
+    # ✅ Check if any PalletID has fewer than group_size IMEIs
+    invalid_pallets = df.groupby("PalletID").filter(lambda x: len(x) < group_size)["PalletID"].unique()
+    if len(invalid_pallets) > 0:
+        st.error(
+            f"❌ The following PalletIDs have fewer than {group_size} IMEIs: "
+            f"{', '.join(invalid_pallets)}. Please fix the CSV and try again."
+        )
         return None, False
-
     # Sort by PalletID to ensure correct grouping
     #df = df.sort_values(by="PalletID").reset_index(drop=True)
 
