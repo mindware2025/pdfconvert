@@ -7,7 +7,6 @@ import io
 
 def barcode_tooll():
 
-    # Step 1: Group size input
     group_size = st.number_input(
         "🔢 Enter number of IMEIs to group per barcode (1 to 50):",
         min_value=1,
@@ -16,7 +15,6 @@ def barcode_tooll():
         step=1
     )
 
-    # Step 2: Upload CSV file
     uploaded_file = st.file_uploader("📁 Upload CSV file with PalletID and IMEIs", type=["csv"])
     if not uploaded_file:
         st.info("ℹ️ Please upload a CSV file to begin.")
@@ -28,32 +26,27 @@ def barcode_tooll():
         st.error(f"❌ Failed to read CSV file: {e}")
         return None, False
 
-    # Clean column names
     df.columns = [col.strip() for col in df.columns]
 
-    # Validate required columns
     required_columns = {"PalletID", "IMEI"}
     if not required_columns.issubset(df.columns):
         st.error(f"❌ CSV must contain the following columns: {required_columns}")
         return None, False
 
-    # Convert to string and clean
     df["PalletID"] = df["PalletID"].astype(str).str.strip()
     df["IMEI"] = df["IMEI"].astype(str).str.strip()
 
-    # Remove empty rows
+  
     df = df.dropna(subset=["PalletID", "IMEI"])
     df = df[df["IMEI"] != ""]
     df = df.reset_index(drop=True)
 
-    # Check for duplicate IMEIs
     if df["IMEI"].duplicated().any():
         duplicates = df[df["IMEI"].duplicated(keep=False)]
         st.error("❌ Duplicate IMEIs found. Please remove them before proceeding.")
         st.dataframe(duplicates)
         return None, False
 
-    # Check if total IMEIs is divisible by group size
     total_imeis = len(df)
     if total_imeis % group_size != 0:
         st.error(f"❌ Total IMEIs ({total_imeis}) is not divisible by group size ({group_size}). Please adjust and try again.")
@@ -66,7 +59,7 @@ def barcode_tooll():
     st.write("📋 Detected columns:", df.columns.tolist())
     st.write(f"📦 Total IMEIs: {total_imeis}")
 
-    # Step 3: Generate barcodes
+    
     pdf_doc = fitz.open()
 
     with st.spinner("🔄 Generating barcodes..."):
@@ -118,6 +111,13 @@ def barcode_tooll():
 
     pdf_bytes = pdf_doc.write()
     pdf_doc.close()
-
+    
+    # Optional: compress into ZIP here
+    zip_buffer = io.BytesIO()
+    import zipfile
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        zip_file.writestr("pallet_barcodes_fullpage.pdf", pdf_bytes)
+    zip_buffer.seek(0)
+    
     st.success("✅ Barcode PDF generated successfully.")
-    return pdf_bytes, True
+    return zip_buffer.getvalue(), True

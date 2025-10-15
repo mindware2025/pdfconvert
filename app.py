@@ -606,7 +606,7 @@ elif tool == "📦 Barcode PDF Generator grouped":
 
         st.download_button(
             label="📥 Download Full-Page Barcode PDF (Zipped)",
-            data=zip_buffer,
+            data=pdf_bytes,
             file_name="pallet_barcodes_fullpage.zip",
             mime="application/zip",
             on_click=lambda: (
