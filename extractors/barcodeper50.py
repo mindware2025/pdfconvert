@@ -48,12 +48,32 @@ def barcode_tooll():
         return None, False
 
     total_imeis = len(df)
-    # ✅ Check if any PalletID has fewer than group_size IMEIs
-    invalid_pallets = df.groupby("PalletID").filter(lambda x: len(x) < group_size)["PalletID"].unique()
-    if len(invalid_pallets) > 0:
+    # ✅ Check if IMEIs for each PalletID are consecutive and meet group_size
+    current_id = None
+    count = 0
+    invalid_ids = []
+    
+    for pallet_id in df["PalletID"]:
+        if current_id is None:
+            current_id = pallet_id
+            count = 1
+        elif pallet_id == current_id:
+            count += 1
+        else:
+            # PalletID changed
+            if count < group_size:
+                invalid_ids.append(current_id)
+            current_id = pallet_id
+            count = 1
+    
+    # Check last group
+    if current_id and count < group_size:
+        invalid_ids.append(current_id)
+    
+    if invalid_ids:
         st.error(
-            f"❌ The following PalletIDs have fewer than {group_size} IMEIs: "
-            f"{', '.join(invalid_pallets)}. Please fix the CSV and try again."
+            f"❌ These PalletIDs are not consecutive or have fewer than {group_size} IMEIs: "
+            f"{', '.join(invalid_ids)}"
         )
         return None, False
     # Sort by PalletID to ensure correct grouping
