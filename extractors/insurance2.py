@@ -1,3 +1,4 @@
+import re
 import pandas as pd
 from io import BytesIO
 from zipfile import ZipFile
@@ -56,9 +57,13 @@ def process_grouped_customer_files(file):
                 raise ValueError(
                     f"Data error: Multiple Cust Names found for Cust Code {cust_code}: {unique_names}"
                 )
-    
+           
             cust_name = unique_names[0]  # Safe to use now
-            filename = f"{cust_name}-{cust_code}.csv"
+            
+            safe_cust_name = re.sub(r'[^\w\s\-]', '_', cust_name).strip()
+
+
+            filename = f"{safe_cust_name}-{cust_code}.csv"
     
             # Save formatted output
             output_df = group[['Formatted Output']]

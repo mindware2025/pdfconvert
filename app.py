@@ -591,7 +591,6 @@ elif tool == "🧾 Cloud Invoice Tool":
 
 
 elif tool == "📦 Barcode PDF Generator grouped":
-    st.title("📦 Barcode PDF Generator grouped")
     st.write("Upload a CSV file with PalletID and IMEIs to generate barcode PDF.")
 
     pdf_bytes, success = barcode_tooll()
