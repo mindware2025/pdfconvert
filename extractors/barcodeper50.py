@@ -24,7 +24,7 @@ def barcode_tooll():
     df["PalletID"] = df["PalletID"].astype(str)
     df["IMEI"] = df["IMEI"].astype(str)
     st.write("✅ Detected columns:", df.columns.tolist())
-    df = df.iloc[1:].reset_index(drop=True)
+    df = df.iloc[0:].reset_index(drop=True)
     pdf_doc = fitz.open()
     
     with st.spinner("🔄 Generating barcodes..."):
