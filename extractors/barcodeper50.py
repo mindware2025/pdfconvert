@@ -6,7 +6,6 @@ import fitz  # PyMuPDF
 import io
 
 def barcode_tooll():
-    st.title("📦 IMEI Barcode Generator")
 
     # Step 1: Group size input
     group_size = st.number_input(
