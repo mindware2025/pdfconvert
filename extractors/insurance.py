@@ -12,21 +12,21 @@ def process_insurance_excel(file, ageing_filter=True, ageing_threshold=200):
     # Convert date columns to datetime format
     for col in df.columns:
         if 'date' in col.lower():
-            df[col] = pd.to_datetime(df[col], format='%m/%d/%Y', errors='coerce')
+            df[col] = pd.to_datetime(df[col], errors='coerce')
 
     # Calculate ageing based on today's date
     today = pd.to_datetime(datetime.today())
     if 'Document Date' in df.columns:
         df['Ageing'] = (today - df['Document Date']).dt.days
 
-    # Filter rows: Total Insurance Limit > 0 and Ar Balance > 1
+    # Filter rows: Total Insurance Limit > 0 and Ar Balance >= 1
     filtered_df = df[
         (df['Total Insurance Limit'] > 0) &
-        (df['Ar Balance'] > 1)
+        (df['Ar Balance'] >= 1)
     ].copy()
 
-    # Convert Ar Balance to integer (remove decimals)
-    filtered_df['Ar Balance'] = filtered_df['Ar Balance'].astype(int)
+    # Round Ar Balance to nearest integer
+    filtered_df['Ar Balance'] = filtered_df['Ar Balance'].round().astype(int)
 
     # Apply ageing filter if enabled
     if ageing_filter and 'Ageing' in filtered_df.columns:
@@ -37,6 +37,10 @@ def process_insurance_excel(file, ageing_filter=True, ageing_threshold=200):
     filtered_df['reason of edd'] = 'Undergoing reconciliation'
     filtered_df['Paid Amount'] = 0
     filtered_df['Payment Date'] = pd.NaT
+
+    # Calculate Over Due Days if possible
+    if 'Document Due Date' in filtered_df.columns:
+        filtered_df['Over Due Days'] = (today - filtered_df['Document Due Date']).dt.days
 
     # Define output columns
     output_columns = [
