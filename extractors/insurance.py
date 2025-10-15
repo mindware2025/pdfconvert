@@ -62,7 +62,7 @@ def process_insurance_excel(file, ageing_filter=True, ageing_threshold=200):
                         cell.style = date_style
 
         # Apply numeric formatting for Ar Balance and Paid Amount
-        numeric_style = NamedStyle(name="numeric_style", number_format='0.00')
+        numeric_style = NamedStyle(name="numeric_style", number_format='0')
         if "numeric_style" not in workbook.named_styles:
             workbook.add_named_style(numeric_style)
 
