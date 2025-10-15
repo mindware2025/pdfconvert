@@ -50,15 +50,22 @@ def process_grouped_customer_files(file):
     zip_buffer = BytesIO()
     with ZipFile(zip_buffer, 'w') as zip_file:
         for cust_code, group in grouped:
+            # Validate that all rows in this group have the same Cust Name
+            unique_names = group['Cust Name'].unique()
+            if len(unique_names) != 1:
+                raise ValueError(
+                    f"Data error: Multiple Cust Names found for Cust Code {cust_code}: {unique_names}"
+                )
+    
+            cust_name = unique_names[0]  # Safe to use now
+            filename = f"{cust_name}-{cust_code}.csv"
+    
+            # Save formatted output
             output_df = group[['Formatted Output']]
-
-            # Save to CSV
             csv_buffer = BytesIO()
             output_df.to_csv(csv_buffer, index=False, header=False)
             csv_buffer.seek(0)
-
-            # Write to ZIP with custom filename
-            filename = f"{cust_code}.csv"
+    
             zip_file.writestr(filename, csv_buffer.read())
 
     zip_buffer.seek(0)
