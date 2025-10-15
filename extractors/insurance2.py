@@ -17,7 +17,7 @@ def process_grouped_customer_files(file):
  
     unpaid_issues = df[
         (df['Status'] == 'UNPAID') &
-        ((df['Payment amount'] != 0) | (df['Payment date'].notna()))
+        ((df['Paid Amount'] != 0) | (df['Payment date'].notna()))
     ]
     if not unpaid_issues.empty:
         raise ValueError(
@@ -36,7 +36,7 @@ def process_grouped_customer_files(file):
                     f"{row['Document Due Date'].strftime('%d/%m/%Y') if pd.notnull(row['Document Due Date']) else ''};"
                     f"{int(row['Ar Balance']) if pd.notnull(row['Ar Balance']) else ''};"
                     f"{row['Status']};"
-                    f"{row['Payment amount'] if pd.notnull(row['Payment amount']) else ''};"
+                    f"{row['Paid Amount'] if pd.notnull(row['Paid Amount']) else ''};"
                     f"{row['Payment date'].strftime('%d/%m/%Y') if pd.notnull(row['Payment date']) else ''};"
                     f"{row['reason of edd'] if pd.notnull(row['reason of edd']) else ''}",
         axis=1
