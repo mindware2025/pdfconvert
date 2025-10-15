@@ -17,7 +17,7 @@ def process_grouped_customer_files(file):
  
     unpaid_issues = df[
         (df['Status'] == 'UNPAID') &
-        ((df['Paid Amount'] != 0) | (df['Payment date'].notna()))
+        ((df['Paid Amount'] != 0) | (df['Payment Date'].notna()))
     ]
     if not unpaid_issues.empty:
         raise ValueError(
@@ -27,7 +27,7 @@ def process_grouped_customer_files(file):
     # Ensure date columns are parsed correctly
     df['Document Date'] = pd.to_datetime(df['Document Date'], errors='coerce')
     df['Document Due Date'] = pd.to_datetime(df['Document Due Date'], errors='coerce')
-    df['Payment date'] = pd.to_datetime(df['Payment date'], errors='coerce')
+    df['Payment Date'] = pd.to_datetime(df['Payment Date'], errors='coerce')
 
     # Generate formatted output per row (single line)
     df['Formatted Output'] = df.apply(
@@ -37,7 +37,7 @@ def process_grouped_customer_files(file):
                     f"{int(row['Ar Balance']) if pd.notnull(row['Ar Balance']) else ''};"
                     f"{row['Status']};"
                     f"{row['Paid Amount'] if pd.notnull(row['Paid Amount']) else ''};"
-                    f"{row['Payment date'].strftime('%d/%m/%Y') if pd.notnull(row['Payment date']) else ''};"
+                    f"{row['Payment Date'].strftime('%d/%m/%Y') if pd.notnull(row['Payment Date']) else ''};"
                     f"{row['reason of edd'] if pd.notnull(row['reason of edd']) else ''}",
         axis=1
     )
