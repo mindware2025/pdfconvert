@@ -8,15 +8,15 @@ def process_grouped_customer_files(file):
 
     # Validate 'status' column
     valid_statuses = {'UNPAID', 'CREDIT', 'PARTLY'}
-    if not df['status'].isin(valid_statuses).all():
-        invalid_values = df.loc[~df['status'].isin(valid_statuses), 'status'].unique()
+    if not df['Status'].isin(valid_statuses).all():
+        invalid_values = df.loc[~df['Status'].isin(valid_statuses), 'Status'].unique()
         raise ValueError(
-            f"Invalid status values found: {invalid_values}. Allowed values are 'UNPAID', 'CREDIT', 'PARTLY'."
+            f"Invalid Status values found: {invalid_values}. Allowed values are 'UNPAID', 'CREDIT', 'PARTLY'."
         )
 
  
     unpaid_issues = df[
-        (df['status'] == 'UNPAID') &
+        (df['Status'] == 'UNPAID') &
         ((df['Payment amount'] != 0) | (df['Payment date'].notna()))
     ]
     if not unpaid_issues.empty:
@@ -35,7 +35,7 @@ def process_grouped_customer_files(file):
                     f"{row['Document Date'].strftime('%d/%m/%Y') if pd.notnull(row['Document Date']) else ''};"
                     f"{row['Document Due Date'].strftime('%d/%m/%Y') if pd.notnull(row['Document Due Date']) else ''};"
                     f"{int(row['Ar Balance']) if pd.notnull(row['Ar Balance']) else ''};"
-                    f"{row['status']};"
+                    f"{row['Status']};"
                     f"{row['Payment amount'] if pd.notnull(row['Payment amount']) else ''};"
                     f"{row['Payment date'].strftime('%d/%m/%Y') if pd.notnull(row['Payment date']) else ''};"
                     f"{row['reason of edd'] if pd.notnull(row['reason of edd']) else ''}",
