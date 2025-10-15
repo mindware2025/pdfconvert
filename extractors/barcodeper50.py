@@ -60,7 +60,7 @@ def barcode_tooll():
         return None, False
 
     # Sort by PalletID to ensure correct grouping
-    df = df.sort_values(by="PalletID").reset_index(drop=True)
+    #df = df.sort_values(by="PalletID").reset_index(drop=True)
 
     st.success("✅ File successfully loaded and validated.")
     st.write("📋 Detected columns:", df.columns.tolist())
