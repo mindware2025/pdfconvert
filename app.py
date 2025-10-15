@@ -611,12 +611,11 @@ elif tool == "📦 Barcode PDF Generator grouped":
             file_name="pallet_barcodes_fullpage.zip",
             mime="application/zip",
             on_click=lambda: (
-                update_usage("barcode Automation", team),
-                log_feedback("barcode Automation", team, user_name, feedback)
-            ),
+                            update_usage("barcode Automation", team),
+                            log_feedback("barcode Automation", team, user_name, feedback)
+                        ),
+
         )
-    else:
-        st.warning("⚠️ Barcode generation did not complete due to validation errors. Please check your input.")
 
 elif tool == "💻 Dell Invoice Extractor":
     st.title("Dell Invoice Extractor (Pre-Alert Upload)")
