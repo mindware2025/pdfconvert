@@ -6,7 +6,7 @@ def process_grouped_customer_files(file):
     # Read the Excel file
     df = pd.read_excel(file, engine="openpyxl")
 
-    # Validate 'status' column
+    # Validate 'Status' column
     valid_statuses = {'UNPAID', 'CREDIT', 'PARTLY'}
     if not df['Status'].isin(valid_statuses).all():
         invalid_values = df.loc[~df['Status'].isin(valid_statuses), 'Status'].unique()
@@ -14,14 +14,14 @@ def process_grouped_customer_files(file):
             f"Invalid Status values found: {invalid_values}. Allowed values are 'UNPAID', 'CREDIT', 'PARTLY'."
         )
 
- 
+    # Validation for UNPAID status
     unpaid_issues = df[
         (df['Status'] == 'UNPAID') &
         ((df['Paid Amount'] != 0) | (df['Payment Date'].notna()))
     ]
     if not unpaid_issues.empty:
         raise ValueError(
-            "Validation error: For status 'UNPAID', 'Payment amount' must be 0 and 'Payment date' must be blank."
+            "Validation error: For status 'UNPAID', 'Paid Amount' must be 0 and 'Payment Date' must be blank."
         )
 
     # Ensure date columns are parsed correctly
