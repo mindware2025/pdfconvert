@@ -42,7 +42,7 @@ def process_insurance_excel(file, ageing_filter=True, ageing_threshold=200):
     ]
     final_df = filtered_df[[col for col in output_columns if col in filtered_df.columns]]
 
-    # Write to Excel with date formatting
+    # Write to Excel with date and numeric formatting
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         final_df.to_excel(writer, index=False, sheet_name='Insurance Filtered')
@@ -61,5 +61,16 @@ def process_insurance_excel(file, ageing_filter=True, ageing_threshold=200):
                     for cell in row:
                         cell.style = date_style
 
+        # Apply numeric formatting for Ar Balance and Paid Amount
+        numeric_style = NamedStyle(name="numeric_style", number_format='0.00')
+        if "numeric_style" not in workbook.named_styles:
+            workbook.add_named_style(numeric_style)
+
+        for col_name in ['Ar Balance', 'Paid Amount']:
+            if col_name in final_df.columns:
+                col_idx = final_df.columns.get_loc(col_name) + 1
+                for row in worksheet.iter_rows(min_row=2, min_col=col_idx, max_col=col_idx):
+                    for cell in row:
+                        cell.style = numeric_style
     output.seek(0)
     return output
