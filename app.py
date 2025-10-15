@@ -983,7 +983,7 @@ elif tool == "Coface CSV Uploader":
                         ),
         )
 elif tool == "AR to EDD file":
-    st.title("Insurance Exposure Tool")
+    st.title("AR to EDD file")
     st.write("Upload the insurance Excel file (starting from row 16) to filter and extract relevant data.")
 
     ageing_threshold = st.number_input(
@@ -1006,9 +1006,9 @@ elif tool == "AR to EDD file":
         )
 
         st.download_button(
-            label="⬇️ Download Filtered Insurance Data",
+            label="⬇️ Download AR to EDD file",
             data=output_excel.getvalue(),
-            file_name="filtered_insurance_data.xlsx",
+            file_name="EDD.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             on_click=lambda: (
                             update_usage("credit Automation ", team),
