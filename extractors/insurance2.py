@@ -37,6 +37,7 @@ def process_grouped_customer_files(file):
                     f"{int(row['Ar Balance']) if pd.notnull(row['Ar Balance']) else ''};"
                     f"{row['Status']};"
                     f"{row['Paid Amount'] if pd.notnull(row['Paid Amount']) else ''};"
+                    f"{int(round(row['Paid Amount'])) if pd.notnull(row['Paid Amount']) else ''};"
                     f"{row['Payment Date'].strftime('%d/%m/%Y') if pd.notnull(row['Payment Date']) else ''};"
                     f"{row['reason of edd'] if pd.notnull(row['reason of edd']) else ''}",
         axis=1
