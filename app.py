@@ -284,8 +284,8 @@ elif team == "Operations":
     ]
 elif team == "Credit":
     TOOL_OPTIONS = [
-        "🟩 Insurance Exposure Tool",
-        "📦 Customer Invoice Formatter"
+        "AR to EDD file",
+        "Coface CSV Uploader"
     ]
 else:
     TOOL_OPTIONS = ["-- Select a tool --"]
@@ -962,7 +962,7 @@ elif tool == "🟨 AWS Invoice Tool":
         else:
             st.info("Please upload one or more AWS invoice PDFs to begin.")
             
-elif tool == "📦 Customer Invoice Formatter":
+elif tool == "Coface CSV Uploader":
     
     st.write("Upload an Excel file with customer invoice data to generate grouped outputs by customer code.")
     
@@ -982,7 +982,7 @@ elif tool == "📦 Customer Invoice Formatter":
                             log_feedback("fredit format by customer", team, user_name, feedback)
                         ),
         )
-elif tool == "🟩 Insurance Exposure Tool":
+elif tool == "AR to EDD file":
     st.title("Insurance Exposure Tool")
     st.write("Upload the insurance Excel file (starting from row 16) to filter and extract relevant data.")
 
