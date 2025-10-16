@@ -118,8 +118,9 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         
         else:
             out_row["Subscription Id"] = sub_id_clean
-        out_row["Billing Cycle Start Date"] = row.get("BillingCycleStartDate", "")
-        out_row["Billing Cycle End Date"] = row.get("BillingCycleEndDate", "")
+        out_row["Billing Cycle Start Date"] = fmt_date(row.get("BillingCycleStartDate", ""))
+        out_row["Billing Cycle End Date"] = fmt_date(row.get("BillingCycleEndDate", ""))
+       
         item_code = row.get("ITEMCode", "")
         if pd.notna(item_code) and str(item_code).strip():
             out_row["ITEM Code"] = item_code
