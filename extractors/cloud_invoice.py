@@ -57,7 +57,7 @@ keyword_map = {
 def fmt_date(value):
     try:
         dt = _parser.parse(str(value), dayfirst=False, fuzzy=True)
-        return f"{dt.month:02d}/{dt.day:02d}/{dt.year}"
+        return f"{dt.day:02d}/{dt.month:02d}/{dt.year}"
     except Exception:
         return str(value) if value is not None else ""
 
