@@ -162,10 +162,10 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         billing_info = ""
         if billing_end and billing_end.lower() != "nan":
             try:
-                billing_end_dt = pd.to_datetime(billing_end)
+                billing_end_dt = pd.to_datetime(billing_end, dayfirst=True)
                 billing_info = billing_end_dt.strftime("%m/%Y")
             except Exception:
-                billing_info = billing_end  # fallback to raw if parsing fails
+                billing_info = billing_end  # fallback
         
         ## Build parts list and skip empty or NaN values
         ##parts = [
@@ -189,7 +189,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                 item_name_detail,
             ]
         
-            # Append billing info based on item code
+            
             if item_code_upper == "MSRI-CNS" and billing_info:
                 parts.append(billing_info)
             elif item_code_upper in ["MSAZ-CNS", "AS-CNS", "AWS-UTILITIES-CNS"] and billing_info:
