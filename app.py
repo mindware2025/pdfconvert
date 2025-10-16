@@ -500,11 +500,11 @@ elif tool == "🧾 Cloud Invoice Tool":
         
         # Create Excel workbook with formulas
         red_fill = PatternFill(start_color="FF9999", end_color="FF9999", fill_type="solid")
-        positive_only_df = sorted_df[sorted_df["Gross Value"].astype(float) >= 0]
-        if "_highlight_end_user" in positive_only_df.columns:
-            df_to_write = positive_only_df.drop(columns=["_highlight_end_user"])
-        else:
-            df_to_write = positive_only_df.copy()
+        df_to_write = sorted_df.copy()
+        
+        # Remove highlight flag column before writing
+        if "_highlight_end_user" in df_to_write.columns:
+            df_to_write = df_to_write.drop(columns=["_highlight_end_user"])
         
         # Get index of 'End User' column (1-based for Excel)
         try:
