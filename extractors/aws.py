@@ -48,9 +48,9 @@ def extract_common_fields(text, is_credit_note=False, template="Unknown"):
         if template in ["C", "D"]:
             net_charges_usd = extract_value(r"USD\s*([0-9,]+\.[0-9]{2})", text)
         else:
-            # ✅ Extract the discounted subtotal before VAT
+          
             net_charges_usd = extract_value(
-                r"Discount \(AWS Distribution Program Discount\)\s+USD\s*([0-9,]+\.[0-9]{2})",
+                r"Net Charges\s*\(.*?\)\s*[\r\n]*USD\s*([0-9,]+\.[0-9]{2})",
                 text
             )
 
