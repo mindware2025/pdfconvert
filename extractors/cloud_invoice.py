@@ -346,7 +346,9 @@ def map_invoice_numbers(processed_df: pd.DataFrame) -> pd.DataFrame:
     return processed_df
 
 def create_srcl_file(df):
-    
+    from openpyxl import Workbook
+    import io
+    import pandas as pd
 
     # --- Sheet 1 headers ---
     headers_head = [
@@ -390,58 +392,74 @@ def create_srcl_file(df):
 
     today_str = pd.Timestamp.today().strftime("%d/%m/%Y")
 
-    for _, row in df.iterrows():
+    # Determine which invoice column to use
+    df["InvoiceKey"] = df.get("Versioned Invoice No.", df.get("Invoice No.", ""))
+
+    # ✅ Remove duplicates for header sheet (unique invoices)
+    unique_invoices = df.drop_duplicates(subset=["InvoiceKey"]).reset_index(drop=True)
+
+    # ✅ Create numeric S.No map based on order of unique invoices
+    s_no_map = {inv: idx + 1 for idx, inv in enumerate(unique_invoices["InvoiceKey"])}
+
+    # --- Fill SALES_RET_HEAD (unique invoices only) ---
+    for _, row in unique_invoices.iterrows():
+        versioned_inv = row["InvoiceKey"]
         ws_head.append([
-            row.get("Versioned Invoice No.", row.get("Invoice No.", "")),  # S.No = Versioned Invoice
+            s_no_map.get(versioned_inv, ""),       # Numeric S.No
             today_str,
             row.get("Customer Code", ""),
             row.get("Currency Code", ""),
-            "0",  # FORM_CODE placeholder
+            "0",                                   # FORM_CODE placeholder
             row.get("Document Location", ""),
             row.get("Document Location", ""),
             row.get("Delivery Location Code", ""),
-            "ED068"   # SalesmanID placeholder
+            "ED068"                                # SalesmanID placeholder
         ])
 
     # --- Sheet 2 ---
-    ws_item = wb.create_sheet(title="SALES_RET_ITEM") 
+    ws_item = wb.create_sheet(title="SALES_RET_ITEM")
     ws_item.append(headers_item)
 
-    # S.No mapping logic for repeated Versioned Invoice No.
-    versioned_inv_series = df.get("Versioned Invoice No.", df.get("Invoice No.", ""))
-    s_no_map = {}
-    current_s_no = 1
-    for v in versioned_inv_series:
-        if v not in s_no_map:
-            s_no_map[v] = current_s_no
-            current_s_no += 1
-
+    # --- Fill SALES_RET_ITEM (all lines, keep Ref. Key as invoice number) ---
     for _, row in df.iterrows():
-        
-        versioned_inv = row.get("Versioned Invoice No.", row.get("Invoice No.", ""))
-        item_name = str(row.get("ITEM Name", ""))[:240]  # Truncate to 240 chars
-        qty = abs(float(row.get("Quantity", 0)))  # Convert to positive
+        versioned_inv = row["InvoiceKey"]
+        s_no = s_no_map.get(versioned_inv, "")
+
+        # Numeric conversions and rounding
+        try:
+            qty = abs(float(row.get("Quantity", 0)))
+        except:
+            qty = 0.0
+        try:
+            rate = round(float(row.get("Rate Per Qty", 0)), 2)
+        except:
+            rate = 0.0
+        try:
+            cost_val = round(float(row.get("Cost", 0)), 2)
+        except:
+            cost_val = 0.0
+
         qty_ls = row.get("Qty Loose", "")
-        rate = abs(float(row.get("Rate Per Qty", 0)))
+        item_name = str(row.get("ITEM Name", ""))[:240]
+
         ws_item.append([
-                    s_no_map.get(versioned_inv, ""),
-                    versioned_inv,
-                    row.get("ITEM Code", ""),
-                    item_name,
-                    row.get("Grade code-1", ""),
-                    row.get("Grade code-2", ""),
-                    row.get("UOM", ""),
-                    qty,
-                    qty_ls,
-                    round(rate, 2),
-                    rate,
-                    versioned_inv,
-                    row.get("End User", ""),
-                    row.get("Subscription Id", ""),
-                    "",  # MPC Billdate CL
-                    row.get("Cost", "")
-                    
-                ])
+            s_no,                           # ✅ Numeric S.No (1, 2, 3…)
+            versioned_inv,                  # ✅ Ref. Key = Versioned Invoice No.
+            row.get("ITEM Code", ""),
+            item_name,
+            row.get("Grade code-1", ""),
+            row.get("Grade code-2", ""),
+            row.get("UOM", ""),
+            qty,
+            qty_ls,
+            rate,                           # ✅ Rounded to 2 decimals
+            rate,                           # Total (kept same per your rule)
+            versioned_inv,
+            row.get("End User", ""),
+            row.get("Subscription Id", ""),
+            "",                             # MPC Billdate CL
+            cost_val                        # ✅ 2 decimals
+        ])
 
     # Save to BytesIO
     output = io.BytesIO()
