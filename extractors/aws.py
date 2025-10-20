@@ -42,16 +42,18 @@ def extract_common_fields(text, is_credit_note=False, template="Unknown"):
     )
     formatted_period = match.group(1).strip() if match else ""
 
-    if is_credit_note:
-        net_charges_usd = extract_value(r"-USD\s*([0-9,]+\.[0-9]{2})", text)
+    if template == "C":
+        # For AWS Inc. invoices
+        match = re.search(r"AWS Marketplace Charges\s*\$([0-9,]+\.[0-9]{2})", text)
+        net_charges_usd = match.group(1) if match else ""
+    elif template == "D":
+        # For AWS Marketplace Operator Invoicing
+        match = re.search(r"Purchases on Marketplace\s*USD\s*([0-9,]+\.[0-9]{2})", text)
+        net_charges_usd = match.group(1) if match else ""
     else:
-        if template in ["C", "D"]:
-            match = re.search(r"USD\s*([0-9,]+\.[0-9]{2})\s*AED\s*[0-9,]+\.[0-9]{2}\s*Net Charges", text)
-            net_charges_usd = match.group(1) if match else ""
-        else:
-            # ✅ Updated regex: looks for USD amount preceding 'Net Charges'
-            match = re.search(r"USD\s*([0-9,]+\.[0-9]{2})\s*AED\s*[0-9,]+\.[0-9]{2}\s*Net Charges", text)
-            net_charges_usd = match.group(1) if match else ""
+        # For EMEA invoices
+        match = re.search(r"USD\s*([0-9,]+\.[0-9]{2})\s*AED\s*[0-9,]+\.[0-9]{2}\s*Net Charges", text)
+        net_charges_usd = match.group(1) if match else ""
 
     net_charges_usd = net_charges_usd.replace(",", "")
     try:
@@ -61,6 +63,7 @@ def extract_common_fields(text, is_credit_note=False, template="Unknown"):
 
     account_number = extract_value(r"(?:Account Number|رقم الحساب)[^\d]*?(\d{9,})", text)
     return invoice_number, net_charges_usd, account_number, formatted_period
+
 
 def extract_bill_to(text, template):
     if template == "C":
