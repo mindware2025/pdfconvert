@@ -351,7 +351,6 @@ def create_srcl_file(df):
     import io
     import pandas as pd
     import re
-    import math
 
     # --- Sheet 1 headers ---
     headers_head = [
@@ -366,7 +365,7 @@ def create_srcl_file(df):
         "SalesmanID"
     ]
 
-    # --- Sheet 2 headers (Unit Rate only; Total moved to end) ---
+    # --- Sheet 2 headers ---
     headers_item = [
         "S.No",
         "Ref. Key",
@@ -377,34 +376,32 @@ def create_srcl_file(df):
         "UOM",
         "Qty",
         "Qty_Ls",
-        "Unit Rate",        # renamed from Rate
+        "Unit Rate",
         "CI Number CL",
         "End User CL",
         "Subs ID CL",
         "MPC Billdate CL",
         "Unit Cost CL",
-        "Total"             # ✅ moved to end
+        "Total"
     ]
 
+    # Create workbook and first sheet
     wb = Workbook()
-
-    # --- Sheet 1 ---
     ws_head = wb.active
     ws_head.title = "SALES_RET_HEAD"
     ws_head.append(headers_head)
 
     today_str = pd.Timestamp.today().strftime("%d/%m/%Y")
 
-    # Determine invoice key
+    # Determine invoice key (use Versioned Invoice No. if available)
     df["InvoiceKey"] = df.get("Versioned Invoice No.", df.get("Invoice No.", ""))
 
-    # ✅ Remove duplicates for header sheet (unique invoices)
+    # --- Create header sheet ---
     unique_invoices = df.drop_duplicates(subset=["InvoiceKey"]).reset_index(drop=True)
 
-    # ✅ Create numeric S.No mapping
+    # Create numeric mapping for invoice S.No
     s_no_map = {inv: idx + 1 for idx, inv in enumerate(unique_invoices["InvoiceKey"])}
 
-    # --- Fill SALES_RET_HEAD (unique invoices only) ---
     for _, row in unique_invoices.iterrows():
         versioned_inv = row["InvoiceKey"]
         ws_head.append([
@@ -419,45 +416,43 @@ def create_srcl_file(df):
             "ED068"                                # SalesmanID placeholder
         ])
 
-    # --- Sheet 2 ---
+    # --- Create item sheet ---
     ws_item = wb.create_sheet(title="SALES_RET_ITEM")
     ws_item.append(headers_item)
 
-    # --- Define red highlight for missing required fields ---
     red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
 
-    # --- Fill SALES_RET_ITEM ---
-    for _, row in df.iterrows():
-        versioned_inv = row["InvoiceKey"]
-        s_no = s_no_map.get(versioned_inv, "")
+    # --- Fill item sheet ---
+    for idx, row in enumerate(df.itertuples(index=False), start=1):
+        versioned_inv = getattr(row, "InvoiceKey")
+        s_no = idx                                 # Sequential per line item
+        ref_key = s_no_map.get(versioned_inv, "")  # Header's numeric reference
 
-        # Numeric conversions and rounding
+        # Numeric conversions
         try:
-            qty = abs(float(row.get("Quantity", 0)))
+            qty = abs(float(getattr(row, "Quantity", 0)))
         except:
             qty = 0.0
         try:
-            rate = round(float(row.get("Rate Per Qty", 0)), 2)
+            rate = round(float(getattr(row, "Rate Per Qty", 0)), 2)
         except:
             rate = 0.0
         try:
-            cost_val = round(float(row.get("Cost", 0)), 2)
+            cost_val = round(float(getattr(row, "Cost", 0)), 2)
         except:
             cost_val = 0.0
 
-        qty_ls = row.get("Qty Loose", "")
+        qty_ls = getattr(row, "Qty Loose", "")
 
-        # ✅ Clean and sanitize item name
-        raw_item_name = str(row.get("ITEM Name", "")).strip()
+        # Clean item name
+        raw_item_name = str(getattr(row, "ITEM Name", "")).strip()
         clean_item_name = re.sub(r"[\r\n]+", " ", raw_item_name)
         clean_item_name = clean_item_name.replace("'", "").replace('"', "")
         clean_item_name = clean_item_name[:240]
 
-        # ✅ End User and Subscription ID — required fields
-        end_user = str(row.get("End User", "")).strip()
-        subs_id = str(row.get("Subscription Id", "")).strip()
-
-        # Replace 'nan' / None / 'NaN' with empty string
+        # End User / Subscription ID cleanup
+        end_user = str(getattr(row, "End User", "")).strip()
+        subs_id = str(getattr(row, "Subscription Id", "")).strip()
         if end_user.lower() in ["nan", "none"]:
             end_user = ""
         if subs_id.lower() in ["nan", "none"]:
@@ -465,27 +460,26 @@ def create_srcl_file(df):
 
         total_val = round(qty * rate, 2)
 
-        # Write row
         ws_item.append([
-            s_no,
-            versioned_inv,
-            row.get("ITEM Code", ""),
+            s_no,               # Sequential S.No
+            ref_key,            # Ref. Key = header S.No
+            getattr(row, "ITEM Code", ""),
             clean_item_name,
-            row.get("Grade code-1", ""),
-            row.get("Grade code-2", ""),
-            row.get("UOM", ""),
+            getattr(row, "Grade code-1", ""),
+            getattr(row, "Grade code-2", ""),
+            getattr(row, "UOM", ""),
             qty,
             qty_ls,
-            rate,               # Unit Rate only
-            versioned_inv,      # CI Number CL
-            end_user,           # End User CL
-            subs_id,            # Subs ID CL
-            "",                 # MPC Billdate CL
-            cost_val,           # Unit Cost CL
-            total_val           # ✅ Total moved to end
+            rate,
+            versioned_inv,
+            end_user,
+            subs_id,
+            "",
+            cost_val,
+            total_val
         ])
 
-    # ✅ Highlight missing End User or Subs ID
+    # --- Highlight missing End User / Subs ID ---
     for row in ws_item.iter_rows(min_row=2, max_row=ws_item.max_row):
         end_user_cell = row[11]  # "End User CL"
         subs_id_cell = row[12]   # "Subs ID CL"
@@ -494,7 +488,7 @@ def create_srcl_file(df):
         if not subs_id_cell.value or str(subs_id_cell.value).strip() == "":
             subs_id_cell.fill = red_fill
 
-    # Save to BytesIO
+    # --- Save to BytesIO ---
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
