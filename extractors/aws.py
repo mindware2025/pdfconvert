@@ -10,34 +10,7 @@ AWS_OUTPUT_COLUMNS = [
     "Account Period", "A/C", "Due date", "Vat USD", "Vat AED",
     "Total USD", "Inv value", "Check", "Bill to"
 ]
-def extract_total_amount_cd(text):
-    """
-    Extracts the USD total for AWS Inc. (C) and AWS Marketplace (D) invoices.
-    Displays an info or warning message through Streamlit.
-    Returns the numeric string for the total ('' if not found).
-    """
-    # Try the detailed version first (handles dates and optional words)
-    pattern_full = (
-        r"TOTAL\s+AMOUNT\s+(?:DUE\s+ON\s+)?"
-        r"(?:[A-Za-z]+\s+\d{1,2},?\s+\d{4}\s*)?"  # optional month/day/year
-        r"\$?\s*USD?\s*([0-9,]+\.[0-9]{2})"
-    )
 
-    match = re.search(pattern_full, text, re.IGNORECASE)
-
-    # Fallback pattern (for shorter or simpler formats)
-    if not match:
-        pattern_simple = r"TOTAL\s+AMOUNT(?:\s+DUE)?\s+\$?\s*USD?\s*([0-9,]+\.[0-9]{2})"
-        match = re.search(pattern_simple, text, re.IGNORECASE)
-
-    # Handle result
-    if not match:
-        
-        
-        return ""
-
-    amount = match.group(1).replace(",", "")
-    return amount
 def extract_due_date_fallback(pdf_bytes):
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     full_text = ""
@@ -82,7 +55,12 @@ def extract_common_fields(text, is_credit_note=False, template="Unknown"):
         if match:
             net_charges_usd = match.group(1).replace(",", "")
     elif template in ["C", "D"]:
-        net_charges_usd = extract_total_amount_cd(text)
+        match = re.search(r"TOTAL\s+AMOUNT\s+(?:DUE\s+ON\s+)?"
+        r"(?:[A-Za-z]+\s+\d{1,2},?\s+\d{4}\s*)?"  # optional month/day/year
+        r"\$?\s*USD?\s*([0-9,]+\.[0-9]{2})", text, re.IGNORECASE)
+
+        if match:
+            net_charges_usd = match.group(1).replace(",", "")
 
     account_number = extract_value(r"(?:Account Number|رقم الحساب)[^\d]*?(\d{9,})", text)
     return invoice_number, net_charges_usd, account_number, formatted_period
