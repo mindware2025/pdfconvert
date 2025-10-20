@@ -138,11 +138,11 @@ def process_pdf_by_template(pdf_bytes):
         narration_prefix ="TAX CREDIT NOTE#"
         label="AMAZON WEB SERVICES EMEA SARL (AWS)"
     elif template == "C":
-        narration_prefix ="TAX CREDIT NOTE#"
+        narration_prefix ="INVOICE#"
         label="AMAZON WEB SERVICES, INC.INVOICE"
     elif template == "D":
         narration_prefix ="INVOICE#"
-        label="AMAZON MARKETPLACE INVOICE"
+        label="AWS MARKETPLACE INVOICE"
     else:
         narration_prefix ="INVOICE#"
         label="AMAZON MARKETPLACE INVOICE"
