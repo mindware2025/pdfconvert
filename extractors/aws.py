@@ -32,11 +32,11 @@ def extract_total_amount_cd(text):
 
     # Handle result
     if not match:
-        st.warning("⚠️ No 'TOTAL AMOUNT … USD' line found in this invoice text.")
+        
+        
         return ""
 
     amount = match.group(1).replace(",", "")
-    st.info(f"✅ Extracted total amount: {amount}")
     return amount
 def extract_due_date_fallback(pdf_bytes):
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
