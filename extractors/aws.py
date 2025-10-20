@@ -36,22 +36,22 @@ def extract_common_fields(text, is_credit_note=False, template="Unknown"):
     else:
         invoice_number = extract_value(r"(EU[A-Z]+[0-9]{2}-\d+)", text)
 
+    # ✅ Improved billing period regex to handle flexible formats
     match = re.search(
-        r"(This (?:Tax Invoice|Tax Credit Note|Document|invoice) is for the billing period\s+[A-Za-z]+\s+\d{1,2}\s*[-–]\s*[A-Za-z]+\s+\d{1,2},?\s+\d{4})",
+        r"(This\s+(?:Tax Invoice|Tax Credit Note|Document|invoice)?\s*is for the billing period\s+[A-Za-z]+\s+\d{1,2}\s*[-–]\s*[A-Za-z]+\s+\d{1,2}\s*,?\s*\d{4})",
         text, re.IGNORECASE
     )
     formatted_period = match.group(1).strip() if match else ""
 
-    if template == "C":
-        # For AWS Inc. invoices
+    if is_credit_note:
+        net_charges_usd = extract_value(r"-USD\s*([0-9,]+\.[0-9]{2})", text)
+    elif template == "C":
         match = re.search(r"AWS Marketplace Charges\s*\$([0-9,]+\.[0-9]{2})", text)
         net_charges_usd = match.group(1) if match else ""
     elif template == "D":
-        # For AWS Marketplace Operator Invoicing
         match = re.search(r"Purchases on Marketplace\s*USD\s*([0-9,]+\.[0-9]{2})", text)
         net_charges_usd = match.group(1) if match else ""
     else:
-        # For EMEA invoices
         match = re.search(r"USD\s*([0-9,]+\.[0-9]{2})\s*AED\s*[0-9,]+\.[0-9]{2}\s*Net Charges", text)
         net_charges_usd = match.group(1) if match else ""
 
