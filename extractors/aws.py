@@ -46,10 +46,7 @@ def extract_common_fields(text, is_credit_note=False, template="Unknown"):
     formatted_period = match.group(1).strip() if match else ""
 
     # Net charges extraction
-    if is_credit_note:
-        net_charges_usd = extract_value(r"-USD\s*([0-9,]+\.[0-9]{2})", text)
-
-    elif template in ["C", "D"]:
+    if template in ["C", "D"]:
         # ✅ FIXED REGEX BELOW
         match = re.search(
             r"TOTAL AMOUNT DUE ON\s+[A-Za-z]+\s+\d{1,2},?\s+\d{4}\s*\$?USD?\s*([0-9,]+\.[0-9]{2})",
