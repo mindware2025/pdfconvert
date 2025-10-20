@@ -346,7 +346,7 @@ def map_invoice_numbers(processed_df: pd.DataFrame) -> pd.DataFrame:
     return processed_df
 
 def create_srcl_file(df):
-    
+   
 
     # --- Sheet 1 headers ---
     headers_head = [
@@ -372,13 +372,13 @@ def create_srcl_file(df):
         "UOM",
         "Qty",
         "Qty_Ls",
-        "Rate",
-        "Total",
+        "Rate",              # Unit rate
         "CI Number CL",
         "End User CL",
         "Subs ID CL",
-        "MPC Billdate CL",
-        "Unit Cost CL"
+        "MPC Billdate CL",   # Dynamic based on Document Location
+        "Unit Cost CL",
+        "Total"              # Moved to end
     ]
 
     wb = Workbook()
@@ -390,60 +390,82 @@ def create_srcl_file(df):
 
     today_str = pd.Timestamp.today().strftime("%d/%m/%Y")
 
+    # Sequential numeric S.No for header
+    s_no = 1
+    header_sno_map = {}
     for _, row in df.iterrows():
-        ws_head.append([
-            row.get("Versioned Invoice No.", row.get("Invoice No.", "")),  # S.No = Versioned Invoice
-            today_str,
-            row.get("Customer Code", ""),
-            row.get("Currency Code", ""),
-            "0",  # FORM_CODE placeholder
-            row.get("Document Location", ""),
-            row.get("Document Location", ""),
-            row.get("Delivery Location Code", ""),
-            "ED068"   # SalesmanID placeholder
-        ])
+        versioned_inv = row.get("Versioned Invoice No.", row.get("Invoice No.", ""))
+        if versioned_inv not in header_sno_map:
+            header_sno_map[versioned_inv] = s_no
+            ws_head.append([
+                s_no,
+                today_str,
+                row.get("Customer Code", ""),
+                row.get("Currency Code", ""),
+                "0",  # FORM_CODE
+                row.get("Document Location", ""),
+                row.get("Document Location", ""),
+                row.get("Delivery Location Code", ""),
+                "ED068"
+            ])
+            s_no += 1
 
     # --- Sheet 2 ---
-    ws_item = wb.create_sheet(title="SALES_RET_ITEM") 
+    ws_item = wb.create_sheet(title="SALES_RET_ITEM")
     ws_item.append(headers_item)
 
-    # S.No mapping logic for repeated Versioned Invoice No.
-    versioned_inv_series = df.get("Versioned Invoice No.", df.get("Invoice No.", ""))
-    s_no_map = {}
-    current_s_no = 1
-    for v in versioned_inv_series:
-        if v not in s_no_map:
-            s_no_map[v] = current_s_no
-            current_s_no += 1
-
+    item_counter = 1
     for _, row in df.iterrows():
-        
         versioned_inv = row.get("Versioned Invoice No.", row.get("Invoice No.", ""))
-        item_name = str(row.get("ITEM Name", ""))[:240]  # Truncate to 240 chars
-        qty = abs(float(row.get("Quantity", 0)))  # Convert to positive
-        qty_ls = row.get("Qty Loose", "")
-        rate = abs(float(row.get("Rate Per Qty", 0)))
-        ws_item.append([
-                    s_no_map.get(versioned_inv, ""),
-                    versioned_inv,
-                    row.get("ITEM Code", ""),
-                    item_name,
-                    row.get("Grade code-1", ""),
-                    row.get("Grade code-2", ""),
-                    row.get("UOM", ""),
-                    qty,
-                    qty_ls,
-                    round(rate, 2),
-                    rate,
-                    versioned_inv,
-                    row.get("End User", ""),
-                    row.get("Subscription Id", ""),
-                    "",  # MPC Billdate CL
-                    row.get("Cost", "")
-                    
-                ])
+        ref_key = header_sno_map.get(versioned_inv, "")
+        doc_loc = str(row.get("Document Location", "")).strip().upper()
 
-    # Save to BytesIO
+        # --- Clean and sanitize item name ---
+        raw_item_name = str(row.get("ITEM Name", "")).strip()
+        clean_item_name = re.sub(r"[\r\n]+", " ", raw_item_name)  # remove newlines (Ctrl+J)
+        clean_item_name = clean_item_name.replace("'", "").replace('"', "")
+        clean_item_name = re.sub(r"\s+", " ", clean_item_name).strip()[:240]
+
+        # --- Numeric cleanup ---
+        qty = abs(float(row.get("Quantity", 0) or 0))
+        qty_ls = abs(float(row.get("Qty Loose", 0) or 0))
+        rate = abs(float(row.get("Rate Per Qty", 0) or 0))
+        total = abs(round(qty * rate, 2))
+        unit_cost = abs(float(row.get("Cost", 0) or 0))
+
+        # --- MPC Billdate CL mapping ---
+        if doc_loc in ["TC000", "UJ000"]:
+            mpc_billdate = "UAE - 28"
+        elif doc_loc == "QA000":
+            mpc_billdate = "QAR - 28"
+        elif doc_loc == "WT000":
+            mpc_billdate = "KWT - 28"
+        else:
+            mpc_billdate = ""
+
+        # --- Append cleaned data ---
+        ws_item.append([
+            item_counter,
+            ref_key,
+            row.get("ITEM Code", ""),
+            clean_item_name,
+            row.get("Grade code-1", ""),
+            row.get("Grade code-2", ""),
+            row.get("UOM", ""),
+            qty,
+            qty_ls,
+            rate,  # ✅ Unit rate only
+            versioned_inv,
+            row.get("End User", ""),
+            row.get("Subscription Id", ""),
+            mpc_billdate,  # ✅ new logic
+            unit_cost,
+            total  # moved to end
+        ])
+
+        item_counter += 1
+
+    # --- Save to memory ---
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
