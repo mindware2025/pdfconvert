@@ -46,7 +46,11 @@ def extract_common_fields(text, is_credit_note=False, template="Unknown"):
         net_charges_usd = extract_value(r"-USD\s*([0-9,]+\.[0-9]{2})", text)
     else:
         if template in ["C", "D"]:
-            net_charges_usd = extract_value(r"USD\s*([0-9,]+\.[0-9]{2})", text)
+            net_charges_usd = extract_value(
+                r"Net Charges\s*\(.*?\)\s*USD\s*([0-9,]+\.[0-9]{2})",
+                text
+            )
+            r"Net Charges\\s*\\(.*?\\)\\s*USD\\s*([0-9,]+\\.[0-9]{2})"
         else:
           
             net_charges_usd = extract_value(
