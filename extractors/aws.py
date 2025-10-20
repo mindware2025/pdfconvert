@@ -45,7 +45,7 @@ def extract_common_fields(text, is_credit_note=False, template="Unknown"):
     net_charges_usd = ""
     if is_credit_note:
         match = re.search(
-            r"USD\s*(-?[0-9,]+\.[0-9]{2})\s*AED\s*-?[0-9,]+\.[0-9]{2}\s*Net Charges",
+            r"-?USD\s*(-?[0-9,]+\.[0-9]{2})\s*-?AED\s*-?[0-9,]+\.[0-9]{2}\\s*Net Charges",
             text
         )
         if match:
