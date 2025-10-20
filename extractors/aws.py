@@ -32,7 +32,10 @@ def extract_value(pattern, text, default=""):
 
 def extract_common_fields(text, is_credit_note=False, template="Unknown"):
     # Invoice number
-    invoice_number = extract_value(r"(EU[A-Z]+[0-9]{2}-\d+)", text)
+    if template == "C":
+        invoice_number = extract_value(r"Invoice Number:\s*([0-9]+)", text)
+    else:
+        invoice_number = extract_value(r"(EU[A-Z]+[0-9]{2}-\d+)", text)
 
     # Billing period
     match = re.search(
