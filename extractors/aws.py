@@ -36,7 +36,7 @@ def extract_common_fields(text, is_credit_note=False, template="Unknown"):
     else:
         invoice_number = extract_value(r"(EU[A-Z]+[0-9]{2}-\d+)", text)
 
-    # ✅ Improved billing period regex to handle flexible formats
+    # Improved billing period regex
     match = re.search(
         r"(This\s+(?:Tax Invoice|Tax Credit Note|Document|invoice)?\s*is for the billing period\s+[A-Za-z]+\s+\d{1,2}\s*[-–]\s*[A-Za-z]+\s+\d{1,2}\s*,?\s*\d{4})",
         text, re.IGNORECASE
@@ -45,13 +45,12 @@ def extract_common_fields(text, is_credit_note=False, template="Unknown"):
 
     if is_credit_note:
         net_charges_usd = extract_value(r"-USD\s*([0-9,]+\.[0-9]{2})", text)
-    elif template == "C":
-        match = re.search(r"AWS Marketplace Charges\s*\$([0-9,]+\.[0-9]{2})", text)
+    elif template == "C" or template == "D":
+        match = re.search(r"TOTAL AMOUNT DUE ON\s+[A-Za-z]+\s+\d{1,2}\s*,?\s+\d{4}\s*\\$?USD?\\s*([0-9,]+\\.[0-9]{2})", text)
+        if not match:
+            match = re.search(r"TOTAL AMOUNT DUE ON\\s+[A-Za-z]+\\s+\\d{1,2}\\s*,?\\s+\\d{4}\\s*\\$([0-9,]+\\.[0-9]{2})", text)
         net_charges_usd = match.group(1) if match else ""
-    elif template == "D":
-        match = re.search(r"Purchases on Marketplace\s*USD\s*([0-9,]+\.[0-9]{2})", text)
-        net_charges_usd = match.group(1) if match else ""
-    else:
+    else:  # Templates A and B
         match = re.search(r"USD\s*([0-9,]+\.[0-9]{2})\s*AED\s*[0-9,]+\.[0-9]{2}\s*Net Charges", text)
         net_charges_usd = match.group(1) if match else ""
 
