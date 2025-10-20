@@ -346,11 +346,7 @@ def map_invoice_numbers(processed_df: pd.DataFrame) -> pd.DataFrame:
     return processed_df
 
 def create_srcl_file(df):
-    from openpyxl import Workbook
-    from openpyxl.styles import PatternFill
-    import io
-    import pandas as pd
-    import re
+    
 
     # --- Sheet 1 headers ---
     headers_head = [
@@ -376,119 +372,78 @@ def create_srcl_file(df):
         "UOM",
         "Qty",
         "Qty_Ls",
-        "Unit Rate",
+        "Rate",
+        "Total",
         "CI Number CL",
         "End User CL",
         "Subs ID CL",
         "MPC Billdate CL",
-        "Unit Cost CL",
-        "Total"
+        "Unit Cost CL"
     ]
 
-    # Create workbook and first sheet
     wb = Workbook()
+
+    # --- Sheet 1 ---
     ws_head = wb.active
     ws_head.title = "SALES_RET_HEAD"
     ws_head.append(headers_head)
 
     today_str = pd.Timestamp.today().strftime("%d/%m/%Y")
 
-    # Determine invoice key (use Versioned Invoice No. if available)
-    df["InvoiceKey"] = df.get("Versioned Invoice No.", df.get("Invoice No.", ""))
-
-    # --- Create header sheet ---
-    unique_invoices = df.drop_duplicates(subset=["InvoiceKey"]).reset_index(drop=True)
-
-    # Create numeric mapping for invoice S.No
-    s_no_map = {inv: idx + 1 for idx, inv in enumerate(unique_invoices["InvoiceKey"])}
-
-    for _, row in unique_invoices.iterrows():
-        versioned_inv = row["InvoiceKey"]
+    for _, row in df.iterrows():
         ws_head.append([
-            s_no_map.get(versioned_inv, ""),       # Numeric S.No
+            row.get("Versioned Invoice No.", row.get("Invoice No.", "")),  # S.No = Versioned Invoice
             today_str,
             row.get("Customer Code", ""),
             row.get("Currency Code", ""),
-            "0",                                   # FORM_CODE placeholder
+            "0",  # FORM_CODE placeholder
             row.get("Document Location", ""),
             row.get("Document Location", ""),
             row.get("Delivery Location Code", ""),
-            "ED068"                                # SalesmanID placeholder
+            "ED068"   # SalesmanID placeholder
         ])
 
-    # --- Create item sheet ---
-    ws_item = wb.create_sheet(title="SALES_RET_ITEM")
+    # --- Sheet 2 ---
+    ws_item = wb.create_sheet(title="SALES_RET_ITEM") 
     ws_item.append(headers_item)
 
-    red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+    # S.No mapping logic for repeated Versioned Invoice No.
+    versioned_inv_series = df.get("Versioned Invoice No.", df.get("Invoice No.", ""))
+    s_no_map = {}
+    current_s_no = 1
+    for v in versioned_inv_series:
+        if v not in s_no_map:
+            s_no_map[v] = current_s_no
+            current_s_no += 1
 
-    # --- Fill item sheet ---
-    for idx, row in enumerate(df.itertuples(index=False), start=1):
-        versioned_inv = getattr(row, "InvoiceKey")
-        s_no = idx                                 # Sequential per line item
-        ref_key = s_no_map.get(versioned_inv, "")  # Header's numeric reference
-
-        # Numeric conversions
-        try:
-            qty = abs(float(getattr(row, "Quantity", 0)))
-        except:
-            qty = 0.0
-        try:
-            rate = round(float(getattr(row, "Rate Per Qty", 0)), 2)
-        except:
-            rate = 0.0
-        try:
-            cost_val = round(float(getattr(row, "Cost", 0)), 2)
-        except:
-            cost_val = 0.0
-
-        qty_ls = getattr(row, "Qty Loose", "")
-
-        # Clean item name
-        raw_item_name = str(getattr(row, "ITEM Name", "")).strip()
-        clean_item_name = re.sub(r"[\r\n]+", " ", raw_item_name)
-        clean_item_name = clean_item_name.replace("'", "").replace('"', "")
-        clean_item_name = clean_item_name[:240]
-
-        # End User / Subscription ID cleanup
-        end_user = str(getattr(row, "End User", "")).strip()
-        subs_id = str(getattr(row, "Subscription Id", "")).strip()
-        if end_user.lower() in ["nan", "none"]:
-            end_user = ""
-        if subs_id.lower() in ["nan", "none"]:
-            subs_id = ""
-
-        total_val = round(qty * rate, 2)
-
+    for _, row in df.iterrows():
+        
+        versioned_inv = row.get("Versioned Invoice No.", row.get("Invoice No.", ""))
+        item_name = str(row.get("ITEM Name", ""))[:240]  # Truncate to 240 chars
+        qty = abs(float(row.get("Quantity", 0)))  # Convert to positive
+        qty_ls = row.get("Qty Loose", "")
+        rate = abs(float(row.get("Rate Per Qty", 0)))
         ws_item.append([
-            s_no,               # Sequential S.No
-            ref_key,            # Ref. Key = header S.No
-            getattr(row, "ITEM Code", ""),
-            clean_item_name,
-            getattr(row, "Grade code-1", ""),
-            getattr(row, "Grade code-2", ""),
-            getattr(row, "UOM", ""),
-            qty,
-            qty_ls,
-            rate,
-            versioned_inv,
-            end_user,
-            subs_id,
-            "",
-            cost_val,
-            total_val
-        ])
+                    s_no_map.get(versioned_inv, ""),
+                    versioned_inv,
+                    row.get("ITEM Code", ""),
+                    item_name,
+                    row.get("Grade code-1", ""),
+                    row.get("Grade code-2", ""),
+                    row.get("UOM", ""),
+                    qty,
+                    qty_ls,
+                    round(rate, 2),
+                    rate,
+                    versioned_inv,
+                    row.get("End User", ""),
+                    row.get("Subscription Id", ""),
+                    "",  # MPC Billdate CL
+                    row.get("Cost", "")
+                    
+                ])
 
-    # --- Highlight missing End User / Subs ID ---
-    for row in ws_item.iter_rows(min_row=2, max_row=ws_item.max_row):
-        end_user_cell = row[11]  # "End User CL"
-        subs_id_cell = row[12]   # "Subs ID CL"
-        if not end_user_cell.value or str(end_user_cell.value).strip() == "":
-            end_user_cell.fill = red_fill
-        if not subs_id_cell.value or str(subs_id_cell.value).strip() == "":
-            subs_id_cell.fill = red_fill
-
-    # --- Save to BytesIO ---
+    # Save to BytesIO
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
