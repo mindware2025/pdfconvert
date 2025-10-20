@@ -31,6 +31,7 @@ def extract_value(pattern, text, default=""):
     return match.group(1).strip() if match else default
 
 def extract_common_fields(text, is_credit_note=False, template="Unknown"):
+    # Invoice number extraction
     if template == "C":
         invoice_number = extract_value(r"Invoice Number:\s*([0-9]+)", text)
     else:
@@ -38,27 +39,44 @@ def extract_common_fields(text, is_credit_note=False, template="Unknown"):
 
     # Improved billing period regex
     match = re.search(
-        r"(This\s+(?:Tax Invoice|Tax Credit Note|Document|invoice)?\s*is for the billing period\s+[A-Za-z]+\s+\d{1,2}\s*[-–]\s*[A-Za-z]+\s+\d{1,2}\s*,?\s*\d{4})",
-        text, re.IGNORECASE
+        r"(This\s+(?:Tax Invoice|Tax Credit Note|Document|invoice)?\s*is for the billing period\s+[A-Za-z]+\s+\d{1,2}\s*[-–]\s*[A-Za-z]+\s+\d{1,2},?\s*\d{4})",
+        text,
+        re.IGNORECASE
     )
     formatted_period = match.group(1).strip() if match else ""
 
+    # Net charges extraction
     if is_credit_note:
         net_charges_usd = extract_value(r"-USD\s*([0-9,]+\.[0-9]{2})", text)
-    elif template == "C" or template == "D":
-        match = re.search(r"TOTAL AMOUNT DUE ON\s+[A-Za-z]+\s+\d{1,2}\s*,?\s+\d{4}\s*\\$?USD?\\s*([0-9,]+\\.[0-9]{2})", text)
+
+    elif template in ["C", "D"]:
+        # ✅ FIXED REGEX BELOW
+        match = re.search(
+            r"TOTAL AMOUNT DUE ON\s+[A-Za-z]+\s+\d{1,2},?\s+\d{4}\s*\$?USD?\s*([0-9,]+\.[0-9]{2})",
+            text
+        )
         if not match:
-            match = re.search(r"TOTAL AMOUNT DUE ON\\s+[A-Za-z]+\\s+\\d{1,2}\\s*,?\\s+\\d{4}\\s*\\$([0-9,]+\\.[0-9]{2})", text)
-        net_charges_usd = match.group(1) if match else ""
-    else:  # Templates A and B
-        match = re.search(r"USD\s*([0-9,]+\.[0-9]{2})\s*AED\s*[0-9,]+\.[0-9]{2}\s*Net Charges", text)
+            match = re.search(
+                r"TOTAL AMOUNT DUE ON\s+[A-Za-z]+\s+\d{1,2},?\s+\d{4}\s*\$([0-9,]+\.[0-9]{2})",
+                text
+            )
         net_charges_usd = match.group(1) if match else ""
 
+    else:  # Templates A and B
+        match = re.search(
+            r"USD\s*([0-9,]+\.[0-9]{2})\s*AED\s*[0-9,]+\.[0-9]{2}\s*Net Charges",
+            text
+        )
+        net_charges_usd = match.group(1) if match else ""
+
+    # Normalize numeric value
     net_charges_usd = net_charges_usd.replace(",", "")
     try:
         net_charges_usd = f"{float(net_charges_usd):.2f}"
     except ValueError:
         net_charges_usd = ""
+
+    
 
     account_number = extract_value(r"(?:Account Number|رقم الحساب)[^\d]*?(\d{9,})", text)
     return invoice_number, net_charges_usd, account_number, formatted_period
