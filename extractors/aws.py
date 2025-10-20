@@ -37,8 +37,8 @@ def extract_common_fields(text, is_credit_note=False, template="Unknown"):
         invoice_number = extract_value(r"(EU[A-Z]+[0-9]{2}-\d+)", text)
 
     match = re.search(
-       r"(This (?:Tax Invoice|Tax Credit Note|Document|invoice) is for the billing period\s+[A-Za-z]+\s+\d{1,2}\s*[-–]\s*[A-Za-z]+\s+\d{1,2}\s*,?\s+\d{4})",
-       text, re.IGNORECASE
+        r"(This (?:Tax Invoice|Tax Credit Note|Document|invoice) is for the billing period\s+[A-Za-z]+\s+\d{1,2}\s*[-–]\s*[A-Za-z]+\s+\d{1,2},?\s+\d{4})",
+        text, re.IGNORECASE
     )
     formatted_period = match.group(1).strip() if match else ""
 
@@ -46,17 +46,11 @@ def extract_common_fields(text, is_credit_note=False, template="Unknown"):
         net_charges_usd = extract_value(r"-USD\s*([0-9,]+\.[0-9]{2})", text)
     else:
         if template in ["C", "D"]:
-            net_charges_usd = extract_value(
-                r"Net Charges\s*\(.*?\)\s*USD\s*([0-9,]+\.[0-9]{2})",
-                text
-            )
-            r"Net Charges\\s*\\(.*?\\)\\s*USD\\s*([0-9,]+\\.[0-9]{2})"
+            net_charges_usd = extract_value(r"USD\s*([0-9,]+\.[0-9]{2})", text)
         else:
-          
-            net_charges_usd = extract_value(
-                r"Net Charges\s*\(.*?\)\s*[\r\n]*USD\s*([0-9,]+\.[0-9]{2})",
-                text
-            )
+            # ✅ Updated regex: looks for USD amount preceding 'Net Charges'
+            match = re.search(r"USD\s*([0-9,]+\.[0-9]{2})\s*AED\s*[0-9,]+\.[0-9]{2}\s*Net Charges", text)
+            net_charges_usd = match.group(1) if match else ""
 
     net_charges_usd = net_charges_usd.replace(",", "")
     try:
