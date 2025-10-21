@@ -57,11 +57,15 @@ def extract_common_fields(text, is_credit_note=False, template="Unknown"):
         if match:
             net_charges_usd = match.group(1).replace(",", "")
     elif template in ["C", "D"]:
-        match = re.search(
-           r"TOTAL AMOUNT.*?(?:USD|\$)\s*([0-9,]+\.[0-9]{2})",  text, re.IGNORECASE
-)
+    # Normalize whitespace to handle line breaks and formatting
+           normalized_text = re.sub(r"\s+", " ", text)
+           match = re.search(
+               r"TOTAL AMOUNT.*?(?:USD|\$)?\s*([0-9,]+\.[0-9]{2})",
+               normalized_text,
+               re.IGNORECASE
+    )
 
-        if match:
+           if match:
                 net_charges_usd = match.group(1).replace(",", "")
 
     account_number = extract_value(r"(?:Account Number|رقم الحساب)[^\d]*?(\d{9,})", text)
