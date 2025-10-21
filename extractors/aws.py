@@ -138,6 +138,7 @@ def process_pdf_by_template(pdf_bytes):
         formatted_due_date = extract_due_date_fallback(pdf_bytes)
 
     today_date = datetime.today().strftime("%d/%m/%Y")
+    
     #narration = f"{'TAX CREDIT  if template == 'B' else 'TAX INVOICE'}#{invoice_number}-AMAZON WEB SERVICES - {formatted_period} - AC NO: {account_number}"
     if template == "A":
         narration_prefix ="TAX INVOICE#"
@@ -180,18 +181,18 @@ def process_pdf_by_template(pdf_bytes):
         without_vat = ""
         with_vat = net_charges_usd
     
-    inv_value = ""
-    if template in ["A", "B"]:
-       inv_value = extract_value(
-            r"TOTAL AMOUNT Payable\s*-?\s*(?:USD|\$)?\s*([0-9,]+\.[0-9]{2})",
-            text
-       )
+    inv_value = extract_value(
+        r"TOTAL AMOUNT Payable(?:\s+DUE ON)?[\s\S]*?(?:-?USD|\$)?\s*([0-9,]+\.[0-9]{2})",
+        text
+    )
+    
+    
     difference_value = ""
     try:
         if inv_value and total_with_vat:
-           difference_value = f"{float(inv_value) - float(total_with_vat):.2f}"
+            difference_value = f"{float(inv_value.replace(',', '')) - float(total_with_vat):.2f}"
     except ValueError:
-         difference_value = ""
+        difference_value = ""
     
          
     row = [
