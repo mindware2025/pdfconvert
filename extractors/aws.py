@@ -45,7 +45,7 @@ def extract_common_fields(text, is_credit_note=False, template="Unknown"):
     formatted_period = match.group(0).strip() if match else ""
     # Net charges
     net_charges_usd = ""
-    if is_credit_note:
+    if is_credit_note or template == "A"   :
        
         
         match = re.search(
