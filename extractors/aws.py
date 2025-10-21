@@ -245,8 +245,13 @@ def build_dnts_cnts_rows(rows, template_map, text_map):
             rate = row[2] if row[2] else row[3]
             item_rows.append([
                 idx, idx, "AWS-NS-SW", row[4], "NA", "NA", "NOS", 1, 0, rate,
-                14807, "", division, "GEN" if not is_cnts else "ZZ-COMM", ""
+                14807, "", division, "GEN", "ZZ-COMM"
             ])
+            
+            #item_rows.append([
+            #    idx, idx, "AWS-NS-SW", row[4], "NA", "NA", "NOS", 1, 0, rate,
+              #  14807, "", division, "GEN" if not is_cnts else "ZZ-COMM", "ZZ-COMM"
+           # ])
 
         output_files[f"{bill_to}__{file_type}"] = {
             "header": header_rows,
