@@ -31,19 +31,20 @@ def extract_value(pattern, text, default=""):
     return match.group(1).strip() if match else default
 
 def extract_common_fields(text, is_credit_note=False, template="Unknown"):
-    # Invoice number
+  
     if template == "C":
         invoice_number = extract_value(r"Invoice Number:\s*([0-9]+)", text)
     else:
         invoice_number = extract_value(r"(EU[A-Z]+[0-9]{2}-\d+)", text)
 
-    # Billing period
+    
     match = re.search(
-         r"(This\s+(?:Tax Invoice|Tax Credit Note|Document|invoice)?\s*is for the billing period\s+[A-Za-z]+\s+\d{1,2}\s*[-–]\s*[A-Za-z]+\s+\d{1,2},?\s*\d{4})",
+        r"This\s+(?:Tax\s+Invoice|Tax\s+Credit\s+Note|Document|invoice)?\s*is\s+for\s+the\s+billing\s+period\s+[A-Za-z]+\s+\d{1,2}\s*[-–]\s*[A-Za-z]+\s+\d{1,2}\s*,?\s*\d{4}",
+
         text, re.IGNORECASE
 )
     formatted_period = match.group(1).strip() if match else ""
-    # Net charges
+    
     net_charges_usd = ""
     if is_credit_note or template == "A"   :
        
@@ -57,7 +58,7 @@ def extract_common_fields(text, is_credit_note=False, template="Unknown"):
         if match:
             net_charges_usd = match.group(1).replace(",", "")
     elif template in ["C", "D"]:
-    # Normalize whitespace to handle line breaks and formatting
+    
            normalized_text = re.sub(r"\s+", " ", text)
            match = re.search(
                r"TOTAL AMOUNT.*?(?:USD|\$)?\s*([0-9,]+\.[0-9]{2})",
@@ -137,7 +138,7 @@ def process_pdf_by_template(pdf_bytes):
         formatted_due_date = extract_due_date_fallback(pdf_bytes)
 
     today_date = datetime.today().strftime("%d/%m/%Y")
-    #narration = f"{'TAX CREDIT NOTE' if template == 'B' else 'TAX INVOICE'}#{invoice_number}-AMAZON WEB SERVICES - {formatted_period} - AC NO: {account_number}"
+    #narration = f"{'TAX CREDIT  if template == 'B' else 'TAX INVOICE'}#{invoice_number}-AMAZON WEB SERVICES - {formatted_period} - AC NO: {account_number}"
     if template == "A":
         narration_prefix ="TAX INVOICE#"
         label="AMAZON WEB SERVICES EMEA SARL (AWS)"
