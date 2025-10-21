@@ -39,8 +39,8 @@ def extract_common_fields(text, is_credit_note=False, template="Unknown"):
 
     # Billing period
     match = re.search(
-          r"(This\\s+(?:Tax Invoice|Tax Credit Note|Document|invoice)?\\s*is for the billing period\\s+[A-Za-z]+\\s+\\d{1,2}\\s*[-–]\\s*[A-Za-z]+\\s+\\d{1,2}\\s*,?\\s*\\d{4})",
-     text, re.IGNORECASE
+        r"(This\s+(?:Tax Invoice|Tax Credit Note|Document|invoice)?\s*is for the billing period\s+[A-Za-z]+\s+\d{1,2}\s*[-–]\s*[A-Za-z]+\s+\d{1,2},?\s*\d{4})",
+        text, re.IGNORECASE
     )
     formatted_period = match.group(1).strip() if match else ""
 
