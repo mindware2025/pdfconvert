@@ -39,8 +39,8 @@ def extract_common_fields(text, is_credit_note=False, template="Unknown"):
 
     # Billing period
     match = re.search(
-         r"billing period\s+[A-Za-z]+\s+\d{1,2}\s*[-–]\s*[A-Za-z]+\s+\d{1,2}\s*,?\s*\d{4}",
-         text, re.IGNORECASE
+        r"TOTAL AMOUNT DUE ON\s+[A-Za-z]+\s+\d{1,2},?\s+\d{4}.*?(?:USD|\$)?\s*([0-9,]+\.[0-9]{2})",
+        text, re.IGNORECASE
    )
     formatted_period = match.group(0).strip() if match else ""
     # Net charges
