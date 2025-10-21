@@ -39,10 +39,10 @@ def extract_common_fields(text, is_credit_note=False, template="Unknown"):
 
     # Billing period
     match = re.search(
-         r"billing period\s+[A-Za-z]+\s+\d{1,2}\s*[-–]\s*[A-Za-z]+\s+\d{1,2}\s*,?\s*\d{4}",
-    text, re.IGNORECASE
+         r"(This\s+(?:Tax Invoice|Tax Credit Note|Document|invoice)?\s*is for the billing period\s+[A-Za-z]+\s+\d{1,2}\s*[-–]\s*[A-Za-z]+\s+\d{1,2},?\s*\d{4})",
+        text, re.IGNORECASE
 )
-    formatted_period = match.group(0).strip() if match else ""
+    formatted_period = match.group(1).strip() if match else ""
     # Net charges
     net_charges_usd = ""
     if is_credit_note or template == "A"   :
@@ -139,7 +139,7 @@ def process_pdf_by_template(pdf_bytes):
     today_date = datetime.today().strftime("%d/%m/%Y")
     #narration = f"{'TAX CREDIT NOTE' if template == 'B' else 'TAX INVOICE'}#{invoice_number}-AMAZON WEB SERVICES - {formatted_period} - AC NO: {account_number}"
     if template == "A":
-        narration_prefix ="TAX INVOICES#"
+        narration_prefix ="TAX INVOICE#"
         label="AMAZON WEB SERVICES EMEA SARL (AWS)"
     elif template == "B":
         narration_prefix ="TAX CREDIT NOTE#"
