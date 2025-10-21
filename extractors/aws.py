@@ -179,11 +179,25 @@ def process_pdf_by_template(pdf_bytes):
     else:
         without_vat = ""
         with_vat = net_charges_usd
-
+    
+    inv_value = ""
+    if template in ["A", "B"]:
+       inv_value = extract_value(
+            r"TOTAL AMOUNT Payable\s*-?\s*(?:USD|\$)?\s*([0-9,]+\.[0-9]{2})",
+            text
+       )
+    difference_value = ""
+    try:
+        if inv_value and total_with_vat:
+           difference_value = f"{float(inv_value) - float(total_with_vat):.2f}"
+    except ValueError:
+         difference_value = ""
+    
+         
     row = [
         today_date, invoice_number, without_vat, with_vat, narration,
         formatted_period, account_number, formatted_due_date,
-        vat_usd_str, vat_aed_calculated, total_with_vat, "", "", bill_to
+        vat_usd_str, vat_aed_calculated, total_with_vat, inv_value, difference_value , bill_to
     ]
     return [row], template, text
 
