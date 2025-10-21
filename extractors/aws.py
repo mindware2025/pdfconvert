@@ -58,9 +58,7 @@ def extract_common_fields(text, is_credit_note=False, template="Unknown"):
         if match:
             net_charges_usd = match.group(1).replace(",", "")
     elif template in ["C", "D"]:
-        match = re.search(r"TOTAL\s+AMOUNT\s+(?:DUE\s+ON\s+)?"
-        r"(?:[A-Za-z]+\s+\d{1,2},?\s+\d{4}\s*)?"  # optional month/day/year
-        r"\$?\s*USD?\s*([0-9,]+\.[0-9]{2})", text, re.IGNORECASE)
+        match = re.search(r"TOTAL AMOUNT DUE ON\s+[A-Za-z]+\s+\d{1,2}\s*,?\s+\d{4}\s*\$([0-9,]+\.[0-9]{2})", text, re.IGNORECASE)
 
         if match:
             net_charges_usd = match.group(1).replace(",", "")
