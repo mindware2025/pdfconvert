@@ -50,7 +50,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
-
+env = st.secrets.get("env", "live")  # Default to live if not set
 
 # CSS: hide top-right icons but keep sidebar visible
 st.markdown("""
@@ -217,12 +217,21 @@ def extractor_workflow(
     else:
         st.info(f"Please upload a {extractor_name} PDF file to get started.")
 # ----------- Tool Selector UI -----------
-st.markdown("""
+
+if env == "test":
+    st.warning("⚠️ You are in TEST environment")
+
+# Change header color and text
+header_color = "#1a73e8" if env == "live" else "orange"
+header_text = "🛠️ Tool Selection" + (" - Test Env" if env == "test" else "")
+
+st.markdown(f"""
     <div style='text-align:center; margin-top:2rem; margin-bottom:1.5rem;'>
-        <h2 style='color:#1a73e8; font-family:Google Sans, sans-serif; font-weight:700; letter-spacing:-1px;'>🛠️ Tool Selection</h2>
+        <h2 style='color:{header_color}; font-family:Google Sans, sans-serif; font-weight:700; letter-spacing:-1px;'>{header_text}</h2>
         <p style='font-size:1.2rem; color:#444;'>Choose the tool you want to use for your PDF extraction.</p>
     </div>
 """, unsafe_allow_html=True)
+
 if team == "Finance":
     TOOL_OPTIONS = [
         "-- Select a tool --",
