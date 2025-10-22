@@ -58,7 +58,6 @@ creds = Credentials.from_service_account_info(service_account_info, scopes=scope
 gc = gspread.authorize(creds)
 
 tool_sheet = gc.open(SHEET_NAME).worksheet("Sheet1")     # Main usage sheet
-feedback_sheet = gc.open(SHEET_NAME).worksheet("Feedback")  # Feedback sheet
 env = st.secrets.get("env", "live")  # Default to live if not set
 
 def update_usage(tool_name, team):
@@ -75,10 +74,6 @@ def update_usage(tool_name, team):
 
     if not found:
         tool_sheet.append_row([tool_name, month, 1, team])
-def log_feedback(tool_name, team, user="", feedback=""):
-    if feedback.strip():  # Only log if user wrote something
-        feedback_sheet.append_row([tool_name, datetime.today().strftime("%b-%Y"), team, user, feedback, datetime.now().strftime("%Y-%m-%d %H:%M")])
-
 
 
 
@@ -185,8 +180,7 @@ elif st.session_state.login_state == "fail":
     show_fail()
     st.stop()
 team = st.radio("👥 Select your team:", ["Finance", "Operations", "Credit"], horizontal=True)
-user_name = st.text_input("👤 Enter your name (optional):")
-feedback = st.text_area("💬 Any feedback about this tool? (optional)")
+
 
 
 def extractor_workflow(
@@ -236,8 +230,7 @@ def extractor_workflow(
                     file_name=file_name,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     on_click=lambda: (
-                            update_usage("Google Automation", team),
-                            log_feedback("google Automation", team, user_name, feedback)
+                            update_usage("Google Automation", team)
                         ),
                     key=f"download_{extractor_name}"
                 )
@@ -252,8 +245,7 @@ def extractor_workflow(
                     file_name=file_name,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     on_click=lambda: (
-                            update_usage("google Automation", team),
-                            log_feedback("google Automation", team, user_name, feedback)
+                            update_usage("google Automation", team)
                         ),
                 )
         else:
@@ -382,8 +374,7 @@ elif tool == "📄 Claims Automation":
                 file_name="claims_output.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 on_click=lambda: (
-                            update_usage("Claims Automation", team),
-                            log_feedback("Claims Automation", team, user_name, feedback)
+                            update_usage("Claims Automation", team)
                         ),
                 key="claims_download"
             )
@@ -567,8 +558,7 @@ elif tool == "🧾 Cloud Invoice Tool":
             file_name="cloud_invoice.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             on_click=lambda: (
-                            update_usage("Cloud Automation", team),
-                            log_feedback("Cloud Automation", team, user_name, feedback)
+                            update_usage("Cloud Automation", team)
                         ),
 
         )
@@ -582,8 +572,7 @@ elif tool == "🧾 Cloud Invoice Tool":
            file_name="srcl_file.xlsx",
            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
            on_click=lambda: (
-                            update_usage("Cloud Automation (SRCL)", team),
-                            log_feedback("Cloud Automation (SRCL)", team, user_name, feedback)
+                            update_usage("Cloud Automation (SRCL)", team)
                         ),
 )
         
@@ -610,8 +599,7 @@ elif tool == "📦 Barcode PDF Generator grouped":
             file_name="pallet_barcodes_fullpage.zip",
             mime="application/zip",
             on_click=lambda: (
-                            update_usage("barcode Automation", team),
-                            log_feedback("barcode Automation", team, user_name, feedback)
+                            update_usage("barcode Automation", team)
                         ),
 
         )
@@ -888,8 +876,7 @@ elif tool == "💻 Dell Invoice Extractor":
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="download_dell_pre_alert",
                 on_click=lambda: (
-                            update_usage("Dell Automation", team),
-                            log_feedback("DELL Automation", team, user_name, feedback)
+                            update_usage("Dell Automation", team)
                         ),
             )
         else:
@@ -952,8 +939,7 @@ elif tool == "🟨 AWS Invoice Tool":
                     mime="application/zip",
              
                     on_click=lambda: (
-                            update_usage("AWS Automation", team),
-                            log_feedback("AWS Automation", team, user_name, feedback)
+                            update_usage("AWS Automation", team)
                         ),
                 )
             else:
@@ -977,8 +963,7 @@ elif tool == "Coface CSV Uploader":
             file_name="customer_outputs.zip",
             mime="application/zip",
             on_click=lambda: (
-                            update_usage("credit format by customer", team),
-                            log_feedback("fredit format by customer", team, user_name, feedback)
+                            update_usage("credit format by customer", team)
                         ),
         )
 elif tool == "AR to EDD file":
@@ -1010,8 +995,7 @@ elif tool == "AR to EDD file":
             file_name="EDD.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             on_click=lambda: (
-                            update_usage("credit Automation ", team),
-                            log_feedback("credit Automation ", team, user_name, feedback)
+                            update_usage("credit Automation ", team)
                         ),
         )
 elif tool == "Other":
