@@ -147,8 +147,7 @@ elif st.session_state.login_state == "fail":
     show_fail()
     st.stop()
 team = st.radio("👥 Select your team:", ["Finance", "Operations", "Credit"], horizontal=True)
-user_name = st.text_input("👤 Enter your name (optional):")
-feedback = st.text_area("💬 Any feedback about this tool? (optional)")
+
 
 
 def extractor_workflow(
