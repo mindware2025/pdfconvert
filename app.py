@@ -59,7 +59,7 @@ gc = gspread.authorize(creds)
 
 tool_sheet = gc.open(SHEET_NAME).worksheet("Sheet1")     # Main usage sheet
 feedback_sheet = gc.open(SHEET_NAME).worksheet("Feedback")  # Feedback sheet
-
+env = st.secrets.get("env", "live")  # Default to live if not set
 
 def update_usage(tool_name, team):
     month = datetime.today().strftime("%b-%Y")
