@@ -44,44 +44,6 @@ from claims_automation import (
 )
 import plotly.express as px
 
-SHEET_JSON = "tool-mindware-0d87ca5562ad.json"  # Path to your downloaded JSON
-SHEET_NAME = "mindware tool"
-
-scope = ["https://www.googleapis.com/auth/spreadsheets", "https://spreadsheets.google.com/feeds",
-         "https://www.googleapis.com/auth/drive"]
-
-# Read credentials from Streamlit secrets
-service_account_info = st.secrets["gcp_service_account"]
-creds = Credentials.from_service_account_info(service_account_info, scopes=scope)
-
-# ✅ Authorize and open sheet
-gc = gspread.authorize(creds)
-
-tool_sheet = gc.open(SHEET_NAME).worksheet("Sheet1")     # Main usage sheet
-feedback_sheet = gc.open(SHEET_NAME).worksheet("Feedback")  # Feedback sheet
-
-
-def update_usage(tool_name, team):
-    month = datetime.today().strftime("%b-%Y")
-    all_rows = tool_sheet.get_all_records()
-    found = False
-
-    for i, row in enumerate(all_rows, start=2):
-        if row.get("Tool") == tool_name and row.get("Month") == month and row.get("Team") == team:
-            current_count = row.get("Usage Count", 0) or 0
-            tool_sheet.update_cell(i, 3, current_count + 1)
-            found = True
-            break
-
-    if not found:
-        tool_sheet.append_row([tool_name, month, 1, team])
-def log_feedback(tool_name, team, user="", feedback=""):
-    if feedback.strip():  # Only log if user wrote something
-        feedback_sheet.append_row([tool_name, datetime.today().strftime("%b-%Y"), team, user, feedback, datetime.now().strftime("%Y-%m-%d %H:%M")])
-
-
-
-
 
 st.set_page_config(
     page_title="Mindware Tool",
@@ -235,10 +197,7 @@ def extractor_workflow(
                     data=output.getvalue(),
                     file_name=file_name,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    on_click=lambda: (
-                            update_usage("Google Automation", team),
-                            log_feedback("google Automation", team, user_name, feedback)
-                        ),
+                    
                     key=f"download_{extractor_name}"
                 )
             else:
@@ -251,10 +210,7 @@ def extractor_workflow(
                     data=towrite,
                     file_name=file_name,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    on_click=lambda: (
-                            update_usage("google Automation", team),
-                            log_feedback("google Automation", team, user_name, feedback)
-                        ),
+                 
                 )
         else:
             st.warning("No table data found in the uploaded PDF.")
@@ -381,10 +337,7 @@ elif tool == "📄 Claims Automation":
                 data=output_buffer,
                 file_name="claims_output.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                on_click=lambda: (
-                            update_usage("Claims Automation", team),
-                            log_feedback("Claims Automation", team, user_name, feedback)
-                        ),
+               
                 key="claims_download"
             )
         except Exception as e:
@@ -566,11 +519,7 @@ elif tool == "🧾 Cloud Invoice Tool":
             data=output_buffer.getvalue(),
             file_name="cloud_invoice.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            on_click=lambda: (
-                            update_usage("Cloud Automation", team),
-                            log_feedback("Cloud Automation", team, user_name, feedback)
-                        ),
-
+           
         )
         # --- Download SRCL File ---
         srcl_buffer = create_srcl_file(neg_df)  # only negative invoices
@@ -581,10 +530,7 @@ elif tool == "🧾 Cloud Invoice Tool":
            data=srcl_buffer.getvalue(),
            file_name="srcl_file.xlsx",
            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-           on_click=lambda: (
-                            update_usage("Cloud Automation (SRCL)", team),
-                            log_feedback("Cloud Automation (SRCL)", team, user_name, feedback)
-                        ),
+         
 )
         
 
@@ -609,10 +555,7 @@ elif tool == "📦 Barcode PDF Generator grouped":
             data=pdf_bytes,
             file_name="pallet_barcodes_fullpage.zip",
             mime="application/zip",
-            on_click=lambda: (
-                            update_usage("barcode Automation", team),
-                            log_feedback("barcode Automation", team, user_name, feedback)
-                        ),
+        
 
         )
 
@@ -887,10 +830,7 @@ elif tool == "💻 Dell Invoice Extractor":
                 file_name="pre_alert_upload.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="download_dell_pre_alert",
-                on_click=lambda: (
-                            update_usage("Dell Automation", team),
-                            log_feedback("DELL Automation", team, user_name, feedback)
-                        ),
+                
             )
         else:
             st.warning("No items found in the uploaded PDF(s).")
@@ -951,10 +891,6 @@ elif tool == "🟨 AWS Invoice Tool":
                     file_name="aws_dnts_cnts_files.zip",
                     mime="application/zip",
              
-                    on_click=lambda: (
-                            update_usage("AWS Automation", team),
-                            log_feedback("AWS Automation", team, user_name, feedback)
-                        ),
                 )
             else:
                 st.warning("No data extracted from the uploaded AWS PDFs.")
@@ -976,10 +912,7 @@ elif tool == "Coface CSV Uploader":
             data=zip_output.getvalue(),
             file_name="customer_outputs.zip",
             mime="application/zip",
-            on_click=lambda: (
-                            update_usage("credit format by customer", team),
-                            log_feedback("fredit format by customer", team, user_name, feedback)
-                        ),
+          
         )
 elif tool == "AR to EDD file":
     st.title("AR to EDD file")
@@ -1009,10 +942,7 @@ elif tool == "AR to EDD file":
             data=output_excel.getvalue(),
             file_name="EDD.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            on_click=lambda: (
-                            update_usage("credit Automation ", team),
-                            log_feedback("credit Automation ", team, user_name, feedback)
-                        ),
+          
         )
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
