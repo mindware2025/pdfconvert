@@ -550,17 +550,10 @@ elif tool == "🧾 Cloud Invoice Tool":
         # --- Download SRCL File ---
         # --- Validate before generating SRCL file ---
       
-        
-        if neg_df.empty:
-            st.warning("No negative invoices found. SRCL file will not be generated.")
-        else:
-            srcl_buffer = create_srcl_file(neg_df)
-            st.download_button(
-                label="⬇️ Download SRCL File",
-                data=srcl_buffer.getvalue(),
-                file_name="srcl_file.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
+        srcl_buffer = create_srcl_file(neg_df)  # only negative invoices
+
+
+  
 
 
 
