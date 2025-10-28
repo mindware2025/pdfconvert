@@ -183,26 +183,19 @@ team = st.radio("👥 Select your team:", ["Finance", "Operations", "Credit"], h
 
 def validate_customer_code(df, file_name="File"):
     """
-    Validates that Customer Code column (CustomerCode or Cust_Code) has no empty or missing values.
+    Validates that Customer Code column has no empty or missing values.
     Shows Streamlit error and stops processing if invalid.
     """
-    # Check for either column name
-    valid_columns = ["CustomerCode", "Cust_Code"]
-    column_found = None
-
-    for col in valid_columns:
-        if col in df.columns:
-            column_found = col
-            break
-
-    if not column_found:
-        st.error(f"❌ {file_name}: Missing 'Customer Code' column (expected one of {valid_columns}).")
+    if "CustomerCode" not in df.columns:
+        st.error(f"❌ {file_name}: Missing 'Customer Code' column.")
         st.stop()
 
     # Check for missing or empty values
-    if df[column_found].isna().any() or (df[column_found].astype(str).str.strip() == "").any():
-        st.error(f"❌ {file_name}: Kindly check the '{column_found}' column — it cannot be empty.")
+    if df["CustomerCode"].isna().any() or (df["CustomerCode"].astype(str).str.strip() == "").any():
+        st.error(f"❌ {file_name}: Kindly check the 'Customer Code' column — it cannot be empty.")
         st.stop()
+     
+
 
 def extractor_workflow(
     extractor_name,
@@ -586,11 +579,11 @@ elif tool == "🧾 Cloud Invoice Tool":
                         ),
 
         )
-        # --- Download SRCL File ---
-        # --- Validate before generating SRCL file ---
-        validate_customer_code(neg_df, "SRCL File")
-        srcl_buffer = create_srcl_file(neg_df)
- # only negative invoices
+        srcl_buffer = create_srcl_file(neg_df)  # only negative invoices
+
+
+  
+
 
 
         st.download_button(
@@ -598,12 +591,9 @@ elif tool == "🧾 Cloud Invoice Tool":
            data=srcl_buffer.getvalue(),
            file_name="srcl_file.xlsx",
            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-           on_click=lambda: (
-                            update_usage("Cloud Automation (SRCL)", team)
-                        ),
+         
 )
-        
-
+     
 
 
 elif tool == "📦 Barcode PDF Generator grouped":
