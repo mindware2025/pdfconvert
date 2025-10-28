@@ -154,12 +154,12 @@ def validate_customer_code(df, file_name="File"):
     Validates that Customer Code column has no empty or missing values.
     Shows Streamlit error and stops processing if invalid.
     """
-    if "Customer Code" not in df.columns:
+    if "CustomerCode" not in df.columns:
         st.error(f"❌ {file_name}: Missing 'Customer Code' column.")
         st.stop()
 
     # Check for missing or empty values
-    if df["Customer Code"].isna().any() or (df["Customer Code"].astype(str).str.strip() == "").any():
+    if df["CustomerCode"].isna().any() or (df["CustomerCode"].astype(str).str.strip() == "").any():
         st.error(f"❌ {file_name}: Kindly check the 'Customer Code' column — it cannot be empty.")
         st.stop()
 
