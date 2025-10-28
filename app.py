@@ -181,6 +181,19 @@ elif st.session_state.login_state == "fail":
     st.stop()
 team = st.radio("👥 Select your team:", ["Finance", "Operations", "Credit"], horizontal=True)
 
+def validate_customer_code(df, file_name="File"):
+    """
+    Validates that Customer Code column has no empty or missing values.
+    Shows Streamlit error and stops processing if invalid.
+    """
+    if "CustomerCode" not in df.columns:
+        st.error(f"❌ {file_name}: Missing 'Customer Code' column.")
+        st.stop()
+
+    # Check for missing or empty values
+    if df["CustomerCode"].isna().any() or (df["CustomerCode"].astype(str).str.strip() == "").any():
+        st.error(f"❌ {file_name}: Kindly check the 'Customer Code' column — it cannot be empty.")
+        st.stop()
 
 
 def extractor_workflow(
@@ -437,6 +450,9 @@ elif tool == "🧾 Cloud Invoice Tool":
         else:
             st.error("Unsupported file format. Please upload a CSV or Excel file.")
             st.stop()
+            # --- Validate Customer Code before proceeding ---
+        validate_customer_code(df, "Cloud Invoice File")
+
         # Process invoice data
         final_df = build_cloud_invoice_df(df)
         final_df = map_invoice_numbers(final_df)
@@ -563,7 +579,10 @@ elif tool == "🧾 Cloud Invoice Tool":
 
         )
         # --- Download SRCL File ---
-        srcl_buffer = create_srcl_file(neg_df)  # only negative invoices
+        # --- Validate before generating SRCL file ---
+        validate_customer_code(neg_df, "SRCL File")
+        srcl_buffer = create_srcl_file(neg_df)
+ # only negative invoices
 
 
         st.download_button(
