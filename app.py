@@ -151,17 +151,27 @@ team = st.radio("👥 Select your team:", ["Finance", "Operations", "Credit"], h
 
 def validate_customer_code(df, file_name="File"):
     """
-    Validates that Customer Code column has no empty or missing values.
+    Validates that Customer Code column (CustomerCode or Cust_Code) has no empty or missing values.
     Shows Streamlit error and stops processing if invalid.
     """
-    if "CustomerCode" not in df.columns:
-        st.error(f"❌ {file_name}: Missing 'Customer Code' column.")
+    # Check for either column name
+    valid_columns = ["CustomerCode", "Cust_Code"]
+    column_found = None
+
+    for col in valid_columns:
+        if col in df.columns:
+            column_found = col
+            break
+
+    if not column_found:
+        st.error(f"❌ {file_name}: Missing 'Customer Code' column (expected one of {valid_columns}).")
         st.stop()
 
     # Check for missing or empty values
-    if df["CustomerCode"].isna().any() or (df["CustomerCode"].astype(str).str.strip() == "").any():
-        st.error(f"❌ {file_name}: Kindly check the 'Customer Code' column — it cannot be empty.")
+    if df[column_found].isna().any() or (df[column_found].astype(str).str.strip() == "").any():
+        st.error(f"❌ {file_name}: Kindly check the '{column_found}' column — it cannot be empty.")
         st.stop()
+
 
 def extractor_workflow(
     extractor_name,
