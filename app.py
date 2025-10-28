@@ -425,7 +425,6 @@ elif tool == "🧾 Cloud Invoice Tool":
             st.stop()
         # --- Validate Customer Code before proceeding ---
         validate_customer_code(df, "Cloud Invoice File")
-   
         # Process invoice data
         final_df = build_cloud_invoice_df(df)
         final_df = map_invoice_numbers(final_df)
@@ -555,7 +554,6 @@ elif tool == "🧾 Cloud Invoice Tool":
         if neg_df.empty:
             st.warning("No negative invoices found. SRCL file will not be generated.")
         else:
-            validate_customer_code(neg_df, "SRCL File")
             srcl_buffer = create_srcl_file(neg_df)
             st.download_button(
                 label="⬇️ Download SRCL File",
