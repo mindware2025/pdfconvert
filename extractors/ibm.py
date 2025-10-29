@@ -19,20 +19,29 @@ def extract_ibm_data_from_pdf(file):
         lines.extend(text.split('\n'))
 
     extracted_data = []
+    known_part_numbers = {"D28AYLL", "E0R1HLL"}
+
     for line in lines:
         tokens = line.strip().split()
-        if len(tokens) >= 15 and tokens[0].isdigit():
+        if len(tokens) < 15:
+            continue
+
+        if tokens[1] in known_part_numbers:
             try:
                 part_number = tokens[1]
-                description = ' '.join(tokens[2:7])
-                coverage_start = tokens[7]
-                coverage_end = tokens[8]
-                quantity = int(tokens[9])
-                unit_svp = parse_number(tokens[10])
-                extended_svp = parse_number(tokens[11])
-                discount = parse_number(tokens[12])
-                bid_unit_svp = parse_number(tokens[13])
-                bid_extended_svp = parse_number(tokens[14])
+
+                # Find coverage start date (format: DD-MMM-YYYY)
+                coverage_start_idx = next(i for i, token in enumerate(tokens) if '-' in token and len(token) == 11)
+                coverage_start = tokens[coverage_start_idx]
+                coverage_end = tokens[coverage_start_idx + 1]
+
+                description = ' '.join(tokens[2:coverage_start_idx])
+                quantity = int(tokens[coverage_start_idx + 2])
+                unit_svp = parse_number(tokens[coverage_start_idx + 3])
+                extended_svp = parse_number(tokens[coverage_start_idx + 4])
+                discount = parse_number(tokens[coverage_start_idx + 5])
+                bid_unit_svp = parse_number(tokens[coverage_start_idx + 6])
+                bid_extended_svp = parse_number(tokens[coverage_start_idx + 7])
                 line_total = bid_extended_svp
 
                 extracted_data.append({
