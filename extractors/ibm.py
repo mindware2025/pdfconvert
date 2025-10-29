@@ -13,8 +13,9 @@ def extract_ibm_data_from_pdf(file):
 
     extracted_data = []
     for line in lines:
-        if any(part in line for part in ["D28AYLL", "E0R1HLL"]):
-            parts = line.split()
+        # Match lines that start with a number and a part number
+        if line.strip().startswith(("1 D28AYLL", "2 E0R1HLL", "3 E0R1HLL")):
+            parts = line.strip().split()
             try:
                 extracted_data.append({
                     "Part Number": parts[1],
@@ -22,12 +23,12 @@ def extract_ibm_data_from_pdf(file):
                     "Coverage Start": parts[6],
                     "Coverage End": parts[7],
                     "Quantity": int(parts[8]),
-                    "Unit SVP": float(parts[9].replace(',', '')),
-                    "Extended SVP": float(parts[10].replace(',', '')),
-                    "Discount %": float(parts[11].replace(',', '')),
-                    "Bid Unit SVP": float(parts[12].replace(',', '')),
-                    "Bid Extended SVP": float(parts[13].replace(',', '')),
-                    "Line Total": float(parts[13].replace(',', ''))
+                    "Unit SVP": float(parts[9].replace('.', '').replace(',', '.')),
+                    "Extended SVP": float(parts[10].replace('.', '').replace(',', '.')),
+                    "Discount %": float(parts[11].replace('.', '').replace(',', '.')),
+                    "Bid Unit SVP": float(parts[12].replace('.', '').replace(',', '.')),
+                    "Bid Extended SVP": float(parts[13].replace('.', '').replace(',', '.')),
+                    "Line Total": float(parts[13].replace('.', '').replace(',', '.'))
                 })
             except Exception:
                 continue
