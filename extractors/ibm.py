@@ -60,7 +60,6 @@ def generate_ibm_excel(df):
         workbook = writer.book
         worksheet = writer.sheets['BoQ']
 
-        # Date formatting
         date_style = NamedStyle(name="date_style", number_format='MM/DD/YYYY')
         if "date_style" not in workbook.named_styles:
             workbook.add_named_style(date_style)
@@ -71,7 +70,6 @@ def generate_ibm_excel(df):
                     for cell in row:
                         cell.style = date_style
 
-        # Currency formatting
         currency_style = NamedStyle(name="currency_style", number_format='"$"#,##0.00')
         if "currency_style" not in workbook.named_styles:
             workbook.add_named_style(currency_style)
