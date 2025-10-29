@@ -18,6 +18,7 @@ from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_mul
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
 from extractors.insurance import process_insurance_excel
 from extractors.insurance2  import process_grouped_customer_files
+from extractors.ibm import extract_ibm_data_from_pdf, generate_ibm_excel
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 load_dotenv()
@@ -260,7 +261,8 @@ elif team == "Operations":
         "-- Select a tool --",
         "💻 Dell Invoice Extractor",
         "🧾 Cloud Invoice Tool",
-        "📦 Barcode PDF Generator grouped"
+        "📦 Barcode PDF Generator grouped",
+        "IBM"
     ]
 elif team == "Credit":
     TOOL_OPTIONS = [
@@ -565,7 +567,28 @@ elif tool == "🧾 Cloud Invoice Tool":
          
 )
         
-
+elif tool == "IBM":
+    st.title("IBM Quotation PDF to Excel Converter")
+    
+    uploaded_file = st.file_uploader("Upload IBM Quotation PDF", type=["pdf"])
+    
+    if uploaded_file:
+        st.success("PDF uploaded successfully.")
+        data = extract_ibm_data_from_pdf(uploaded_file)
+    
+        if not data.empty:
+            st.subheader("Extracted BoQ Data")
+            st.dataframe(data)
+    
+            excel_file = generate_ibm_excel(data)
+            st.download_button(
+                label="Download Excel File",
+                data=excel_file.getvalue(),
+                file_name="IBM_Quotation_BoQ.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        else:
+            st.warning("No valid line items found in the PDF.")
 
 
 elif tool == "📦 Barcode PDF Generator grouped":
