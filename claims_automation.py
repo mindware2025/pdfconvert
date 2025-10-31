@@ -659,7 +659,10 @@ def build_debit_rows_from_source2(
             set_col("Acty1", acty1_value)
             
         division = division_map.get(orion_id, "").strip().upper() if division_map else ""
-        acty2_value = "OMOBIL" if division in ["POMN", "PKWT"] else "NET ETSL"
+        if main_ac_val == "54902":
+            division = division_map.get(orion_id, "").strip().upper() if division_map else ""
+            acty2_value = "OMOBIL" if division in ["POMN", "PKWT"] else "NET ETSL"
+            set_col("Acty2", acty2_value)
         set_col("Acty2", acty2_value)
 
         if default_div is not None and str(default_div).strip() != "":
