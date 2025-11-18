@@ -448,54 +448,80 @@ def build_pre_alert_rows(
             
             
             elif total_supplier_matches > 1:
-                # Case B
+                            # Case B - multiple supplier entries for same (po, supplier)
+                            # 🔍 DEBUG (Shows in Streamlit UI)
+                            st.write("---- DEBUG FOR CASE B ----")
+                            st.write("PDF Unit Price:", unit_price)
+                            st.write("PDF Qty:", qty)
             
-                # 🔍 DEBUG (Shows in Streamlit UI)
-                st.write("---- DEBUG FOR CASE B ----")
-                st.write("PDF Unit Price:", unit_price)
-                st.write("PDF Qty:", qty)
+                            for e in supplier_candidates:
+                                st.write({
+                                    "candidate_item_code": e[0],
+                                    "candidate_unit_price": e[2],
+                                    "candidate_qty": e[3],
+                                    "same_price?": (as_float(e[2]) == pdf_unit_price_val) if pdf_unit_price_val is not None else False,
+                                    "same_qty?": (as_float(e[3]) == pdf_qty_val) if pdf_qty_val is not None else False
+                                })
             
-                for e in supplier_candidates:
-                    st.write({
-                        "candidate_item_code": e[0],
-                        "candidate_unit_price": e[2],
-                        "candidate_qty": e[3],
-                        "same_price?": as_float(e[2]) == pdf_unit_price_val,
-                        "same_qty?": as_float(e[3]) == pdf_qty_val
-                    })
+                            # Matches by price+qty and by price-only
+                            price_qty_matched = [
+                                e for e in supplier_candidates
+                                if pdf_unit_price_val is not None and as_float(e[2]) == pdf_unit_price_val
+                                and pdf_qty_val is not None and as_float(e[3]) == pdf_qty_val
+                            ]
             
-                # Continue with your matching
-                price_qty_matched = [
-                    e for e in supplier_candidates
-                    if pdf_unit_price_val is not None and as_float(e[2]) == pdf_unit_price_val
-                    and pdf_qty_val is not None and as_float(e[3]) == pdf_qty_val
-                ]
-                rates_list = ", ".join([e[2] or "" for e in supplier_candidates])
-                debug_steps.append(f"Case B: Multiple supplier matches ({total_supplier_matches}). PDF unit price={unit_price}. Candidate rates=[{rates_list}]")
-                if len(price_qty_matched) == 1:
-                    e = price_qty_matched[0]
-                    out_orion_unit_price = e[2]
-                    out_orion_qty = e[3]
-                    out_orion_item_code = e[0]
-                    mapped_item_code = ""
-                    mapped_item_desc = ""
-                    status = "B_price_qty_single"
-                    highlight = "yellow"
-                    matched_by = "supplier-" + matching_mode + "+price+qty"
-                    chosen_orion_code_minimal = out_orion_item_code
-                else:
-                    status = "B_no_price_qty_match" if len(price_qty_matched) == 0 else "B_multi_price_qty_matches"
-                    highlight = "yellow"
-                    mapped_item_code = ""
-                    mapped_item_desc = ""
+                            price_matched = [
+                                e for e in supplier_candidates
+                                if pdf_unit_price_val is not None and as_float(e[2]) == pdf_unit_price_val
+                            ]
+            
+                            rates_list = ", ".join([e[2] or "" for e in supplier_candidates])
+                            debug_steps.append(f"Case B: Multiple supplier matches ({total_supplier_matches}). PDF unit price={unit_price}. Candidate rates=[{rates_list}]")
+                            debug_steps.append(f"Price-only candidates: {len(price_matched)}; Price+Qty candidates: {len(price_qty_matched)}")
+            
+                            # Prefer exact price+qty match
+                            if len(price_qty_matched) == 1:
+                                e = price_qty_matched[0]
+                                out_orion_unit_price = e[2]
+                                out_orion_qty = e[3]
+                                out_orion_item_code = e[0]
+                                mapped_item_code = ""
+                                mapped_item_desc = ""
+                                status = "B_price_qty_single"
+                                highlight = "yellow"
+                                matched_by = "supplier-" + matching_mode + "+price+qty"
+                                chosen_orion_code_minimal = out_orion_item_code
+                                debug_steps.append("Price+Qty match success: exactly 1 -> Output U/V/W; keep M/N empty")
+                            # If no unique price+qty match, but exactly one price-only match, accept that
+                            elif len(price_matched) == 1:
+                                e = price_matched[0]
+                                out_orion_unit_price = e[2]
+                                out_orion_qty = e[3]
+                                out_orion_item_code = e[0]
+                                mapped_item_code = ""
+                                mapped_item_desc = ""
+                                status = "B_price_single"
+                                highlight = "yellow"
+                                matched_by = "supplier-" + matching_mode + "+price"
+                                chosen_orion_code_minimal = out_orion_item_code
+                                debug_steps.append("Price-only match success: exactly 1 -> Output U/V/W; keep M/N empty")
+                            else:
+                                # Ambiguous or no price-based matches: keep M/N empty and highlight M/N yellow
+                                if len(price_qty_matched) == 0 and len(price_matched) == 0:
+                                    status = "B_no_price_qty_or_price_match"
+                                    debug_steps.append("No price or price+qty matches -> Highlight M/N yellow; no output in U/V/W")
+                                else:
+                                    # multiple ambiguous matches in price or price+qty
+                                    status = "B_multi_price_or_qty_matches"
+                                    debug_steps.append(f"Ambiguous matches: price-only={len(price_matched)}, price+qty={len(price_qty_matched)} -> Highlight M/N yellow; no output in U/V/W")
+            
+                                highlight = "yellow"
+                                mapped_item_code = ""
+                                mapped_item_desc = ""
                 
                 
                 
                 
-                    if len(price_matched) == 0:
-                        debug_steps.append("Price match failure: 0 matches -> Highlight M/N yellow; no output in U/V/W")
-                    else:
-                        debug_steps.append(f"Price match ambiguous: {len(price_matched)} matches -> Highlight M/N yellow; no output in U/V/W")
             else:
                 # Case C - no supplier match
                 highlight = "red"
