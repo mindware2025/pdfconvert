@@ -1,4 +1,5 @@
 import re
+from turtle import st
 from typing import List, Optional, Dict, Any, Tuple
 
 import pdfplumber
@@ -448,15 +449,27 @@ def build_pre_alert_rows(
             
             elif total_supplier_matches > 1:
                 # Case B
-                # --- Extra Debug Step ---
+            
+                # 🔍 DEBUG (Shows in Streamlit UI)
+                st.write("---- DEBUG FOR CASE B ----")
+                st.write("PDF Unit Price:", unit_price)
+                st.write("PDF Qty:", qty)
+            
                 for e in supplier_candidates:
-                    print(f"Candidate unit price={e[2]}, qty={e[3]}; PDF unit price={unit_price}, qty={qty}")
-                
+                    st.write({
+                        "candidate_item_code": e[0],
+                        "candidate_unit_price": e[2],
+                        "candidate_qty": e[3],
+                        "same_price?": as_float(e[2]) == pdf_unit_price_val,
+                        "same_qty?": as_float(e[3]) == pdf_qty_val
+                    })
+            
+                # Continue with your matching
                 price_qty_matched = [
-                     e for e in supplier_candidates
-                     if pdf_unit_price_val is not None and as_float(e[2]) == pdf_unit_price_val
-                     and pdf_qty_val is not None and as_float(e[3]) == pdf_qty_val
-               ]
+                    e for e in supplier_candidates
+                    if pdf_unit_price_val is not None and as_float(e[2]) == pdf_unit_price_val
+                    and pdf_qty_val is not None and as_float(e[3]) == pdf_qty_val
+                ]
                 rates_list = ", ".join([e[2] or "" for e in supplier_candidates])
                 debug_steps.append(f"Case B: Multiple supplier matches ({total_supplier_matches}). PDF unit price={unit_price}. Candidate rates=[{rates_list}]")
                 if len(price_qty_matched) == 1:
