@@ -444,9 +444,14 @@ def build_pre_alert_rows(
                 debug_steps.append("Case A: Single supplier match found -> Output M/N with Orion code & desc")
                 matched_by = "supplier-exact" if matching_mode == "exact" else "supplier-flex"
                 chosen_orion_code_minimal = mapped_item_code
+            
+            
             elif total_supplier_matches > 1:
                 # Case B
-               # price_matched = [e for e in supplier_candidates if pdf_unit_price_val is not None and as_float(e[2]) == pdf_unit_price_val]
+                # --- Extra Debug Step ---
+                for e in supplier_candidates:
+                    print(f"Candidate unit price={e[2]}, qty={e[3]}; PDF unit price={unit_price}, qty={qty}")
+                
                 price_qty_matched = [
                      e for e in supplier_candidates
                      if pdf_unit_price_val is not None and as_float(e[2]) == pdf_unit_price_val
