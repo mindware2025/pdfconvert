@@ -444,31 +444,44 @@ def build_pre_alert_rows(
                 matched_by = "supplier-exact" if matching_mode == "exact" else "supplier-flex"
                 chosen_orion_code_minimal = mapped_item_code
             elif total_supplier_matches > 1:
-                # Case B
-                price_matched = [e for e in supplier_candidates if pdf_unit_price_val is not None and as_float(e[2]) == pdf_unit_price_val]
-                rates_list = ", ".join([e[2] or "" for e in supplier_candidates])
-                debug_steps.append(f"Case B: Multiple supplier matches ({total_supplier_matches}). PDF unit price={unit_price}. Candidate rates=[{rates_list}]")
-                if len(price_matched) == 1:
-                    e = price_matched[0]
-                    out_orion_unit_price = e[2]
-                    out_orion_qty = e[3]
-                    out_orion_item_code = e[0]
-                    mapped_item_code = ""
-                    mapped_item_desc = ""
-                    status = "B_price_single"
+                # Case B: Multiple supplier matches, try qty first
+                pdf_qty_val = None
+                try:
+                    pdf_qty_val = float(qty.replace(",", "").strip())
+                except Exception:
+                    pass
+                
+                qty_matched = [e for e in supplier_candidates 
+                               if pdf_qty_val is not None and e[3] and float(e[3].replace(",", "").strip()) == pdf_qty_val]
+                
+                if len(qty_matched) == 1:
+                    e = qty_matched[0]
+                    mapped_item_code, mapped_item_desc, out_orion_unit_price, out_orion_qty = e
+                    status = "B_qty_single"
                     highlight = "yellow"
-                    debug_steps.append("Price match success: exactly 1 match -> Output U/V/W; keep M/N empty")
-                    matched_by = "supplier-" + matching_mode + "+price"
-                    chosen_orion_code_minimal = out_orion_item_code
+                    matched_by = "supplier-" + matching_mode + "+qty"
+                    chosen_orion_code_minimal = mapped_item_code
                 else:
-                    status = "B_no_price_match" if len(price_matched) == 0 else "B_multi_price_matches"
-                    highlight = "yellow"
-                    mapped_item_code = ""
-                    mapped_item_desc = ""
-                    if len(price_matched) == 0:
-                        debug_steps.append("Price match failure: 0 matches -> Highlight M/N yellow; no output in U/V/W")
+                    # Fallback: try unit price
+                    price_matched = [e for e in supplier_candidates 
+                                     if pdf_unit_price_val is not None and e[2] and as_float(e[2]) == pdf_unit_price_val]
+                    if len(price_matched) == 1:
+                        e = price_matched[0]
+                        out_orion_unit_price = e[2]
+                        out_orion_qty = e[3]
+                        out_orion_item_code = e[0]
+                        mapped_item_code = ""
+                        mapped_item_desc = ""
+                        status = "B_price_single"
+                        highlight = "yellow"
+                        matched_by = "supplier-" + matching_mode + "+price"
+                        chosen_orion_code_minimal = out_orion_item_code
                     else:
-                        debug_steps.append(f"Price match ambiguous: {len(price_matched)} matches -> Highlight M/N yellow; no output in U/V/W")
+                        # Ambiguous or no match
+                        status = "B_no_qty_price_match" if len(price_matched) == 0 else "B_multi_price_matches"
+                        highlight = "yellow"
+                        mapped_item_code = ""
+                        mapped_item_desc = ""
             else:
                 # Case C - no supplier match
                 highlight = "red"
