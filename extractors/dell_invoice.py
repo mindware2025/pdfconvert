@@ -442,8 +442,9 @@ def build_pre_alert_rows(
                 if exact_entries:
                     debug_steps.extend([f"  exact[{i}]={e!r}" for i, e in enumerate(exact_entries)])
 
+                # Always also gather flex entries (candidates where ksupp startswith/pdf startswith ksupp)
                 flex_entries: List[Tuple[str, str, str, str]] = []
-                if not exact_entries and supplier_index:
+                if supplier_index:
                     def po_flex_match(master_po: str, pdf_po: str) -> bool:
                         return bool(master_po) and bool(pdf_po) and (master_po.startswith(pdf_po) or pdf_po.startswith(master_po))
                     for (kpo, ksupp), entries in supplier_index.items():
@@ -453,11 +454,16 @@ def build_pre_alert_rows(
                     if flex_entries:
                         debug_steps.extend([f"  flex[{i}]={e!r}" for i, e in enumerate(flex_entries)])
 
-                supplier_candidates = exact_entries if exact_entries else flex_entries
+                # Combine exact and flex candidates (dedupe) so we don't miss close variants like 210-BDUK-LCA
+                if exact_entries:
+                    seen = set(exact_entries)
+                    supplier_candidates = list(exact_entries) + [e for e in flex_entries if e not in seen]
+                else:
+                    supplier_candidates = flex_entries
+
                 total_supplier_matches = len(supplier_candidates)
                 matching_mode = "exact" if exact_entries else ("flex" if flex_entries else "none")
                 debug_steps.append(f"Using supplier_candidates count={total_supplier_matches} mode={matching_mode}")
-
                 if total_supplier_matches == 1:
                     # Case A
                     mapped_item_code, mapped_item_desc, out_orion_unit_price, out_orion_qty = supplier_candidates[0]
