@@ -621,10 +621,11 @@ def build_pre_alert_rows(
 
             # Print debug to console (live) for immediate inspection
             try:
-                print("DEBUG build_pre_alert_rows item_index=", idx_item)
+                print(f"DEBUG-DIAG: build_pre_alert_rows item_index={idx_item}", flush=True)
                 for m in debug_steps:
-                    print("  DBG:", m)
-                print("---- end debug item ----")
+                    print("DEBUG-DIAG:", m, flush=True)
+                print("DEBUG-DIAG: ---- end debug item ----", flush=True)   
+               
             except Exception:
                 # avoid crashing on print errors
                 pass
