@@ -485,7 +485,8 @@ def build_pre_alert_rows(
                         TOL = 0.01
                         for e in supplier_candidates:
                             try:
-                                e_price = float(str(e[2]).replace(",", "").strip()) if e[2] not in (None, "") else None
+                                e_qty = float(str(e[3]).replace(",", "").strip()) if e[3] not in (None, "") else None
+                                #e_price = float(str(e[2]).replace(",", "").strip()) if e[2] not in (None, "") else None
                                 e_qty = float(str(e[3]).replace(",", "").strip()) if e[3] not in (None, "") else None
                             
                             except Exception:
