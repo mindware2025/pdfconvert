@@ -449,7 +449,9 @@ def build_pre_alert_rows(
                 rates_list = ", ".join([e[2] or "" for e in supplier_candidates])
                 debug_steps.append(f"Case B: Multiple supplier matches ({total_supplier_matches}). PDF unit price={unit_price}. Candidate rates=[{rates_list}]")
                 if len(price_matched) == 1:
-                    ksupp, out_orion_item_code, _, out_orion_unit_price, out_orion_qty = price_matched[0]
+                    mapped_item_code, mapped_item_desc, out_orion_unit_price, out_orion_qty = price_matched[0]
+                    out_orion_item_code = mapped_item_code
+                    #ksupp, out_orion_item_code, _, out_orion_unit_price, out_orion_qty = price_matched[0]
                     mapped_item_code = ""
                     mapped_item_desc = ""
                     status = "B_price_single"
@@ -483,8 +485,9 @@ def build_pre_alert_rows(
                         TOL = 0.01
                         for e in supplier_candidates:
                             try:
-                                e_price = float(str(e[3]).replace(",", "").strip()) if e[3] not in (None, "") else None
-                                e_qty = float(str(e[4]).replace(",", "").strip()) if e[4] not in (None, "") else None
+                                e_price = float(str(e[2]).replace(",", "").strip()) if e[2] not in (None, "") else None
+                                e_qty = float(str(e[3]).replace(",", "").strip()) if e[3] not in (None, "") else None
+                            
                             except Exception:
                                 e_price = None
                                 e_qty = None
@@ -494,7 +497,9 @@ def build_pre_alert_rows(
                                 break
 
                     if picked is not None:
-                        ksupp, out_orion_item_code, _, out_orion_unit_price, out_orion_qty = picked
+                        mapped_item_code, mapped_item_desc, out_orion_unit_price, out_orion_qty = picked
+                        out_orion_item_code = mapped_item_code
+                        #ksupp, out_orion_item_code, _, out_orion_unit_price, out_orion_qty = picked
                         mapped_item_code = ""
                         mapped_item_desc = ""
                         status = "B_price_qty_first"
