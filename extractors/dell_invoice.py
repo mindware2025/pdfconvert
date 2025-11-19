@@ -420,15 +420,25 @@ def build_pre_alert_rows(
 
             # Build candidate lists from supplier_index (exact or flexible)
             debug_steps: List[str] = []
-            exact_entries = (supplier_index.get(key, []) if supplier_index else [])
+
+            # Build exact_entries as list of tuples: (ksupp, orion, pi_desc, unit_rate, qty)
+            exact_entries: List[Tuple[str, str, str, str, str]] = []
+            if supplier_index:
+                for (kpo, ksupp), entries in supplier_index.items():
+                    if kpo == po_key and ksupp == item_no_norm:
+                        for e in entries:
+                            exact_entries.append((ksupp, e[0], e[1], e[2], e[3]))
             debug_steps.append(f"Step 1: Exact supplier key match (PO={po_key}, Supplier={item_no_norm}) -> {len(exact_entries)} record(s)")
-            flex_entries: List[Tuple[str, str, str, str]] = []
+
+            # If no exact entries, build flex entries but also preserve ksupp
+            flex_entries: List[Tuple[str, str, str, str, str]] = []
             if not exact_entries and supplier_index:
                 def po_flex_match(master_po: str, pdf_po: str) -> bool:
                     return bool(master_po) and bool(pdf_po) and (master_po.startswith(pdf_po) or pdf_po.startswith(master_po))
                 for (kpo, ksupp), entries in supplier_index.items():
                     if po_flex_match(kpo, po_key) and (ksupp.startswith(item_no_norm) or item_no_norm.startswith(ksupp)):
-                        flex_entries.extend(entries)
+                        for e in entries:
+                            flex_entries.append((ksupp, e[0], e[1], e[2], e[3]))
                 debug_steps.append(f"Step 2: Flexible supplier/PO match -> {len(flex_entries)} record(s)")
 
             supplier_candidates = exact_entries if exact_entries else flex_entries
@@ -436,23 +446,29 @@ def build_pre_alert_rows(
             matching_mode = "exact" if exact_entries else ("flex" if flex_entries else "none")
 
             if total_supplier_matches == 1:
-                # Case A
-                mapped_item_code, mapped_item_desc, out_orion_unit_price, out_orion_qty = supplier_candidates[0]
+                # Case A - candidate tuple: (ksupp, orion, pi_desc, unit_rate, qty)
+                ksupp, mapped_item_code, mapped_item_desc, out_orion_unit_price, out_orion_qty = supplier_candidates[0]
                 status = "A_single"
                 highlight = "none"
                 debug_steps.append("Case A: Single supplier match found -> Output M/N with Orion code & desc")
                 matched_by = "supplier-exact" if matching_mode == "exact" else "supplier-flex"
                 chosen_orion_code_minimal = mapped_item_code
             elif total_supplier_matches > 1:
-                # Case B
-                price_matched = [e for e in supplier_candidates if pdf_unit_price_val is not None and as_float(e[2]) == pdf_unit_price_val]
-                rates_list = ", ".join([e[2] or "" for e in supplier_candidates])
+                # Case B - compute price_matched using unit_rate at index 3
+                price_matched = []
+                if pdf_unit_price_val is not None:
+                    for e in supplier_candidates:
+                        try:
+                            e_price = float(str(e[3]).replace(",", "").strip()) if e[3] not in (None, "") else None
+                        except Exception:
+                            e_price = None
+                        if e_price is not None and e_price == pdf_unit_price_val:
+                            price_matched.append(e)
+                rates_list = ", ".join([str(e[3] or "") for e in supplier_candidates])
                 debug_steps.append(f"Case B: Multiple supplier matches ({total_supplier_matches}). PDF unit price={unit_price}. Candidate rates=[{rates_list}]")
+
                 if len(price_matched) == 1:
-                    e = price_matched[0]
-                    out_orion_unit_price = e[2]
-                    out_orion_qty = e[3]
-                    out_orion_item_code = e[0]
+                    ksupp, out_orion_item_code, _, out_orion_unit_price, out_orion_qty = price_matched[0]
                     mapped_item_code = ""
                     mapped_item_desc = ""
                     status = "B_price_single"
@@ -461,18 +477,42 @@ def build_pre_alert_rows(
                     matched_by = "supplier-" + matching_mode + "+price"
                     chosen_orion_code_minimal = out_orion_item_code
                 else:
-                    # Qty tie-breaker: always take the first exact qty match (deterministic)
-                    pdf_qty_val = as_float(qty)
-                    qty_exact_matches = []
-                    if pdf_qty_val is not None:
-                        qty_exact_matches = [e for e in price_matched if as_float(e[3]) is not None and as_float(e[3]) == pdf_qty_val]
+                    # deterministic: prefer first exact-qty match among price_matched candidates
+                    pdf_qty_val = None
+                    try:
+                        pdf_qty_val = float(str(qty).replace(",", "").strip())
+                    except Exception:
+                        pdf_qty_val = None
 
-                    if len(qty_exact_matches) >= 1:
-                        # deterministically pick the first exact-qty match
-                        e = qty_exact_matches[0]
-                        out_orion_unit_price = e[2]
-                        out_orion_qty = e[3]
-                        out_orion_item_code = e[0]
+                    picked = None
+                    if pdf_qty_val is not None and price_matched:
+                        for e in price_matched:
+                            try:
+                                e_qty = float(str(e[4]).replace(",", "").strip()) if e[4] not in (None, "") else None
+                            except Exception:
+                                e_qty = None
+                            if e_qty is not None and e_qty == pdf_qty_val:
+                                picked = e
+                                debug_steps.append("Picked first exact-qty among price_matched")
+                                break
+
+                    # If not found in price_matched, try first exact-qty among all supplier_candidates with tolerant price match
+                    if picked is None and pdf_qty_val is not None and supplier_candidates:
+                        TOL = 0.005  # small tolerance for price formatting/rounding differences
+                        for e in supplier_candidates:
+                            try:
+                                e_price = float(str(e[3]).replace(",", "").strip()) if e[3] not in (None, "") else None
+                                e_qty = float(str(e[4]).replace(",", "").strip()) if e[4] not in (None, "") else None
+                            except Exception:
+                                e_price = None
+                                e_qty = None
+                            if e_qty is not None and e_qty == pdf_qty_val and e_price is not None and pdf_unit_price_val is not None and abs(e_price - pdf_unit_price_val) <= TOL:
+                                picked = e
+                                debug_steps.append("Picked first exact-qty among all supplier_candidates within small price tolerance")
+                                break
+
+                    if picked is not None:
+                        ksupp, out_orion_item_code, _, out_orion_unit_price, out_orion_qty = picked
                         mapped_item_code = ""
                         mapped_item_desc = ""
                         status = "B_price_qty_first"
@@ -481,19 +521,20 @@ def build_pre_alert_rows(
                         matched_by = "supplier-" + matching_mode + "+price+qty_first"
                         chosen_orion_code_minimal = out_orion_item_code
                     else:
-                        # No exact qty matches -> attempt closest qty among price_matched (keep previous behaviour)
-                        if pdf_qty_val is not None:
+                        # fallback: unique closest qty among price_matched (existing behavior)
+                        if pdf_qty_val is not None and price_matched:
                             diffs = []
                             for e in price_matched:
-                                mqty = as_float(e[3])
+                                try:
+                                    mqty = float(str(e[4]).replace(",", "").strip()) if e[4] not in (None, "") else None
+                                except Exception:
+                                    mqty = None
                                 if mqty is not None:
                                     diffs.append((abs(mqty - pdf_qty_val), e))
                             diffs.sort(key=lambda x: x[0])
                             if len(diffs) > 0 and (len(diffs) == 1 or diffs[0][0] < diffs[1][0]):
                                 e = diffs[0][1]
-                                out_orion_unit_price = e[2]
-                                out_orion_qty = e[3]
-                                out_orion_item_code = e[0]
+                                ksupp, out_orion_item_code, _, out_orion_unit_price, out_orion_qty = e
                                 mapped_item_code = ""
                                 mapped_item_desc = ""
                                 status = "B_price_qty_closest"
@@ -512,7 +553,7 @@ def build_pre_alert_rows(
                             highlight = "yellow"
                             mapped_item_code = ""
                             mapped_item_desc = ""
-                            debug_steps.append("Price match ambiguous and pdf qty not numeric -> Highlight M/N yellow; no output in U/V/W")
+                            debug_steps.append("Price match ambiguous and pdf qty not numeric or no price_matched -> Highlight M/N yellow; no output in U/V/W")
             else:
                 # Case C - no supplier match
                 highlight = "red"
