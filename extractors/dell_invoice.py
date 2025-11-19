@@ -461,51 +461,27 @@ def build_pre_alert_rows(
                     matched_by = "supplier-" + matching_mode + "+price"
                     chosen_orion_code_minimal = out_orion_item_code
                 else:
-                    # Try qty tie-breaker when there are multiple price matches
+                    # Qty tie-breaker: always take the first exact qty match (deterministic)
                     pdf_qty_val = as_float(qty)
-                    qty_matched = []
+                    qty_exact_matches = []
                     if pdf_qty_val is not None:
-                        qty_matched = [e for e in price_matched if as_float(e[3]) is not None and as_float(e[3]) == pdf_qty_val]
+                        qty_exact_matches = [e for e in price_matched if as_float(e[3]) is not None and as_float(e[3]) == pdf_qty_val]
 
-                    if len(qty_matched) == 1:
-                        e = qty_matched[0]
+                    if len(qty_exact_matches) >= 1:
+                        # deterministically pick the first exact-qty match
+                        e = qty_exact_matches[0]
                         out_orion_unit_price = e[2]
                         out_orion_qty = e[3]
                         out_orion_item_code = e[0]
                         mapped_item_code = ""
                         mapped_item_desc = ""
-                        status = "B_price_qty_single"
+                        status = "B_price_qty_first"
                         highlight = "none"
-                        debug_steps.append("Qty tie-break success: exactly 1 qty match -> Output U/V/W; keep M/N empty")
-                        matched_by = "supplier-" + matching_mode + "+price+qty"
+                        debug_steps.append("Qty tie-break: picked first exact qty match -> Output U/V/W; keep M/N empty")
+                        matched_by = "supplier-" + matching_mode + "+price+qty_first"
                         chosen_orion_code_minimal = out_orion_item_code
-                    elif len(qty_matched) > 1:
-                        # multiple exact qty matches -> try closest (pick unique closest), else ambiguous
-                        try:
-                            diffs = [(abs(as_float(e[3]) - pdf_qty_val), e) for e in qty_matched if as_float(e[3]) is not None]
-                            diffs.sort(key=lambda x: x[0])
-                            if len(diffs) > 0 and (len(diffs) == 1 or diffs[0][0] < diffs[1][0]):
-                                e = diffs[0][1]
-                                out_orion_unit_price = e[2]
-                                out_orion_qty = e[3]
-                                out_orion_item_code = e[0]
-                                mapped_item_code = ""
-                                mapped_item_desc = ""
-                                status = "B_price_qty_closest"
-                                highlight = "yellow"
-                                debug_steps.append("Qty tie-break: picked unique closest qty -> Output U/V/W; keep M/N empty (yellow)")
-                                matched_by = "supplier-" + matching_mode + "+price+qty_closest"
-                                chosen_orion_code_minimal = out_orion_item_code
-                            else:
-                                raise Exception("ambiguous closest")
-                        except Exception:
-                            status = "B_multi_price_matches"
-                            highlight = "yellow"
-                            mapped_item_code = ""
-                            mapped_item_desc = ""
-                            debug_steps.append("Price+Qty ambiguous -> Highlight M/N yellow; no output in U/V/W")
                     else:
-                        # no exact qty match — try closest qty among all price_matched entries
+                        # No exact qty matches -> attempt closest qty among price_matched (keep previous behaviour)
                         if pdf_qty_val is not None:
                             diffs = []
                             for e in price_matched:
