@@ -5,6 +5,15 @@ import pandas as pd
 from datetime import datetime
 from dateutil import parser as _parser
 
+import logging
+
+# Configure root logger once (adjust level to DEBUG while troubleshooting)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s | %(levelname)s | %(message)s"
+)
+logger = logging.getLogger(__name__)
+
 # === Header Definition ===
 CLOUD_INVOICE_HEADER = [
     "Invoice No.", "Customer Code", "Customer Name", "Invoice Date", "Document Location",
@@ -114,51 +123,57 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         invoice_desc_clean = re.sub(r"^[#\s]+", "", invoice_desc)
         
         
+        
+        
+        # ONE decision tree: Manual first, then az-cns / msri-cns / reserved / default
+        sub_id = str(sub_id_raw).strip() if pd.notna(sub_id_raw) else ""
+        invoice_desc_clean = re.sub(r"^[#\s]+", "", invoice_desc)
         sub_id_clean = sub_id[:36] if sub_id else "Sub"
         
         item_name_raw = str(row.get("ITEMName", "")).strip()
         item_name_lower = item_name_raw.lower()
-        print("[DBG] ITEMName(raw):", item_name_raw)
-        print("[DBG] Contains 'manual'?:", ("manual" in item_name_lower))
-        print("[DBG] item_code:", item_code)
-        print("[DBG] sub_id_clean (fallback):", sub_id_clean)
+        
+        logger.debug("ITEMName(raw): %s", item_name_raw)
+        logger.debug("Contains 'manual'?: %s", "manual" in item_name_lower)
+        logger.debug("item_code: %s", item_code)
+        logger.debug("sub_id_clean (fallback): %s", sub_id_clean)
         
         # ONE decision tree: Manual first, then az-cns / msri-cns / reserved / default
         if "manual" in item_name_lower:
             m = manual_token_re.search(item_name_raw)
-            print("[DBG] Manual GUID/token match?:", bool(m), "| span:", (m.span(1) if m else None))
+            logger.debug("Manual GUID/token match?: %s | span: %s", bool(m), (m.span(1) if m else None))
             if m:
                 token = m.group(1)
                 token_norm = re.sub(r'\s*-\s*', '-', token)  # normalize whitespace around hyphens
                 out_row["Subscription Id"] = token_norm
-                print("[DBG] Subscription Id from Manual:", token_norm)
+                logger.debug("Manual -> Subscription Id: %s", token_norm)
             else:
                 m2 = re.search(r'(?i)manual\S*\s+([^\s#:\-]+)', item_name_raw, flags=re.DOTALL)
-                print("[DBG] Manual fallback match?:", bool(m2), "| group:", (m2.group(1) if m2 else None))
+                logger.debug("Manual fallback match?: %s | group: %s", bool(m2), (m2.group(1) if m2 else None))
                 if m2:
                     candidate = m2.group(1).strip().strip('#').strip(':').strip('-')
                     out_row["Subscription Id"] = candidate
-                    print("[DBG] Subscription Id from Manual fallback:", candidate)
+                    logger.debug("Manual fallback -> Subscription Id: %s", candidate)
                 else:
                     out_row["Subscription Id"] = sub_id_clean
-                    print("[DBG] Manual path failed; using sub_id_clean:", out_row["Subscription Id"])
+                    logger.debug("Manual path failed; using sub_id_clean: %s", out_row["Subscription Id"])
         
         elif item_code == "az-cns":
             digits = extract_digits(invoice_desc_clean)
             out_row["Subscription Id"] = digits[-36:] if digits else sub_id_clean
-            print("[DBG] az-cns digits:", digits, "| chosen:", out_row["Subscription Id"])
+            logger.debug("az-cns -> Subscription Id: %s", out_row["Subscription Id"])
         
         elif item_code == "msri-cns":
             out_row["Subscription Id"] = invoice_desc_clean[:36] if invoice_desc_clean else sub_id_clean
-            print("[DBG] msri-cns chosen:", out_row["Subscription Id"])
+            logger.debug("msri-cns -> Subscription Id: %s", out_row["Subscription Id"])
         
         elif "reserved vm instance" in item_desc_lower:
             out_row["Subscription Id"] = item_desc_raw[:38] if item_desc_raw else sub_id_clean
-            print("[DBG] reserved-vm chosen:", out_row["Subscription Id"])
+            logger.debug("reserved-vm -> Subscription Id: %s", out_row["Subscription Id"])
         
         else:
             out_row["Subscription Id"] = sub_id_clean
-            print("[DBG] default chosen:", out_row["Subscription Id"])
+            logger.debug("default -> Subscription Id: %s", out_row["Subscription Id"])
         out_row["Billing Cycle Start Date"] = fmt_date(row.get("BillingCycleStartDate", ""))
         out_row["Billing Cycle End Date"] = fmt_date(row.get("BillingCycleEndDate", ""))
        
