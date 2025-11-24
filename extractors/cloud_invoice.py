@@ -107,7 +107,8 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         sub_id_clean = sub_id[:36] if sub_id else "Sub"
         
         item_name_raw = str(row.get("ITEMName", "")).strip()
-        if "manual" in item_name_raw.lower():
+        item_name_lower = item_name_raw.lower()
+        if "manual" in item_name_lower.lower():
             m = re.search(
                 r'(?:[A-Za-z0-9]{1,10}-)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}',
                 item_name_raw
