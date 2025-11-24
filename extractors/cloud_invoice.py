@@ -106,7 +106,21 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         
         sub_id_clean = sub_id[:36] if sub_id else "Sub"
         
-       
+        item_name_raw = str(row.get("ITEMName", "")).strip()
+        if "manual" in item_name_raw.lower():
+            m = re.search(
+                r'(?:[A-Za-z0-9]{1,10}-)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}',
+                item_name_raw
+            )
+            if m:
+                out_row["Subscription Id"] = m.group(0)
+            else:
+                m2 = re.search(r'manual\S*\s+([^\s#:\-]+)', item_name_raw, flags=re.IGNORECASE)
+                if m2:
+                    out_row["Subscription Id"] = m2.group(1).strip().strip('-')
+                else:
+                    out_row["Subscription Id"] = sub_id_clean
+                    
         if item_code == "az-cns":
             digits = extract_digits(invoice_desc_clean)
             out_row["Subscription Id"] = digits[-36:] if digits else sub_id_clean
@@ -231,14 +245,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         out_row["ITEM Tax Value"] = tax_value
         lpo = row.get("LPONumber", "")
         out_row["LPO Number"] = "" if pd.isna(lpo) or str(lpo).strip().lower() in ["nan", "none"] else str(lpo)[:30]
-        #end_user = str(row.get("EndUser", ""))
-        #end_user_country = str(row.get("EndUserCountryCode", ""))
-        
-        #if end_user.strip().lower() in ["", "nan", "none"] or end_user_country.strip().lower() in ["", "nan", "none"]:
-       #      out_row["End User"] = ""
-        #else:
-        #     out_row["End User"] = f"{end_user} ; {end_user_country}"
-        # Normalize and clean inputs
+       
         end_user = str(row.get("EndUser", "")).strip()
         end_user_country = str(row.get("EndUserCountryCode", "")).strip()
         
