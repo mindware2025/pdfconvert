@@ -19,7 +19,17 @@ CLOUD_INVOICE_HEADER = [
     "ITEM Expense Value", "ITEM Tax Code", "ITEM Tax %", "ITEM Tax Currency", "ITEM Tax Basis", "ITEM Tax Value",
     "LPO Number", "End User", "Cost"
 ]
-
+GUID_WS = (
+    r'[0-9a-fA-F]{8}\s*-\s*'
+    r'[0-9a-fA-F]{4}\s*-\s*'
+    r'[0-9a-fA-F]{4}\s*-\s*'
+    r'[0-9a-fA-F]{4}\s*-\s*'
+    r'[0-9a-fA-F]{12}'
+)
+manual_token_re = re.compile(
+    r'(?i)manual.*?((?:[A-Za-z0-9]{1,10}\s*-\s*)?' + GUID_WS + r')',
+    flags=re.DOTALL
+)
 # === Mappings ===
 exchange_rate_map = {
     "UJ000": 1,
@@ -108,31 +118,47 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         
         item_name_raw = str(row.get("ITEMName", "")).strip()
         item_name_lower = item_name_raw.lower()
-        if "manual" in item_name_lower.lower():
-            m = re.search(
-                r'(?:[A-Za-z0-9]{1,10}-)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}',
-                item_name_raw
-            )
+        print("[DBG] ITEMName(raw):", item_name_raw)
+        print("[DBG] Contains 'manual'?:", ("manual" in item_name_lower))
+        print("[DBG] item_code:", item_code)
+        print("[DBG] sub_id_clean (fallback):", sub_id_clean)
+        
+        # ONE decision tree: Manual first, then az-cns / msri-cns / reserved / default
+        if "manual" in item_name_lower:
+            m = manual_token_re.search(item_name_raw)
+            print("[DBG] Manual GUID/token match?:", bool(m), "| span:", (m.span(1) if m else None))
             if m:
-                out_row["Subscription Id"] = m.group(0)
+                token = m.group(1)
+                token_norm = re.sub(r'\s*-\s*', '-', token)  # normalize whitespace around hyphens
+                out_row["Subscription Id"] = token_norm
+                print("[DBG] Subscription Id from Manual:", token_norm)
             else:
-                m2 = re.search(r'manual\S*\s+([^\s#:\-]+)', item_name_raw, flags=re.IGNORECASE)
+                m2 = re.search(r'(?i)manual\S*\s+([^\s#:\-]+)', item_name_raw, flags=re.DOTALL)
+                print("[DBG] Manual fallback match?:", bool(m2), "| group:", (m2.group(1) if m2 else None))
                 if m2:
-                    out_row["Subscription Id"] = m2.group(1).strip().strip('-')
+                    candidate = m2.group(1).strip().strip('#').strip(':').strip('-')
+                    out_row["Subscription Id"] = candidate
+                    print("[DBG] Subscription Id from Manual fallback:", candidate)
                 else:
                     out_row["Subscription Id"] = sub_id_clean
-                    
-        if item_code == "az-cns":
+                    print("[DBG] Manual path failed; using sub_id_clean:", out_row["Subscription Id"])
+        
+        elif item_code == "az-cns":
             digits = extract_digits(invoice_desc_clean)
             out_row["Subscription Id"] = digits[-36:] if digits else sub_id_clean
+            print("[DBG] az-cns digits:", digits, "| chosen:", out_row["Subscription Id"])
         
         elif item_code == "msri-cns":
             out_row["Subscription Id"] = invoice_desc_clean[:36] if invoice_desc_clean else sub_id_clean
+            print("[DBG] msri-cns chosen:", out_row["Subscription Id"])
+        
         elif "reserved vm instance" in item_desc_lower:
             out_row["Subscription Id"] = item_desc_raw[:38] if item_desc_raw else sub_id_clean
+            print("[DBG] reserved-vm chosen:", out_row["Subscription Id"])
         
         else:
             out_row["Subscription Id"] = sub_id_clean
+            print("[DBG] default chosen:", out_row["Subscription Id"])
         out_row["Billing Cycle Start Date"] = fmt_date(row.get("BillingCycleStartDate", ""))
         out_row["Billing Cycle End Date"] = fmt_date(row.get("BillingCycleEndDate", ""))
        
