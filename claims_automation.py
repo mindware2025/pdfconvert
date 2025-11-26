@@ -636,7 +636,7 @@ def build_debit_rows_from_source2(
         employee_name = str(src.get("Employee", "")).strip()
         orion_id = find_orion_id_for_employee(master1_map, employee_name)
         acty1_value = ""
-
+        acty2_value = ""
         
         main_ac_val = row[OUTPUT_HEADERS.index("Main A/C")]
 
@@ -663,7 +663,8 @@ def build_debit_rows_from_source2(
             division = division_map.get(orion_id, "").strip().upper() if division_map else ""
             acty2_value = "OMOBIL" if division in ["POMN", "PKWT"] else "NET ETSL"
             set_col("Acty2", acty2_value)
-        set_col("Acty2", acty2_value)
+            if 'acty2_value' in locals() and acty2_value:
+                set_col("Acty2", acty2_value)
 
         if default_div is not None and str(default_div).strip() != "":
             set_col("Div", str(default_div).strip())
