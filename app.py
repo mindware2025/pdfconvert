@@ -18,7 +18,7 @@ from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_mul
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
 from extractors.insurance import process_insurance_excel
 from extractors.insurance2  import process_grouped_customer_files
-from extractors.ibm import extract_ibm_data_from_pdf, generate_ibm_excel
+from extractors.ibm import correct_descriptions, create_styled_excel, extract_ibm_data_from_pdf, extract_last_page_text, generate_ibm_excel
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 load_dotenv()
@@ -147,7 +147,7 @@ if st.session_state.login_state == "login":
 elif st.session_state.login_state == "fail":
     show_fail()
     st.stop()
-team = st.radio("👥 Select your team:", ["Finance", "Operations", "Credit"], horizontal=True)
+team = st.radio("👥 Select your team:", ["Finance", "Operations", "Credit","Sales"], horizontal=True)
 
 
 def validate_customer_code(df, file_name="File"):
@@ -254,7 +254,8 @@ if team == "Finance":
         "🟦 Google DNTS Extractor",
         "🟩 Google Invoice Extractor",
         "📄 Claims Automation",
-        "🟨 AWS Invoice Tool"
+        "🟨 AWS Invoice Tool",
+        
     ]
 elif team == "Operations":
     TOOL_OPTIONS = [
@@ -262,12 +263,16 @@ elif team == "Operations":
         "💻 Dell Invoice Extractor",
         "🧾 Cloud Invoice Tool",
         "📦 Barcode PDF Generator grouped",
-        "IBM"
+        
     ]
 elif team == "Credit":
     TOOL_OPTIONS = [
         "AR to EDD file",
         "Coface CSV Uploader"
+    ]
+elif team == "Sales":
+    TOOL_OPTIONS = [
+        "💻 IBM Quotation",
     ]
 else:
     TOOL_OPTIONS = ["-- Select a tool --"]
@@ -310,6 +315,7 @@ elif tool == "🟩 Google Invoice Extractor":
         table_columns=GOOGLE_INVOICE_COLS,
         file_name_template="{invoice_num}-{file_date}.xlsx"
     )
+    
 elif tool == "📄 Claims Automation":
     st.title("Claims Automation")
     
@@ -567,28 +573,42 @@ elif tool == "🧾 Cloud Invoice Tool":
          
 )
         
-elif tool == "IBM":
+elif tool == "IBM Quotation":
     st.title("IBM Quotation PDF to Excel Converter")
-    
+    compliance_text = """<Paste compliance text here>"""
+    logo_path = "image.png"
     uploaded_file = st.file_uploader("Upload IBM Quotation PDF", type=["pdf"])
-    
+
     if uploaded_file:
-        st.success("PDF uploaded successfully.")
-        data = extract_ibm_data_from_pdf(uploaded_file)
+       file_bytes = uploaded_file.read()
+       file_stream = io.BytesIO(file_bytes)
+       ibm_terms_text = extract_last_page_text(io.BytesIO(file_bytes))
+       st.success("✅ PDF uploaded successfully.")
     
-        if not data.empty:
-            st.subheader("Extracted BoQ Data")
-            st.dataframe(data)
-    
-            excel_file = generate_ibm_excel(data)
-            st.download_button(
-                label="Download Excel File",
-                data=excel_file.getvalue(),
-                file_name="IBM_Quotation_BoQ.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        else:
-            st.warning("No valid line items found in the PDF.")
+       data, header_info = extract_ibm_data_from_pdf(io.BytesIO(file_bytes))
+       corrected_data = correct_descriptions(data)  # Now handled in ibm.py
+       if corrected_data and len(corrected_data) > 0:
+           st.subheader("Corrected BoQ Data")
+           df = pd.DataFrame(corrected_data, columns=[
+            "SKU", "Product Description", "Quantity", "Start Date", "End Date",
+            "Unit Price in AED", "Total Price in AED"
+            ])
+           st.dataframe(df, use_container_width=True)
+           output = io.BytesIO()
+        
+       # create_styled_excel(corrected_data, header_info, logo_path, output, compliance_text, ibm_terms_text)
+           create_styled_excel(corrected_data, header_info, logo_path, output, compliance_text, ibm_terms_text)
+           st.download_button(
+           label="📥 Download Styled Excel File",
+           data=output.getvalue(),
+           file_name="Styled_IBM_Quotation.xlsx",
+           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+           st.info("✅ Excel file includes logo, header details, styled table, summary row, terms, compliance text, and IBM Terms.")
+       else:
+             st.warning("⚠ No valid line items found in the PDF. Please check the format or try another file.")
+    else:
+         st.info("📤 Please upload a PDF file to begin.")
 
 
 elif tool == "📦 Barcode PDF Generator grouped":
