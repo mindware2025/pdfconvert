@@ -18,7 +18,7 @@ from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_mul
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
 from extractors.insurance import process_insurance_excel
 from extractors.insurance2  import process_grouped_customer_files
-from extractors.ibm import correct_descriptions, create_styled_excel, extract_ibm_data_from_pdf, extract_last_page_text, generate_ibm_excel
+from extractors.ibm import correct_descriptions, create_styled_excel, extract_ibm_data_from_pdf, extract_last_page_text
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 load_dotenv()
