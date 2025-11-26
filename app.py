@@ -573,7 +573,7 @@ elif tool == "🧾 Cloud Invoice Tool":
          
 )
         
-elif tool == "IBM Quotation":
+elif tool == "💻 IBM Quotation":
     st.title("IBM Quotation PDF to Excel Converter")
     compliance_text = """<Paste compliance text here>"""
     logo_path = "image.png"
