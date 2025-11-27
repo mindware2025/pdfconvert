@@ -236,13 +236,24 @@ if not st.session_state.show_team_selection:
         </div>
         """, unsafe_allow_html=True)
 
-        # Replace the motivational messages section with this better-designed version:
+        # Add this BEFORE the motivational messages to close any open columns:
     
-        # Elegant motivational messages in a grid layout
+        # Close any open column structures first
+        st.markdown("</div>" * 10, unsafe_allow_html=True)  # Close any open divs
+        
+        # Reset the layout with a clean container
+        st.markdown("""
+        <div style="clear: both; width: 100%; margin: 2rem 0;">
+        </div>
+        """, unsafe_allow_html=True)
+    
+        # Elegant motivational messages in a clean, centered grid layout
         st.markdown("""
         <div style="
             text-align: center;
-            margin: 2rem 0;
+            margin: 2rem auto;
+            max-width: 100%;
+            padding: 0;
         ">
             <h2 style="
                 color: #667eea;
@@ -255,12 +266,11 @@ if not st.session_state.show_team_selection:
         </div>
         """, unsafe_allow_html=True)
     
-        # Create a 2x4 grid for the messages
-        row1_col1, row1_col2 = st.columns(2)
-        row2_col1, row2_col2 = st.columns(2)
-        row3_col1, row3_col2 = st.columns(2)
-        row4_col1, row4_col2 = st.columns(2)
-    
+        # Create properly centered 2x4 grid for the messages
+        st.markdown("<div style='width: 100%; padding: 0; margin: 0;'>", unsafe_allow_html=True)
+        
+        row1_col1, row1_col2 = st.columns(2, gap="medium")
+        
         with row1_col1:
             st.markdown("""
             <div style="
@@ -275,6 +285,7 @@ if not st.session_state.show_team_selection:
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                width: 100%;
             ">
                 <div>
                     <div style="font-size: 2rem; margin-bottom: 0.5rem;">🎯</div>
@@ -299,6 +310,7 @@ if not st.session_state.show_team_selection:
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                width: 100%;
             ">
                 <div>
                     <div style="font-size: 2rem; margin-bottom: 0.5rem;">💪</div>
@@ -309,6 +321,8 @@ if not st.session_state.show_team_selection:
             </div>
             """, unsafe_allow_html=True)
     
+        row2_col1, row2_col2 = st.columns(2, gap="medium")
+        
         with row2_col1:
             st.markdown("""
             <div style="
@@ -323,6 +337,7 @@ if not st.session_state.show_team_selection:
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                width: 100%;
             ">
                 <div>
                     <div style="font-size: 2rem; margin-bottom: 0.5rem;">🧠</div>
@@ -347,6 +362,7 @@ if not st.session_state.show_team_selection:
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                width: 100%;
             ">
                 <div>
                     <div style="font-size: 2rem; margin-bottom: 0.5rem;">🌟</div>
@@ -357,6 +373,8 @@ if not st.session_state.show_team_selection:
             </div>
             """, unsafe_allow_html=True)
     
+        row3_col1, row3_col2 = st.columns(2, gap="medium")
+        
         with row3_col1:
             st.markdown("""
             <div style="
@@ -371,6 +389,7 @@ if not st.session_state.show_team_selection:
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                width: 100%;
             ">
                 <div>
                     <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔥</div>
@@ -395,6 +414,7 @@ if not st.session_state.show_team_selection:
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                width: 100%;
             ">
                 <div>
                     <div style="font-size: 2rem; margin-bottom: 0.5rem;">✨</div>
@@ -405,6 +425,8 @@ if not st.session_state.show_team_selection:
             </div>
             """, unsafe_allow_html=True)
     
+        row4_col1, row4_col2 = st.columns(2, gap="medium")
+        
         with row4_col1:
             st.markdown("""
             <div style="
@@ -419,6 +441,7 @@ if not st.session_state.show_team_selection:
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                width: 100%;
             ">
                 <div>
                     <div style="font-size: 2rem; margin-bottom: 0.5rem;">🎉</div>
@@ -443,6 +466,7 @@ if not st.session_state.show_team_selection:
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                width: 100%;
             ">
                 <div>
                     <div style="font-size: 2rem; margin-bottom: 0.5rem;">🚀</div>
@@ -452,6 +476,8 @@ if not st.session_state.show_team_selection:
                 </div>
             </div>
             """, unsafe_allow_html=True)
+        
+        st.markdown("</div>", unsafe_allow_html=True)  # Close the container
 
     # Time-based greeting
     import datetime
