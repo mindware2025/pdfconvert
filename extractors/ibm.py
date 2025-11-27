@@ -707,8 +707,9 @@ def create_styled_excel(
         cell_sl.alignment = Alignment(horizontal="center", vertical="center")
         # Data columns C..I (8 values)
         # Expected row = [SKU, Desc, Qty, Start, End, Unit AED, Total AED]
-        for j, value in enumerate(row, start=3):
-            cell = ws.cell(row=excel_row, column=j, value=value)
+        for j, value in enumerate(row):
+            excel_col = j + 3
+            cell = ws.cell(row=excel_row, column=excel_col, value=value)
             cell.font = Font(size=11, color="1F497D")
             cell.alignment = Alignment(horizontal="center", vertical="center")
         # Row fill
