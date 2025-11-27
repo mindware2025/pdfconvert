@@ -54,93 +54,57 @@ def parse_euro_number(value: str):
         return None
 
 # ----------------------------------------------------------------------
-# SKU map (for description correction)
+# Description correction
 # ----------------------------------------------------------------------
-def _load_sku_map(csv_path=None, master_data=None):
-    """
-    Load SKU map from file or master_data DataFrame.
-    Args:
-        csv_path: Path to local CSV file (optional)
-        master_data: pandas DataFrame with SKU mappings (optional)
-    """
-    sku_map = {}
-    
-    # First try to load from local file (existing logic)
-    if csv_path is None:
-        # Try multiple possible locations
-        possible_paths = [
-            "Quotation IBM PriceList csv.csv",
-            os.path.join(os.path.dirname(__file__), "Quotation IBM PriceList csv.csv"),
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), "Quotation IBM PriceList csv.csv"),
-            "/mount/src/pdfconvert/Quotation IBM PriceList csv.csv",
-            "./Quotation IBM PriceList csv.csv"
-        ]
-        
-        for path in possible_paths:
-            if os.path.exists(path):
-                csv_path = path
-                logging.info(f"[SKU MAP] Found CSV at: {path}")
-                break
-        
-        if csv_path is None:
-            logging.warning(f"[SKU MAP] CSV not found in any of these locations: {possible_paths}")
-    
-    # Load from local file if found
-    if csv_path and os.path.exists(csv_path):
-        try:
-            sku_map_df = pd.read_csv(csv_path, usecols=["SKU", "SKU DESCRIPTION"])
-            sku_map_df.dropna(subset=["SKU", "SKU DESCRIPTION"], inplace=True)
-            sku_map = dict(zip(sku_map_df["SKU"], sku_map_df["SKU DESCRIPTION"]))
-            logging.info(f"[SKU MAP] Loaded {len(sku_map)} mappings from local file")
-        except Exception as e:
-            logging.warning(f"[SKU MAP] Could not load local CSV: {e}")
-    
-    # Add/override with master_data if provided
-    if master_data is not None:
-        try:
-            master_map = dict(zip(master_data["SKU"], master_data["SKU DESCRIPTION"]))
-            sku_map.update(master_map)
-            logging.info(f"[SKU MAP] Added {len(master_map)} mappings from master data")
-        except Exception as e:
-            logging.warning(f"[SKU MAP] Could not process master data: {e}")
-    
-    return sku_map
-
-# Load initial SKU map from local file
-SKU_MAP = _load_sku_map()
-
 def correct_descriptions(extracted_data, master_data=None):
     """
     Each row: [sku, desc, qty, start_date, end_date, bid_unit_svp_aed, bid_ext_svp_aed]
-    Replace desc if SKU_MAP has a match, or use master_data if provided.
+    Description policy:
+    - If master_data uploaded: Use ONLY master CSV descriptions (blank if SKU not found)
+    - If master_data NOT uploaded: Set ALL descriptions to blank
+    - Never use PDF descriptions
     Args:
         extracted_data: List of extracted rows
         master_data: Optional pandas DataFrame with columns like ['SKU', 'SKU DESCRIPTION']
     """
     corrected = []
     
-    # Create a combined lookup - prioritize master_data if available
-    lookup_map = SKU_MAP.copy()  # Start with existing SKU_MAP
-    
     if master_data is not None:
+        # Master CSV uploaded - use ONLY master data
         try:
-            # Convert master data to dictionary, assuming columns 'SKU' and 'SKU DESCRIPTION'
             master_map = dict(zip(master_data['SKU'], master_data['SKU DESCRIPTION']))
-            lookup_map.update(master_map)  # Master data takes precedence
-            logging.info(f"[MASTER DATA] Added {len(master_map)} SKU mappings from uploaded CSV")
+            logging.info(f"[MASTER DATA] Using ONLY master CSV with {len(master_map)} SKU mappings")
+            
+            for row in extracted_data:
+                try:
+                    sku = row[0]
+                    original_desc = row[1]
+                    
+                    if sku in master_map:
+                        row[1] = master_map[sku]
+                        logging.info(f"[DESC FROM MASTER] SKU {sku}: '{original_desc}' -> '{row[1]}'")
+                    else:
+                        row[1] = ""  # Blank if SKU not found in master
+                        logging.info(f"[DESC BLANK] SKU {sku} not found in master CSV, description set to blank")
+                        
+                except Exception as e:
+                    logging.warning(f"[DESC CORRECTION ERROR] Error processing row: {e}")
+                    row[1] = ""  # Set to blank on error
+                    
+                corrected.append(row)
+                
         except Exception as e:
             logging.warning(f"[MASTER DATA ERROR] Could not process master data: {e}")
-    
-    for row in extracted_data:
-        try:
-            sku = row[0]
-            if sku in lookup_map:
-                original_desc = row[1]
-                row[1] = lookup_map[sku]
-                logging.info(f"[DESC CORRECTION] SKU {sku}: '{original_desc}' -> '{row[1]}'")
-        except Exception as e:
-            logging.warning(f"[DESC CORRECTION ERROR] Error processing row: {e}")
-        corrected.append(row)
+            # On error with master data, set all descriptions to blank
+            for row in extracted_data:
+                row[1] = ""
+            corrected = extracted_data
+    else:
+        # No master CSV uploaded - set ALL descriptions to blank
+        logging.info(f"[NO MASTER DATA] Setting all descriptions to blank")
+        for row in extracted_data:
+            row[1] = ""  # Set all descriptions to blank
+        corrected = extracted_data
     
     return corrected
 
@@ -264,12 +228,11 @@ def _extend_after_end_with_following_lines(lines, start_idx, window, max_extra_l
 # ----------------------------------------------------------------------
 # Core PDF extraction
 # ----------------------------------------------------------------------
-def extract_ibm_data_from_pdf(file_like, master_data=None) -> tuple[list, dict]:
+def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
     """
     Extracts line items and header info from an IBM Quotation PDF.
     Args:
         file_like: PDF file stream
-        master_data: Optional pandas DataFrame with master CSV data
     Returns:
       - extracted_data: list of rows
           [sku, desc, qty, start_date, end_date, bid_unit_svp_aed, bid_ext_svp_aed]
@@ -367,7 +330,7 @@ def extract_ibm_data_from_pdf(file_like, master_data=None) -> tuple[list, dict]:
                     near_money = True
             if not near_money:
                 continue
-            # Build description (text between SKU and first date)
+            # Build description (text between SKU and first date) - will be overwritten by correct_descriptions
             if desc_start_index is not None:
                 desc_parts = []
                 for ln in chunk_lines[desc_start_index:]:
@@ -436,7 +399,7 @@ def extract_ibm_data_from_pdf(file_like, master_data=None) -> tuple[list, dict]:
             # Convert to AED
             bid_unit_svp_aed = round(bid_unit_svp * USD_TO_AED, 2) if bid_unit_svp is not None else None
             bid_ext_svp_aed  = round(bid_ext_svp  * USD_TO_AED, 2) if bid_ext_svp  is not None else None
-            # Clean description
+            # Clean description (will be replaced by correct_descriptions)
             desc = re.sub(r'\s{2,}', ' ', desc).strip()
             extracted_data.append([sku, desc, qty, start_date, end_date, bid_unit_svp_aed, bid_ext_svp_aed])
             i += window
