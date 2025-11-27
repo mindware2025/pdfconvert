@@ -574,9 +574,11 @@ elif tool == "🧾 Cloud Invoice Tool":
 )
         
 elif tool == "💻 IBM Quotation":
-    st.title("IBM Quotation PDF to Excel Converter")
     compliance_text = """<Paste compliance text here>"""
     logo_path = "image.png"
+    st.title("IBM Quotation PDF to Excel Converter")
+    
+    # Add master CSV upload section
     st.subheader("📁 Upload Master Price List (Optional)")
     master_csv = st.file_uploader(
         "Upload IBM Price List CSV", 
@@ -584,16 +586,19 @@ elif tool == "💻 IBM Quotation":
         key="ibm_master_csv",
         help="Upload the master CSV file to enhance quotation processing"
     )
+    
+    # Process master CSV if uploaded
     master_data = None
     if master_csv:
         try:
             master_data = pd.read_csv(master_csv)
             st.success(f"✅ Master CSV loaded: {len(master_data)} records")
-            # Show preview of master data
             with st.expander("Preview Master Data"):
-                st.dataframe(master_data.head(), use_container_width=True)
+                st.dataframe(master_data.head(10), use_container_width=True)
         except Exception as e:
             st.error(f"Error reading master CSV: {e}")
+    
+    st.subheader("📄 Upload IBM Quotation PDF")
     uploaded_file = st.file_uploader("Upload IBM Quotation PDF", type=["pdf"])
 
     if uploaded_file:
@@ -601,21 +606,66 @@ elif tool == "💻 IBM Quotation":
        ibm_terms_text = extract_last_page_text(io.BytesIO(file_bytes))
        st.success("✅ PDF uploaded successfully.")
     
-       # Extract data (NO master_data parameter)
+       # Extract data
        data, header_info = extract_ibm_data_from_pdf(io.BytesIO(file_bytes))
+       
+       # Show extraction debug info BEFORE correction
+       with st.expander("🔍 Debug: PDF Extraction Results"):
+           st.write(f"**Total rows extracted from PDF:** {len(data)}")
+           if data:
+               st.write("**Extracted SKUs and original descriptions:**")
+               for i, row in enumerate(data):
+                   st.write(f"Row {i+1}: `{row[0]}` - {row[1][:50]}{'...' if len(row[1]) > 50 else ''}")
+           else:
+               st.error("❌ No data extracted from PDF!")
+       
+       # Show master data info
+       if master_data is not None:
+           with st.expander("🔍 Debug: Master CSV Details"):
+               st.write(f"**Total master records:** {len(master_data)}")
+               st.write("**Master CSV SKUs (first 20):**")
+               master_skus = master_data['SKU'].head(20).tolist()
+               st.write(master_skus)
+               
+               # Show matches between PDF and Master
+               pdf_skus = [row[0] for row in data]
+               matched_skus = [sku for sku in pdf_skus if sku in master_data['SKU'].values]
+               unmatched_skus = [sku for sku in pdf_skus if sku not in master_data['SKU'].values]
+               
+               st.write(f"**SKUs found in both PDF and Master:** {len(matched_skus)}")
+               if matched_skus:
+                   st.write(matched_skus)
+               
+               st.write(f"**SKUs from PDF NOT in Master:** {len(unmatched_skus)}")
+               if unmatched_skus:
+                   st.error(f"These SKUs will have blank descriptions: {unmatched_skus}")
        
        # Correct descriptions using master data
        corrected_data = correct_descriptions(data, master_data=master_data)
        
+       # Show final results
        if corrected_data and len(corrected_data) > 0:
-           st.subheader("Corrected BoQ Data")
+           st.subheader("📊 Final BoQ Data")
            df = pd.DataFrame(corrected_data, columns=[
             "SKU", "Product Description", "Quantity", "Start Date", "End Date",
             "Unit Price in AED", "Total Price in AED"
             ])
            st.dataframe(df, use_container_width=True)
+           
+           # Show description correction summary
+           with st.expander("🔍 Debug: Description Correction Summary"):
+               for i, (original_row, final_row) in enumerate(zip(data, corrected_data)):
+                   original_desc = original_row[1]
+                   final_desc = final_row[1]
+                   
+                   if final_desc and final_desc != original_desc:
+                       st.success(f"Row {i+1} - SKU `{final_row[0]}`: Description updated from master CSV")
+                   elif not final_desc:
+                       st.warning(f"Row {i+1} - SKU `{final_row[0]}`: Description set to blank")
+                   else:
+                       st.info(f"Row {i+1} - SKU `{final_row[0]}`: No change")
+           
            output = io.BytesIO()
-        
            create_styled_excel(corrected_data, header_info, logo_path, output, compliance_text, ibm_terms_text)
            st.download_button(
            label="📥 Download Styled Excel File",
@@ -623,9 +673,12 @@ elif tool == "💻 IBM Quotation":
            file_name="Styled_IBM_Quotation.xlsx",
            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-           st.info("✅ Excel file includes logo, header details, styled table, summary row, terms, compliance text, and IBM Terms.")
        else:
-             st.warning("⚠ No valid line items found in the PDF. Please check the format or try another file.")
+             st.error("⚠️ No valid line items found in the PDF.")
+             st.write("**Possible issues:**")
+             st.write("- PDF format not recognized")
+             st.write("- No valid SKUs found")
+             st.write("- No date patterns found")
     else:
          st.info("📤 Please upload a PDF file to begin.")
 
