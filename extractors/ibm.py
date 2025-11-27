@@ -1,4 +1,3 @@
-
 # ibm.py
 import os
 import re
@@ -12,6 +11,7 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.drawing.image import Image
 from openpyxl.utils import get_column_letter
 from terms_template import get_terms_section
+
 # ----------------------------------------------------------------------
 # Logging
 # ----------------------------------------------------------------------
@@ -20,10 +20,12 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
+
 # ----------------------------------------------------------------------
 # Constants
 # ----------------------------------------------------------------------
 USD_TO_AED = 3.6725
+
 # ----------------------------------------------------------------------
 # Number parsers
 # ----------------------------------------------------------------------
@@ -50,21 +52,30 @@ def parse_euro_number(value: str):
         return float(s)
     except Exception:
         return None
+
 # ----------------------------------------------------------------------
 # SKU map (for description correction)
 # ----------------------------------------------------------------------
-def _load_sku_map(csv_path=None):
+def _load_sku_map(csv_path=None, master_data=None):
+    """
+    Load SKU map from file or master_data DataFrame.
+    Args:
+        csv_path: Path to local CSV file (optional)
+        master_data: pandas DataFrame with SKU mappings (optional)
+    """
+    sku_map = {}
+    
+    # First try to load from local file (existing logic)
     if csv_path is None:
         # Try multiple possible locations
         possible_paths = [
-            "Quotation IBM PriceList csv.csv",  # Same directory as script
-            os.path.join(os.path.dirname(__file__), "Quotation IBM PriceList csv.csv"),  # extractors folder
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), "Quotation IBM PriceList csv.csv"),  # parent folder
-            "/mount/src/pdfconvert/Quotation IBM PriceList csv.csv",  # Streamlit Cloud path
-            "./Quotation IBM PriceList csv.csv"  # Current working directory
+            "Quotation IBM PriceList csv.csv",
+            os.path.join(os.path.dirname(__file__), "Quotation IBM PriceList csv.csv"),
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), "Quotation IBM PriceList csv.csv"),
+            "/mount/src/pdfconvert/Quotation IBM PriceList csv.csv",
+            "./Quotation IBM PriceList csv.csv"
         ]
         
-        csv_path = None
         for path in possible_paths:
             if os.path.exists(path):
                 csv_path = path
@@ -73,31 +84,66 @@ def _load_sku_map(csv_path=None):
         
         if csv_path is None:
             logging.warning(f"[SKU MAP] CSV not found in any of these locations: {possible_paths}")
-            return {}
-    try:
-        sku_map_df = pd.read_csv(csv_path, usecols=["SKU", "SKU DESCRIPTION"])
-        sku_map_df.dropna(subset=["SKU", "SKU DESCRIPTION"], inplace=True)
-        logging.info(f"[SKU MAP] Successfully loaded {len(sku_map_df)} SKU mappings")
-        return dict(zip(sku_map_df["SKU"], sku_map_df["SKU DESCRIPTION"]))
-    except Exception as e:
-        logging.warning(f"[SKU MAP] Could not load CSV: {e}")
-        return {}
+    
+    # Load from local file if found
+    if csv_path and os.path.exists(csv_path):
+        try:
+            sku_map_df = pd.read_csv(csv_path, usecols=["SKU", "SKU DESCRIPTION"])
+            sku_map_df.dropna(subset=["SKU", "SKU DESCRIPTION"], inplace=True)
+            sku_map = dict(zip(sku_map_df["SKU"], sku_map_df["SKU DESCRIPTION"]))
+            logging.info(f"[SKU MAP] Loaded {len(sku_map)} mappings from local file")
+        except Exception as e:
+            logging.warning(f"[SKU MAP] Could not load local CSV: {e}")
+    
+    # Add/override with master_data if provided
+    if master_data is not None:
+        try:
+            master_map = dict(zip(master_data["SKU"], master_data["SKU DESCRIPTION"]))
+            sku_map.update(master_map)
+            logging.info(f"[SKU MAP] Added {len(master_map)} mappings from master data")
+        except Exception as e:
+            logging.warning(f"[SKU MAP] Could not process master data: {e}")
+    
+    return sku_map
+
+# Load initial SKU map from local file
 SKU_MAP = _load_sku_map()
-def correct_descriptions(extracted_data):
+
+def correct_descriptions(extracted_data, master_data=None):
     """
     Each row: [sku, desc, qty, start_date, end_date, bid_unit_svp_aed, bid_ext_svp_aed]
-    Replace desc if SKU_MAP has a match.
+    Replace desc if SKU_MAP has a match, or use master_data if provided.
+    Args:
+        extracted_data: List of extracted rows
+        master_data: Optional pandas DataFrame with columns like ['SKU', 'SKU DESCRIPTION']
     """
     corrected = []
+    
+    # Create a combined lookup - prioritize master_data if available
+    lookup_map = SKU_MAP.copy()  # Start with existing SKU_MAP
+    
+    if master_data is not None:
+        try:
+            # Convert master data to dictionary, assuming columns 'SKU' and 'SKU DESCRIPTION'
+            master_map = dict(zip(master_data['SKU'], master_data['SKU DESCRIPTION']))
+            lookup_map.update(master_map)  # Master data takes precedence
+            logging.info(f"[MASTER DATA] Added {len(master_map)} SKU mappings from uploaded CSV")
+        except Exception as e:
+            logging.warning(f"[MASTER DATA ERROR] Could not process master data: {e}")
+    
     for row in extracted_data:
         try:
             sku = row[0]
-            if sku in SKU_MAP:
-                row[1] = SKU_MAP[sku]
-        except Exception:
-            pass
+            if sku in lookup_map:
+                original_desc = row[1]
+                row[1] = lookup_map[sku]
+                logging.info(f"[DESC CORRECTION] SKU {sku}: '{original_desc}' -> '{row[1]}'")
+        except Exception as e:
+            logging.warning(f"[DESC CORRECTION ERROR] Error processing row: {e}")
         corrected.append(row)
+    
     return corrected
+
 # ----------------------------------------------------------------------
 # Robust regexes
 # ----------------------------------------------------------------------
@@ -110,12 +156,14 @@ int_re = re.compile(r'\b\d+\b')
 money_with_sep_re = re.compile(r'\d[\d.,]*[.,]\d+')
 # Examples matched: 543,00 | 171.045,00 | 84,196 | 287,53 | 90.571,95
 # NOT matched: 280
+
 header_blacklist_re = re.compile(
     r'\b('
     r'Bid Number|Bid Request|Opportunity Number|Distributor|Distributor Name|Supplier|'
     r'Page \d+ of|IBM Ireland Product Distribution Limited|IBM Terms|Customer Information'
     r')\b', re.I
 )
+
 def looks_like_valid_sku(tok: str) -> bool:
     if not tok:
         return False
@@ -127,6 +175,7 @@ def looks_like_valid_sku(tok: str) -> bool:
     if not re.search(r'\d', tok):
         return False
     return True
+
 # ----------------------------------------------------------------------
 # Qty inference (ANY qty, no small-number assumptions)
 # ----------------------------------------------------------------------
@@ -150,6 +199,7 @@ def _pick_qty_from_candidates(candidates, unit, ext, abs_tol=0.02):
     if q_est > 0 and abs(ext - unit * q_est) <= abs_tol:
         return q_est
     return None
+
 def infer_qty_and_prorate(after_end: str, abs_tol=0.02):
     """
     Infer Qty using Entitled Ext ≈ Qty * Entitled Unit (to cent rounding).
@@ -192,6 +242,7 @@ def infer_qty_and_prorate(after_end: str, abs_tol=0.02):
                 prorate = n
                 break
     return qty, prorate, tokens
+
 # ----------------------------------------------------------------------
 # Helpers to handle wrapped rows (extend after_end)
 # ----------------------------------------------------------------------
@@ -209,12 +260,16 @@ def _extend_after_end_with_following_lines(lines, start_idx, window, max_extra_l
             break
         ext_parts.append(" " + ln)
     return "".join(ext_parts)
+
 # ----------------------------------------------------------------------
 # Core PDF extraction
 # ----------------------------------------------------------------------
-def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
+def extract_ibm_data_from_pdf(file_like, master_data=None) -> tuple[list, dict]:
     """
     Extracts line items and header info from an IBM Quotation PDF.
+    Args:
+        file_like: PDF file stream
+        master_data: Optional pandas DataFrame with master CSV data
     Returns:
       - extracted_data: list of rows
           [sku, desc, qty, start_date, end_date, bid_unit_svp_aed, bid_ext_svp_aed]
@@ -391,6 +446,7 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
         if not matched:
             i += 1
     return extracted_data, header_info
+
 # ----------------------------------------------------------------------
 # Extract last page text (for "IBM Terms" sheet)
 # ----------------------------------------------------------------------
@@ -491,6 +547,7 @@ def extract_last_page_text(file_like) -> str:
     logging.info("---- FILTERED IBM TERMS TEXT ----")
     logging.info(result)
     return result
+
 # ----------------------------------------------------------------------
 # Excel creation
 # ----------------------------------------------------------------------

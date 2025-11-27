@@ -577,6 +577,23 @@ elif tool == "💻 IBM Quotation":
     st.title("IBM Quotation PDF to Excel Converter")
     compliance_text = """<Paste compliance text here>"""
     logo_path = "image.png"
+    st.subheader("📁 Upload Master Price List (Optional)")
+    master_csv = st.file_uploader(
+        "Upload IBM Price List CSV", 
+        type=["csv"], 
+        key="ibm_master_csv",
+        help="Upload the master CSV file to enhance quotation processing"
+    )
+    master_data = None
+    if master_csv:
+        try:
+            master_data = pd.read_csv(master_csv)
+            st.success(f"✅ Master CSV loaded: {len(master_data)} records")
+            # Show preview of master data
+            with st.expander("Preview Master Data"):
+                st.dataframe(master_data.head(), use_container_width=True)
+        except Exception as e:
+            st.error(f"Error reading master CSV: {e}")
     uploaded_file = st.file_uploader("Upload IBM Quotation PDF", type=["pdf"])
 
     if uploaded_file:
@@ -585,8 +602,10 @@ elif tool == "💻 IBM Quotation":
        ibm_terms_text = extract_last_page_text(io.BytesIO(file_bytes))
        st.success("✅ PDF uploaded successfully.")
     
-       data, header_info = extract_ibm_data_from_pdf(io.BytesIO(file_bytes))
-       corrected_data = correct_descriptions(data)  # Now handled in ibm.py
+       # Pass master_data to your extraction function
+       data, header_info = extract_ibm_data_from_pdf(io.BytesIO(file_bytes), master_data=master_data)
+       corrected_data = correct_descriptions(data, master_data=master_data)
+       
        if corrected_data and len(corrected_data) > 0:
            st.subheader("Corrected BoQ Data")
            df = pd.DataFrame(corrected_data, columns=[
@@ -596,7 +615,6 @@ elif tool == "💻 IBM Quotation":
            st.dataframe(df, use_container_width=True)
            output = io.BytesIO()
         
-       # create_styled_excel(corrected_data, header_info, logo_path, output, compliance_text, ibm_terms_text)
            create_styled_excel(corrected_data, header_info, logo_path, output, compliance_text, ibm_terms_text)
            st.download_button(
            label="📥 Download Styled Excel File",
