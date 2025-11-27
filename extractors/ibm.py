@@ -13,13 +13,28 @@ from openpyxl.utils import get_column_letter
 from terms_template import get_terms_section
 
 # ----------------------------------------------------------------------
-# Logging
+# Debug info collector for live environment
 # ----------------------------------------------------------------------
-logging.basicConfig(
-    filename="pdf_extraction_debug.log",
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
+debug_info = []
+
+def add_debug(message):
+    """Add debug info that can be displayed in Streamlit"""
+    debug_info.append(message)
+    if len(debug_info) > 200:  # Keep only last 200 messages
+        debug_info.pop(0)
+
+def get_debug_info():
+    """Get collected debug info"""
+    return debug_info.copy()
+
+def clear_debug():
+    """Clear debug info"""
+    debug_info.clear()
+
+# ----------------------------------------------------------------------
+# Simplified logging for live environment
+# ----------------------------------------------------------------------
+logging.basicConfig(level=logging.ERROR)  # Only log errors in live
 
 # ----------------------------------------------------------------------
 # Constants
@@ -69,18 +84,18 @@ def correct_descriptions(extracted_data, master_data=None):
     """
     corrected = []
     
-    # Log initial state
-    logging.info(f"[DESC CORRECTION] Starting with {len(extracted_data)} rows")
+    add_debug(f"[DESC CORRECTION] Starting with {len(extracted_data)} rows")
     for i, row in enumerate(extracted_data):
-        logging.info(f"[INPUT ROW {i}] SKU: '{row[0]}', Original Desc: '{row[1][:50]}...'")
+        add_debug(f"[INPUT ROW {i}] SKU: '{row[0]}', Original Desc: '{row[1][:50]}...'")
     
     if master_data is not None:
         try:
             master_map = dict(zip(master_data['SKU'], master_data['SKU DESCRIPTION']))
-            logging.info(f"[MASTER DATA] Using ONLY master CSV with {len(master_map)} SKU mappings")
+            add_debug(f"[MASTER DATA] Using ONLY master CSV with {len(master_map)} SKU mappings")
             
-            # Log all master SKUs for debugging
-            logging.info(f"[MASTER SKUs] Available SKUs: {list(master_map.keys())[:10]}...")  # First 10 SKUs
+            # Log sample master SKUs for debugging
+            sample_skus = list(master_map.keys())[:10]
+            add_debug(f"[MASTER SKUs] Sample available: {sample_skus}")
             
             for i, row in enumerate(extracted_data):
                 try:
@@ -89,34 +104,29 @@ def correct_descriptions(extracted_data, master_data=None):
                     
                     if sku in master_map:
                         row[1] = master_map[sku]
-                        logging.info(f"[DESC FROM MASTER] Row {i} - SKU '{sku}': '{original_desc}' -> '{row[1]}'")
+                        add_debug(f"[DESC FROM MASTER] Row {i} - SKU '{sku}': Found in master CSV")
                     else:
                         row[1] = ""  # Blank if SKU not found in master
-                        logging.warning(f"[DESC BLANK] Row {i} - SKU '{sku}' not found in master CSV, description set to blank")
+                        add_debug(f"[DESC BLANK] Row {i} - SKU '{sku}' not found in master CSV")
                         
                 except Exception as e:
-                    logging.error(f"[DESC CORRECTION ERROR] Row {i} - Error processing: {e}")
+                    add_debug(f"[DESC ERROR] Row {i} - Error: {e}")
                     row[1] = ""
                     
                 corrected.append(row)
                 
         except Exception as e:
-            logging.error(f"[MASTER DATA ERROR] Could not process master data: {e}")
+            add_debug(f"[MASTER DATA ERROR] Could not process master data: {e}")
             for row in extracted_data:
                 row[1] = ""
             corrected = extracted_data
     else:
-        logging.info(f"[NO MASTER DATA] Setting all descriptions to blank")
+        add_debug(f"[NO MASTER DATA] Setting all descriptions to blank")
         for i, row in enumerate(extracted_data):
-            logging.info(f"[BLANK DESC] Row {i} - SKU '{row[0]}' description set to blank")
             row[1] = ""
         corrected = extracted_data
     
-    # Log final results
-    logging.info(f"[DESC CORRECTION COMPLETE] Processed {len(corrected)} rows")
-    for i, row in enumerate(corrected):
-        logging.info(f"[OUTPUT ROW {i}] SKU: '{row[0]}', Final Desc: '{row[1][:50]}...'")
-    
+    add_debug(f"[DESC CORRECTION COMPLETE] Processed {len(corrected)} rows")
     return corrected
 
 # ----------------------------------------------------------------------
@@ -126,11 +136,7 @@ date_re = re.compile(r'\b\d{2}[‐‑–-][A-Za-z]{3}[‐‑–-]\d{4}\b')  # hy
 sku_line_re = re.compile(r'^[A-Z0-9\-\._/]{5,20}$')
 token_sku_re = re.compile(r'\b[A-Z0-9\-\._/]{5,20}\b')
 int_re = re.compile(r'\b\d+\b')
-# IMPORTANT: Money tokens must contain at least one separator (comma or dot)
-# Prevents plain integers (e.g., '280') from being treated as money.
 money_with_sep_re = re.compile(r'\d[\d.,]*[.,]\d+')
-# Examples matched: 543,00 | 171.045,00 | 84,196 | 287,53 | 90.571,95
-# NOT matched: 280
 
 header_blacklist_re = re.compile(
     r'\b('
@@ -140,15 +146,31 @@ header_blacklist_re = re.compile(
 )
 
 def looks_like_valid_sku(tok: str) -> bool:
+    """Enhanced SKU validation to avoid serial numbers"""
     if not tok:
         return False
+    
+    # Skip obvious serial numbers
+    if tok.startswith('IE') and len(tok) > 8:
+        return False
+    
+    # Skip pure numbers
+    if tok.isdigit():
+        return False
+    
     if not sku_line_re.match(tok):
         return False
-    # must contain at least one letter and one digit
+    
+    # Must contain at least one letter and one digit
     if not re.search(r'[A-Z]', tok):
         return False
     if not re.search(r'\d', tok):
         return False
+    
+    # IBM SKUs are typically 7-8 characters
+    if not (5 <= len(tok) <= 10):
+        return False
+        
     return True
 
 # ----------------------------------------------------------------------
@@ -249,6 +271,8 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
           [sku, desc, qty, start_date, end_date, bid_unit_svp_aed, bid_ext_svp_aed]
       - header_info: dict of customer/bid metadata
     """
+    clear_debug()  # Clear previous debug info
+    
     # Open PDF
     doc = fitz.open(stream=file_like.read(), filetype="pdf")
     # Collect lines
@@ -258,9 +282,9 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
         for l in page_text.splitlines():
             if l and l.strip():
                 lines.append(l.rstrip())
-    logging.info("---- RAW PDF LINES (first 80) ----")
-    for idx, line in enumerate(lines[:80]):
-        logging.info(f"{idx}: {repr(line)}")
+    
+    add_debug(f"[PDF INFO] Total lines extracted: {len(lines)}")
+    
     # Header fields
     header_info = {
         "Customer Name": "",
@@ -274,6 +298,7 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
         "City": "",
         "Country": ""
     }
+    
     # Parse header info (simple look-ahead by 1 line)
     for i, line in enumerate(lines):
         if "Customer Name:" in line:
@@ -300,15 +325,12 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
     extracted_data = []
     i = 0
     max_window = 12  # Try wider chunks first to capture wrapped rows
+    processed_skus = set()  # Track processed SKUs to avoid duplicates
     
-    logging.info(f"[EXTRACTION START] Beginning extraction from {len(lines)} lines")
+    add_debug(f"[EXTRACTION START] Beginning extraction from {len(lines)} lines")
     
     while i < len(lines):
         matched = False
-        
-        # Log current position for debugging
-        if i % 50 == 0:  # Log every 50 lines to avoid spam
-            logging.info(f"[EXTRACTION PROGRESS] Processing line {i}/{len(lines)}")
         
         # Prefer larger chunks first (helps capture qty + amounts in one chunk)
         for window in range(max_window, 0, -1):
@@ -317,46 +339,61 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
             chunk_lines = lines[i:i + window]
             chunk = " | ".join(chunk_lines)
             
-            # Log chunk details for debugging
-            logging.debug(f"[CHUNK DEBUG] Lines {i}-{i+window}: {chunk[:100]}...")
-            
             # Skip header-ish chunks
             if header_blacklist_re.search(chunk):
-                logging.debug(f"[CHUNK SKIP] Header blacklist match in chunk starting at line {i}")
                 continue
+                
             # Must have at least two date tokens
             dates = date_re.findall(chunk)
             if len(dates) < 2:
-                logging.debug(f"[CHUNK SKIP] Less than 2 dates found in chunk starting at line {i}: {dates}")
                 continue
             start_date, end_date = dates[0], dates[1]
-            logging.info(f"[DATES FOUND] Lines {i}-{i+window}: start='{start_date}', end='{end_date}'")
             
-            # Identify SKU and where description starts
+            # NEW: Enhanced SKU identification
             sku = None
             desc_start_index = None
             
-            # Pattern: optional leading serial number
-            if chunk_lines[0].strip().isdigit() and len(chunk_lines) > 1 and looks_like_valid_sku(chunk_lines[1].strip()):
-                sku = chunk_lines[1].strip()
-                desc_start_index = 2
-                logging.info(f"[SKU FOUND] Pattern 1 - Serial+SKU: '{sku}' from chunk line 1 (line {i+1})")
-            elif looks_like_valid_sku(chunk_lines[0].strip()):
-                sku = chunk_lines[0].strip()
-                desc_start_index = 1
-                logging.info(f"[SKU FOUND] Pattern 2 - Direct SKU: '{sku}' from chunk line 0 (line {i})")
-            else:
-                # Try to find a token that looks like a SKU
-                t = token_sku_re.search(chunk)
-                if t and looks_like_valid_sku(t.group(0)):
-                    sku = t.group(0)
-                    logging.info(f"[SKU FOUND] Pattern 3 - Token search: '{sku}' from chunk search")
-                    
+            # Log all chunk lines for debugging
+            add_debug(f"[CHUNK ANALYSIS] Lines {i}-{i+window}: {[line.strip() for line in chunk_lines]}")
+            
+            # Look for SKU patterns in all lines
+            potential_skus = []
+            for line_idx, line in enumerate(chunk_lines):
+                line = line.strip()
+                # Skip obvious serial/row numbers
+                if line.isdigit():
+                    add_debug(f"[SKIP SERIAL] Skipping digit-only line: '{line}'")
+                    continue
+                
+                # Look for SKU patterns in the line
+                sku_candidates = token_sku_re.findall(line)
+                for candidate in sku_candidates:
+                    if looks_like_valid_sku(candidate):
+                        potential_skus.append((candidate, line_idx, line))
+                        add_debug(f"[SKU CANDIDATE] Found '{candidate}' in line {line_idx}: '{line}'")
+
+            # Pick the first valid SKU that's not a serial number or duplicate
+            for candidate_sku, line_idx, full_line in potential_skus:
+                # Skip obvious serial numbers like IE4693255O
+                if len(candidate_sku) > 10 or candidate_sku.startswith('IE'):
+                    add_debug(f"[SKU SKIP] Skipping likely serial: '{candidate_sku}'")
+                    continue
+                
+                # Create unique identifier for this SKU + date combination
+                sku_key = f"{candidate_sku}_{start_date}_{end_date}"
+                if sku_key in processed_skus:
+                    add_debug(f"[SKU DUPLICATE] Skipping duplicate: '{candidate_sku}' for dates {start_date}-{end_date}")
+                    continue
+                
+                sku = candidate_sku
+                desc_start_index = line_idx + 1
+                processed_skus.add(sku_key)
+                add_debug(f"[SKU SELECTED] Selected SKU: '{sku}' from line {line_idx}")
+                break
+
             if not sku:
-                logging.warning(f"[SKU NOT FOUND] No valid SKU in chunk lines {i}-{i+window}: {chunk[:100]}...")
+                add_debug(f"[SKU NOT FOUND] No valid SKU in chunk lines {i}-{i+window}")
                 continue
-            else:
-                logging.info(f"[SKU EXTRACTED] Final SKU: '{sku}' for processing from lines {i}-{i+window}")
             
             # Keep only chunks where a money token is "near" the start date (reduces false positives)
             pos_date = chunk.find(start_date)
@@ -365,47 +402,49 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                 window_text = chunk[max(0, pos_date - 60): pos_date + len(start_date) + 60]
                 if money_with_sep_re.search(window_text):
                     near_money = True
-                    logging.info(f"[MONEY CHECK] Found money tokens near date for SKU '{sku}'")
             if not near_money:
-                logging.debug(f"[CHUNK SKIP] No money tokens near date for SKU '{sku}'")
                 continue
             
-            # Build description (text between SKU and first date) - will be overwritten by correct_descriptions
-            if desc_start_index is not None:
+            # Enhanced description extraction with cleaning
+            if desc_start_index is not None and desc_start_index < len(chunk_lines):
                 desc_parts = []
                 for ln in chunk_lines[desc_start_index:]:
+                    # Stop at date patterns
                     if date_re.search(ln):
                         break
-                    desc_parts.append(ln)
+                    # Clean the line
+                    clean_line = ln.strip()
+                    # Remove leading/trailing pipes and extra characters
+                    clean_line = re.sub(r'^\|?\s*', '', clean_line)
+                    clean_line = re.sub(r'\s*\|?\s*$', '', clean_line)
+                    if clean_line and not clean_line.isdigit():  # Skip digit-only lines
+                        desc_parts.append(clean_line)
+                
                 desc = " ".join(desc_parts).strip()
-                logging.info(f"[DESC EXTRACTED] Pattern A - SKU '{sku}': '{desc[:50]}...'")
+                # Remove any remaining pipe characters and clean up
+                desc = re.sub(r'\s*\|\s*', ' ', desc)
+                desc = re.sub(r'\s+', ' ', desc).strip()
+                add_debug(f"[DESC CLEANED] SKU '{sku}': '{desc[:50]}...'")
             else:
+                # Fallback description extraction
                 pos_sku = chunk.find(sku)
                 pos_date0 = chunk.find(start_date)
                 desc = chunk[pos_sku + len(sku):pos_date0].strip() if pos_sku >= 0 and pos_date0 > pos_sku else ""
-                logging.info(f"[DESC EXTRACTED] Pattern B - SKU '{sku}': '{desc[:50]}...'")
+                desc = re.sub(r'\s*\|\s*', ' ', desc)
+                desc = re.sub(r'\s+', ' ', desc).strip()
+                add_debug(f"[DESC FALLBACK] SKU '{sku}': '{desc[:50]}...'")
             
             # ---- Robust Qty inference (ANY value) ----
             chunk_flat = " ".join(chunk_lines)
             all_date_matches = list(date_re.finditer(chunk_flat))
             if len(all_date_matches) < 2:
-                logging.warning(f"[QTY SKIP] Less than 2 date matches in flattened chunk for SKU '{sku}'")
                 continue
             end_date_match = all_date_matches[1]
             after_end = chunk_flat[end_date_match.end():].strip()
             
-            # Optional debug: show strict tokens
-            m_first_dbg = money_with_sep_re.search(after_end)
-            if m_first_dbg:
-                ints_zone_dbg = after_end[:m_first_dbg.start()]
-                money_zone_dbg = after_end[m_first_dbg.start():]
-                dbg_ints = [int(x) for x in int_re.findall(ints_zone_dbg)]
-                dbg_amount = money_with_sep_re.findall(money_zone_dbg)
-                logging.info(f"[TOKENS STRICT] SKU '{sku}' - INTs(pre)={dbg_ints}  MONEY(after)={dbg_amount[:6]}")
-            
             # 1) First pass qty + tokens
             qty, prorate, money_tokens = infer_qty_and_prorate(after_end, abs_tol=0.02)
-            logging.info(f"[QTY] sku={sku} start={start_date} end={end_date} -> qty={qty}, prorate={prorate}")
+            add_debug(f"[QTY] sku={sku} qty={qty}, money_tokens={len(money_tokens)}")
             
             # 2) If we didn't get all money tokens, extend with a few following lines
             if len(money_tokens) < 5:
@@ -417,10 +456,10 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                         qty, prorate = qty2, prorate2
                     if len(money_tokens2) > len(money_tokens):
                         money_tokens = money_tokens2
-                        logging.info(f"[EXTENDED] Added tokens for sku={sku}: {money_tokens[:6]}")
+                        add_debug(f"[EXTENDED] Extended tokens for sku={sku}: {len(money_tokens)} tokens")
             
             if qty is None or not (1 <= qty <= 100000):
-                logging.warning(f"[QTY ANOMALY] sku={sku} invalid qty={qty}, chunk={chunk_flat[:100]}...")
+                add_debug(f"[QTY INVALID] sku={sku} invalid qty={qty}")
                 continue
             
             # ---- Bid Unit/Ext SVP (via money token positions) ----
@@ -431,9 +470,9 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                     # tokens: [EntUnit, EntExt, Disc%, BidUnit, BidExt, ...]
                     bid_unit_svp = parse_euro_number(money_tokens[3])
                     bid_ext_svp  = parse_euro_number(money_tokens[4])
-                    logging.info(f"[SVP DIRECT] SKU '{sku}' - BidUnit={bid_unit_svp}, BidExt={bid_ext_svp}")
+                    add_debug(f"[SVP DIRECT] SKU '{sku}' - BidUnit={bid_unit_svp}, BidExt={bid_ext_svp}")
                 else:
-                    logging.warning(f"[SVP TOKENS <5] sku={sku} tokens={money_tokens}")
+                    add_debug(f"[SVP TOKENS <5] sku={sku} tokens={money_tokens}")
                     # Fallback via Entitled + Disc%
                     if len(money_tokens) >= 3:
                         ent_unit = parse_euro_number(money_tokens[0])
@@ -443,25 +482,26 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                             factor = max(0.0, 1.0 - (disc_pct / 100.0))
                             bid_unit_svp = round(ent_unit * factor, 2)
                             bid_ext_svp  = round(ent_ext  * factor, 2)
-                            logging.info(f"[SVP FALLBACK] sku={sku} ent=({ent_unit},{ent_ext}) disc={disc_pct}% -> bid=({bid_unit_svp},{bid_ext_svp})")
+                            add_debug(f"[SVP FALLBACK] sku={sku} -> bid=({bid_unit_svp},{bid_ext_svp})")
             except Exception as e:
-                logging.warning(f"[SVP PARSE ERROR] sku={sku} err={e}")
+                add_debug(f"[SVP ERROR] sku={sku} err={e}")
             
             # Convert to AED
             bid_unit_svp_aed = round(bid_unit_svp * USD_TO_AED, 2) if bid_unit_svp is not None else None
             bid_ext_svp_aed  = round(bid_ext_svp  * USD_TO_AED, 2) if bid_ext_svp  is not None else None
             
-            # Clean description (will be replaced by correct_descriptions)
+            # Final description cleanup
             desc = re.sub(r'\s{2,}', ' ', desc).strip()
+            
             extracted_data.append([sku, desc, qty, start_date, end_date, bid_unit_svp_aed, bid_ext_svp_aed])
             i += window
             matched = True
-            logging.info(f"[ROW EXTRACTED] Row {len(extracted_data)}: {extracted_data[-1]}")
+            add_debug(f"[ROW EXTRACTED] Row {len(extracted_data)}: SKU='{sku}', Qty={qty}")
             break  # break window loop
         if not matched:
             i += 1
     
-    logging.info(f"[EXTRACTION COMPLETE] Total rows extracted: {len(extracted_data)}")
+    add_debug(f"[EXTRACTION COMPLETE] Total unique rows extracted: {len(extracted_data)}")
     return extracted_data, header_info
 
 # ----------------------------------------------------------------------
@@ -471,11 +511,6 @@ def extract_last_page_text(file_like) -> str:
     doc = fitz.open(stream=file_like.read(), filetype="pdf")
     last_page = doc[-1]
     full_text = last_page.get_text("text") or last_page.get_text()
-    
-    # Log the raw text for debugging
-    logging.info("---- RAW LAST PAGE TEXT ----")
-    for idx, line in enumerate(full_text.splitlines()):
-        logging.info(f"{idx}: {repr(line)}")
     
     # Filter to extract IBM terms content
     lines = full_text.splitlines()
@@ -561,8 +596,6 @@ def extract_last_page_text(file_like) -> str:
         all_content.extend(useful_resources_section)
     
     result = "\n\n".join(all_content)  # Use double newlines for paragraph separation
-    logging.info("---- FILTERED IBM TERMS TEXT ----")
-    logging.info(result)
     return result
 
 # ----------------------------------------------------------------------
@@ -717,9 +750,6 @@ def create_styled_excel(
     table_end_row = start_row + len(data) + 4  # data rows + summary + spacing
     terms_start_row = max(29, table_end_row + 2)  # Ensure terms start after table
     
-    # Log the calculated positions for debugging
-    logging.info(f"[TERMS POSITIONING] start_row={start_row}, data_rows={len(data)}, table_end={table_end_row}, terms_start={terms_start_row}")
-    
     # Adjust terms positioning dynamically
     adjusted_terms = []
     row_offset = terms_start_row - 29  # Calculate offset from original row 29
@@ -732,13 +762,11 @@ def create_styled_excel(
                 original_row = int(cell_addr[1:])
                 new_row = original_row + row_offset
                 new_cell_addr = f"{col_letter}{new_row}"
-                logging.info(f"[TERMS ADJUST] {cell_addr} -> {new_cell_addr} (offset={row_offset})")
                 adjusted_terms.append((new_cell_addr, text, *style))
             else:
                 # Keep original if parsing fails
                 adjusted_terms.append((cell_addr, text, *style))
         except Exception as e:
-            logging.error(f"[TERMS ADJUST ERROR] Failed to adjust {cell_addr}: {e}")
             adjusted_terms.append((cell_addr, text, *style))
     # Render the terms blocks
     for cell_addr, text, *style in adjusted_terms:
@@ -748,9 +776,6 @@ def create_styled_excel(
                 col_letter = cell_addr[0]
                 merge_rows = style[0].get("merge_rows") if style else None
                 end_row = row_num + (merge_rows - 1 if merge_rows else 0)
-                
-                # Debug: Log what we're rendering
-                logging.info(f"[TERMS RENDER] {cell_addr}, rows {row_num}-{end_row}, merge_rows={merge_rows}")
                 
                 ws.merge_cells(f"{col_letter}{row_num}:H{end_row}")
                 ws[cell_addr] = text
@@ -767,7 +792,7 @@ def create_styled_excel(
                 if style and "bold" in style[0]:
                     ws[cell_addr].font = Font(**style[0])
         except Exception as e:
-            logging.error(f"[TERMS RENDER ERROR] Failed to render {cell_addr}: {e}")
+            pass
 
     # Divider line across current header row if needed - only for our table columns
     border_row = 4
@@ -786,8 +811,6 @@ def create_styled_excel(
         last_terms_row = terms_start_row + 10  # Safe fallback
         
     current_row = last_terms_row + 3
-    logging.info(f"[IBM TERMS START] Starting IBM Terms at row {current_row}")
-    
     
     # IBM Terms header - blue like in the screenshot
     ibm_header_cell = ws[f"C{current_row}"]
@@ -860,3 +883,8 @@ def create_styled_excel(
     # Set print options for better PDF output
     ws.sheet_properties.pageSetUpPr.fitToPage = False  # Use scale instead
     wb.save(output)
+
+# Function to get debug info for Streamlit display
+def get_extraction_debug():
+    """Get debug info for display in Streamlit"""
+    return get_debug_info()
