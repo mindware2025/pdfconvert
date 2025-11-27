@@ -297,7 +297,7 @@ st.snow()  # Another fun effect after the delay!
 
 # NOW the team selection starts (your existing code)
 team = st.radio("👥 Select your team:", ["Finance", "Operations", "Credit","Sales"], horizontal=True) 
-team = st.radio("👥 Select your team:", ["Finance", "Operations", "Credit","Sales"], horizontal=True)
+#team = st.radio("👥 Select your team:", ["Finance", "Operations", "Credit","Sales"], horizontal=True)
 
 
 def validate_customer_code(df, file_name="File"):
