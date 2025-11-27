@@ -236,35 +236,128 @@ if not st.session_state.show_team_selection:
         </div>
         """, unsafe_allow_html=True)
 
-    # Fun random motivational message
-    import random
-    motivational_messages = [
-        "🎯 Today's mission: Turn PDFs into Excel magic!",
-        "💪 You're about to save hours of manual work!",
-        "🧠 Smart tools for smart people like you!",
-        "🌟 Every file you process is a step towards efficiency!",
-        "🔥 Ready to automate the boring stuff?",
-        "✨ Making the impossible possible, one click at a time!",
-        "🎉 Time to show those spreadsheets who's boss!",
-        "🚀 Blast off to productivity paradise!"
-    ]
-
-    selected_message = random.choice(motivational_messages)
-
-    st.markdown(f"""
-    <div style="
-        text-align: center;
-        padding: 1.5rem;
-        background: linear-gradient(90deg, #ffecd2 0%, #fcb69f 100%);
-        border-radius: 15px;
-        margin: 1.5rem 0;
-        border-left: 5px solid #ff6b6b;
-    ">
-        <h3 style="margin: 0; color: #d63031; font-weight: bold;">
-            {selected_message}
-        </h3>
-    </div>
-    """, unsafe_allow_html=True)
+        # Replace the random motivational message section with this:
+    
+        # Show ALL motivational messages (not random)
+        st.markdown("""
+        <div style="
+            text-align: center;
+            padding: 1.5rem;
+            background: linear-gradient(90deg, #ffecd2 0%, #fcb69f 100%);
+            border-radius: 15px;
+            margin: 1.5rem 0;
+            border-left: 5px solid #ff6b6b;
+        ">
+            <h3 style="margin: 0; color: #d63031; font-weight: bold;">
+                🎯 Today's mission: Turn PDFs into Excel magic!
+            </h3>
+        </div>
+        """, unsafe_allow_html=True)
+    
+        st.markdown("""
+        <div style="
+            text-align: center;
+            padding: 1.5rem;
+            background: linear-gradient(90deg, #e3f2fd 0%, #bbdefb 100%);
+            border-radius: 15px;
+            margin: 1.5rem 0;
+            border-left: 5px solid #2196f3;
+        ">
+            <h3 style="margin: 0; color: #1565c0; font-weight: bold;">
+                💪 You're about to save hours of manual work!
+            </h3>
+        </div>
+        """, unsafe_allow_html=True)
+    
+        st.markdown("""
+        <div style="
+            text-align: center;
+            padding: 1.5rem;
+            background: linear-gradient(90deg, #f3e5f5 0%, #e1bee7 100%);
+            border-radius: 15px;
+            margin: 1.5rem 0;
+            border-left: 5px solid #9c27b0;
+        ">
+            <h3 style="margin: 0; color: #7b1fa2; font-weight: bold;">
+                🧠 Smart tools for smart people like you!
+            </h3>
+        </div>
+        """, unsafe_allow_html=True)
+    
+        st.markdown("""
+        <div style="
+            text-align: center;
+            padding: 1.5rem;
+            background: linear-gradient(90deg, #e8f5e8 0%, #c8e6c9 100%);
+            border-radius: 15px;
+            margin: 1.5rem 0;
+            border-left: 5px solid #4caf50;
+        ">
+            <h3 style="margin: 0; color: #388e3c; font-weight: bold;">
+                🌟 Every file you process is a step towards efficiency!
+            </h3>
+        </div>
+        """, unsafe_allow_html=True)
+    
+        st.markdown("""
+        <div style="
+            text-align: center;
+            padding: 1.5rem;
+            background: linear-gradient(90deg, #fff3e0 0%, #ffcc80 100%);
+            border-radius: 15px;
+            margin: 1.5rem 0;
+            border-left: 5px solid #ff9800;
+        ">
+            <h3 style="margin: 0; color: #f57c00; font-weight: bold;">
+                🔥 Ready to automate the boring stuff?
+            </h3>
+        </div>
+        """, unsafe_allow_html=True)
+    
+        st.markdown("""
+        <div style="
+            text-align: center;
+            padding: 1.5rem;
+            background: linear-gradient(90deg, #fce4ec 0%, #f8bbd9 100%);
+            border-radius: 15px;
+            margin: 1.5rem 0;
+            border-left: 5px solid #e91e63;
+        ">
+            <h3 style="margin: 0; color: #c2185b; font-weight: bold;">
+                ✨ Making the impossible possible, one click at a time!
+            </h3>
+        </div>
+        """, unsafe_allow_html=True)
+    
+        st.markdown("""
+        <div style="
+            text-align: center;
+            padding: 1.5rem;
+            background: linear-gradient(90deg, #e0f2f1 0%, #b2dfdb 100%);
+            border-radius: 15px;
+            margin: 1.5rem 0;
+            border-left: 5px solid #009688;
+        ">
+            <h3 style="margin: 0; color: #00695c; font-weight: bold;">
+                🎉 Time to show those spreadsheets who's boss!
+            </h3>
+        </div>
+        """, unsafe_allow_html=True)
+    
+        st.markdown("""
+        <div style="
+            text-align: center;
+            padding: 1.5rem;
+            background: linear-gradient(90deg, #e3f2fd 0%, #90caf9 100%);
+            border-radius: 15px;
+            margin: 1.5rem 0;
+            border-left: 5px solid #03a9f4;
+        ">
+            <h3 style="margin: 0; color: #0277bd; font-weight: bold;">
+                🚀 Blast off to productivity paradise!
+            </h3>
+        </div>
+        """, unsafe_allow_html=True)
 
     # Time-based greeting
     import datetime
