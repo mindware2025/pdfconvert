@@ -1,12 +1,13 @@
 # extractors/template_detector.py
 import fitz
-
+import re
 
 def detect_ibm_template(file_like) -> str:
     """
     Auto-detect IBM template based on structural differences
     Template 1: Parts Information with coverage dates
     Template 2: Software as a Service with subscription parts
+    Returns: 'template1' or 'template2'
     """
     try:
         doc = fitz.open(stream=file_like.read(), filetype="pdf")
@@ -69,3 +70,19 @@ def detect_ibm_template(file_like) -> str:
     except Exception as e:
         print(f"Detection error: {e}")
         return 'template1'
+
+def get_template_info(template_type: str) -> dict:
+    """Return template metadata for display"""
+    templates = {
+        'template1': {
+            'name': 'IBM Template 1 - Parts Information',
+            'description': 'Contains Parts Information table with coverage dates and entitled pricing',
+            'icon': '📦'
+        },
+        'template2': {
+            'name': 'IBM Template 2 - Software as a Service',
+            'description': 'Contains subscription-based services with commit values',
+            'icon': '☁️'
+        }
+    }
+    return templates.get(template_type, templates['template1'])
