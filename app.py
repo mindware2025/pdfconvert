@@ -576,111 +576,344 @@ elif tool == "🧾 Cloud Invoice Tool":
 elif tool == "💻 IBM Quotation":
     compliance_text = """<Paste compliance text here>"""
     logo_path = "image.png"
-    st.title("IBM Quotation PDF to Excel Converter")
+    st.title("🎯 IBM Quotation PDF to Excel Converter")
+    st.markdown("Upload your IBM quotation PDF - the system will automatically detect the template type")
     
-    # Add master CSV upload section
-    st.subheader("📁 Upload Master Price List (Optional)")
-    master_csv = st.file_uploader(
-        "Upload IBM Price List CSV", 
-        type=["csv"], 
-        key="ibm_master_csv",
-        help="Upload the master CSV file to enhance quotation processing"
-    )
+    # Sidebar info for supported templates
+    with st.sidebar:
+        st.header("📋 Supported Templates")
+        st.info("""
+        **Auto-Detection Available:**
+        
+        📦 **Template 1: Parts Information**
+        - Coverage dates
+        - Entitled/Bid pricing
+        - Parts table structure
+        
+        ☁️ **Template 2: Software as a Service**
+        - Subscription parts
+        - Service agreements
+        - Commit values
+        """)
+    
+    # Create two columns for layout
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.subheader("📁 Upload Master Price List (Optional)")
+        master_csv = st.file_uploader(
+            "Upload IBM Price List CSV", 
+            type=["csv"], 
+            key="ibm_master_csv",
+            help="Upload the master CSV file to enhance quotation processing"
+        )
+    
+    with col2:
+        # Show upload status
+        if master_csv:
+            st.success("✅ Master CSV uploaded")
+        else:
+            st.info("📄 No master CSV uploaded")
     
     # Process master CSV if uploaded
     master_data = None
     if master_csv:
         try:
             master_data = pd.read_csv(master_csv)
-            st.success(f"✅ Master CSV loaded: {len(master_data)} records")
-            with st.expander("Preview Master Data"):
+            st.success(f"✅ Master data loaded: **{len(master_data)}** SKUs")
+            with st.expander("📊 Preview Master Data"):
                 st.dataframe(master_data.head(10), use_container_width=True)
         except Exception as e:
-            st.error(f"Error reading master CSV: {e}")
+            st.error(f"❌ Error reading master CSV: {e}")
     
-    st.subheader("📄 Upload IBM Quotation PDF")
-    uploaded_file = st.file_uploader("Upload IBM Quotation PDF", type=["pdf"])
+    st.markdown("---")
+    
+    # PDF Upload Section
+    st.subheader("📤 Upload IBM Quotation PDF")
+    uploaded_file = st.file_uploader(
+        "Upload IBM Quotation PDF (Auto-detects template)", 
+        type=["pdf"],
+        help="Supports both Parts Information and Software as a Service templates"
+    )
 
     if uploaded_file:
-       file_bytes = uploaded_file.read()
-       ibm_terms_text = extract_last_page_text(io.BytesIO(file_bytes))
-       st.success("✅ PDF uploaded successfully.")
-    
-       # Extract data
-       data, header_info = extract_ibm_data_from_pdf(io.BytesIO(file_bytes))
-       
-       # Show extraction debug info BEFORE correction
-       with st.expander("🔍 Debug: PDF Extraction Results"):
-           st.write(f"**Total rows extracted from PDF:** {len(data)}")
-           if data:
-               st.write("**Extracted SKUs and original descriptions:**")
-               for i, row in enumerate(data):
-                   st.write(f"Row {i+1}: `{row[0]}` - {row[1][:50]}{'...' if len(row[1]) > 50 else ''}")
-           else:
-               st.error("❌ No data extracted from PDF!")
-       
-       # Show master data info
-       if master_data is not None:
-           with st.expander("🔍 Debug: Master CSV Details"):
-               st.write(f"**Total master records:** {len(master_data)}")
-               st.write("**Master CSV SKUs (first 20):**")
-               master_skus = master_data['SKU'].head(20).tolist()
-               st.write(master_skus)
-               
-               # Show matches between PDF and Master
-               pdf_skus = [row[0] for row in data]
-               matched_skus = [sku for sku in pdf_skus if sku in master_data['SKU'].values]
-               unmatched_skus = [sku for sku in pdf_skus if sku not in master_data['SKU'].values]
-               
-               st.write(f"**SKUs found in both PDF and Master:** {len(matched_skus)}")
-               if matched_skus:
-                   st.write(matched_skus)
-               
-               st.write(f"**SKUs from PDF NOT in Master:** {len(unmatched_skus)}")
-               if unmatched_skus:
-                   st.error(f"These SKUs will have blank descriptions: {unmatched_skus}")
-       
-       # Correct descriptions using master data
-       corrected_data = correct_descriptions(data, master_data=master_data)
-       
-       # Show final results
-       if corrected_data and len(corrected_data) > 0:
-           st.subheader("📊 Final BoQ Data")
-           df = pd.DataFrame(corrected_data, columns=[
-            "SKU", "Product Description", "Quantity", "Start Date", "End Date",
-            "Unit Price in AED", "Total Price in AED"
+        st.success("✅ PDF uploaded successfully!")
+        
+        # Create columns for template detection display
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            # Auto-detect template
+            with st.spinner("🔍 Analyzing PDF structure..."):
+                # Import the new functions
+                try:
+                    from extractors.template_detector import detect_ibm_template, get_template_info
+                    template_type = detect_ibm_template(uploaded_file)
+                    template_info = get_template_info(template_type)
+                except ImportError:
+                    st.error("❌ Template detection not available. Please create the template detector.")
+                    st.stop()
+                except Exception as e:
+                    st.error(f"❌ Error detecting template: {e}")
+                    template_type = 'template1'  # Fallback
+                    template_info = {
+                        'name': 'IBM Template 1 (Fallback)',
+                        'description': 'Using fallback extraction',
+                        'icon': '📦'
+                    }
+            
+            # Show detected template with nice styling
+            st.markdown(f"""
+            <div style="
+                padding: 1rem; 
+                border-radius: 0.5rem; 
+                background: linear-gradient(90deg, #e8f4fd, #f0f9ff);
+                border-left: 4px solid #1f77b4;
+                margin: 1rem 0;
+            ">
+                <h3 style="margin: 0; color: #1f77b4;">
+                    {template_info['icon']} {template_info['name']}
+                </h3>
+                <p style="margin: 0.5rem 0 0 0; color: #666;">
+                    📋 {template_info['description']}
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            st.metric("Detected Template", template_type.upper())
+        
+        st.markdown("---")
+        
+        # Extract data based on detected template
+        with st.spinner("📄 Extracting data from PDF..."):
+            try:
+                file_bytes = uploaded_file.read()
+                
+                # Route to appropriate extractor based on template
+                if template_type == 'template1':
+                    # Use existing Template 1 extractor
+                    data, header_info = extract_ibm_data_from_pdf(io.BytesIO(file_bytes))
+                    from extractors.ibm import get_extraction_debug
+                    debug_messages = get_extraction_debug()
+                else:  # template2
+                    # Use new Template 2 extractor
+                    try:
+                        from extractors.ibm_template2 import extract_ibm_template2_from_pdf, get_extraction_debug as get_template2_debug
+                        uploaded_file.seek(0)  # Reset file pointer
+                        data, header_info = extract_ibm_template2_from_pdf(uploaded_file)
+                        debug_messages = get_template2_debug()
+                    except ImportError:
+                        st.error("❌ Template 2 extractor not available. Please create ibm_template2.py")
+                        st.stop()
+                
+                # Extract IBM terms from last page
+                ibm_terms_text = extract_last_page_text(io.BytesIO(file_bytes))
+                
+            except Exception as e:
+                st.error(f"❌ Error extracting data: {str(e)}")
+                data = []
+                header_info = {}
+                debug_messages = [f"Error: {str(e)}"]
+        
+        if data and len(data) > 0:
+            # Success metrics
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("📄 Template", template_type.title())
+            with col2:
+                st.metric("📦 Line Items", len(data))
+            with col3:
+                total_value = sum([row[6] for row in data if len(row) > 6 and row[6]])
+                st.metric("💰 Total Value", f"AED {total_value:,.2f}")
+            
+            st.success(f"✅ Successfully extracted **{len(data)}** line items from {template_info['name']}")
+            
+            # Show header information
+            with st.expander("📋 Quotation Information", expanded=True):
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.markdown("**Customer Details:**")
+                    st.text(f"Name: {header_info.get('Customer Name', 'N/A')}")
+                    st.text(f"City: {header_info.get('City', 'N/A')}")
+                    st.text(f"Country: {header_info.get('Country', 'N/A')}")
+                
+                with col2:
+                    st.markdown("**Bid Information:**")
+                    st.text(f"Bid Number: {header_info.get('Bid Number', 'N/A')}")
+                    st.text(f"PA Agreement: {header_info.get('PA Agreement Number', 'N/A')}")
+                    st.text(f"PA Site: {header_info.get('PA Site Number', 'N/A')}")
+                
+                with col3:
+                    st.markdown("**Other Details:**")
+                    st.text(f"Reseller: {header_info.get('Reseller Name', 'N/A')}")
+                    st.text(f"Territory: {header_info.get('Select Territory', 'N/A')}")
+                    st.text(f"GOE: {header_info.get('Government Entity (GOE)', 'N/A')}")
+            
+            # Show extraction debug info
+            with st.expander("🔍 Debug: PDF Extraction Results"):
+                st.write(f"**Template detected:** {template_info['name']}")
+                st.write(f"**Total rows extracted from PDF:** {len(data)}")
+                if data:
+                    st.write("**Extracted SKUs and descriptions:**")
+                    for i, row in enumerate(data):
+                        desc_preview = row[1][:50] + '...' if len(row[1]) > 50 else row[1]
+                        st.write(f"Row {i+1}: `{row[0]}` - {desc_preview}")
+                else:
+                    st.error("❌ No data extracted from PDF!")
+            
+            # Show extracted data preview
+            with st.expander("📊 Preview Extracted Line Items"):
+                preview_df = pd.DataFrame(data, columns=[
+                    "SKU", "Description", "Qty", "Start Date", "End Date", "Unit Price AED", "Total Price AED"
+                ])
+                st.dataframe(preview_df, use_container_width=True)
+            
+            # Master CSV analysis
+            if master_data is not None:
+                with st.expander("🔍 Debug: Master CSV Analysis"):
+                    st.write(f"**Total master records:** {len(master_data)}")
+                    
+                    # Show matches between PDF and Master
+                    pdf_skus = [row[0] for row in data]
+                    matched_skus = [sku for sku in pdf_skus if sku in master_data['SKU'].values]
+                    unmatched_skus = [sku for sku in pdf_skus if sku not in master_data['SKU'].values]
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("✅ Matched SKUs", len(matched_skus))
+                        if matched_skus:
+                            st.write("**Found in master:**")
+                            for sku in matched_skus[:10]:  # Show first 10
+                                st.write(f"• {sku}")
+                            if len(matched_skus) > 10:
+                                st.write(f"... and {len(matched_skus) - 10} more")
+                    
+                    with col2:
+                        st.metric("❌ Unmatched SKUs", len(unmatched_skus))
+                        if unmatched_skus:
+                            st.warning("**These SKUs will have blank descriptions:**")
+                            for sku in unmatched_skus[:10]:  # Show first 10
+                                st.write(f"• {sku}")
+                            if len(unmatched_skus) > 10:
+                                st.write(f"... and {len(unmatched_skus) - 10} more")
+            
+            st.markdown("---")
+            
+            # Apply description corrections
+            with st.spinner("🔄 Applying description corrections..."):
+                corrected_data = correct_descriptions(data, master_data=master_data)
+            
+            # Show corrected data
+            st.subheader("📊 Final BoQ Data")
+            final_df = pd.DataFrame(corrected_data, columns=[
+                "SKU", "Product Description", "Quantity", "Start Date", "End Date",
+                "Unit Price in AED", "Total Price in AED"
             ])
-           st.dataframe(df, use_container_width=True)
-           
-           # Show description correction summary
-           with st.expander("🔍 Debug: Description Correction Summary"):
-               for i, (original_row, final_row) in enumerate(zip(data, corrected_data)):
-                   original_desc = original_row[1]
-                   final_desc = final_row[1]
-                   
-                   if final_desc and final_desc != original_desc:
-                       st.success(f"Row {i+1} - SKU `{final_row[0]}`: Description updated from master CSV")
-                   elif not final_desc:
-                       st.warning(f"Row {i+1} - SKU `{final_row[0]}`: Description set to blank")
-                   else:
-                       st.info(f"Row {i+1} - SKU `{final_row[0]}`: No change")
-           
-           output = io.BytesIO()
-           create_styled_excel(corrected_data, header_info, logo_path, output, compliance_text, ibm_terms_text)
-           st.download_button(
-           label="📥 Download Styled Excel File",
-           data=output.getvalue(),
-           file_name="Styled_IBM_Quotation.xlsx",
-           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-       else:
-             st.error("⚠️ No valid line items found in the PDF.")
-             st.write("**Possible issues:**")
-             st.write("- PDF format not recognized")
-             st.write("- No valid SKUs found")
-             st.write("- No date patterns found")
+            st.dataframe(final_df, use_container_width=True)
+            
+            # Show description correction summary
+            if master_data is not None:
+                with st.expander("🔍 Debug: Description Correction Summary"):
+                    for i, (original_row, final_row) in enumerate(zip(data, corrected_data)):
+                        original_desc = original_row[1]
+                        final_desc = final_row[1]
+                        
+                        if final_desc and final_desc != original_desc:
+                            st.success(f"Row {i+1} - SKU `{final_row[0]}`: ✅ Updated from master CSV")
+                        elif not final_desc:
+                            st.warning(f"Row {i+1} - SKU `{final_row[0]}`: ⚠️ Set to blank")
+                        else:
+                            st.info(f"Row {i+1} - SKU `{final_row[0]}`: 📄 No change")
+            
+            st.markdown("---")
+            
+            # Generate Excel Section
+            st.subheader("📥 Generate Excel Quotation")
+            
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                if st.button("🎯 Generate Excel File", type="primary", use_container_width=True):
+                    with st.spinner("📊 Creating styled Excel quotation..."):
+                        try:
+                            output = io.BytesIO()
+                            
+                            # Create Excel using the same function for both templates
+                            create_styled_excel(
+                                corrected_data, 
+                                header_info, 
+                                logo_path, 
+                                output, 
+                                compliance_text, 
+                                ibm_terms_text
+                            )
+                            
+                            # Download button
+                            bid_number = header_info.get('Bid Number', 'output')
+                            filename = f"IBM_Quotation_{bid_number}.xlsx"
+                            
+                            st.download_button(
+                                label="📥 Download Excel Quotation",
+                                data=output.getvalue(),
+                                file_name=filename,
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True
+                            )
+                            
+                            st.success("✅ Excel file generated successfully!")
+                            st.balloons()
+                            
+                        except Exception as e:
+                            st.error(f"❌ Error generating Excel: {str(e)}")
+                            st.exception(e)
+            
+            with col2:
+                st.metric("📄 Items to Export", len(corrected_data))
+            
+            # Debug information (optional)
+            with st.expander("🔍 Advanced Debug Information", expanded=False):
+                st.markdown("**Template Detection Log:**")
+                st.write(f"Detected: {template_type} - {template_info['name']}")
+                
+                st.markdown("**Extraction Log:**")
+                for msg in debug_messages[-20:]:  # Show last 20 debug messages
+                    st.text(msg)
+                
+                st.markdown("**Header Info:**")
+                st.json(header_info)
+        
+        else:
+            # Error handling
+            st.error("❌ No data could be extracted from the PDF")
+            
+            st.markdown("### 🔧 Troubleshooting")
+            st.warning("**Please check if:**")
+            st.write("• PDF format matches supported templates")
+            st.write("• PDF contains recognizable SKUs and line items")
+            st.write("• PDF is not corrupted or password-protected")
+            
+            if template_type == 'template2':
+                st.write("• PDF contains 'Software as a Service' sections")
+                st.write("• Subscription parts are clearly defined")
+            else:
+                st.write("• PDF contains 'Parts Information' table")
+                st.write("• Coverage dates are present")
+            
+            with st.expander("🔍 Debug Information", expanded=True):
+                st.markdown("**Template Detection:**")
+                st.write(f"Detected: {template_type} - {template_info['name']}")
+                
+                st.markdown("**Extraction Log:**")
+                for msg in debug_messages:
+                    st.text(msg)
+    
     else:
-         st.info("📤 Please upload a PDF file to begin.")
+        # No file uploaded
+        st.info("📤 Please upload a PDF file to begin.")
+        
+        
 
 
 elif tool == "📦 Barcode PDF Generator grouped":
