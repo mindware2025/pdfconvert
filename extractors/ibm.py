@@ -20,7 +20,7 @@ debug_info = []
 def add_debug(message):
     """Add debug info that can be displayed in Streamlit"""
     debug_info.append(message)
-    if len(debug_info) > 200:  # Keep only last 200 messages
+    if len(debug_info) > 300:  # Keep more debug messages
         debug_info.pop(0)
 
 def get_debug_info():
@@ -69,6 +69,22 @@ def parse_euro_number(value: str):
         return None
 
 # ----------------------------------------------------------------------
+# Debug function for data integrity
+# ----------------------------------------------------------------------
+def debug_extracted_data(extracted_data):
+    """Debug function to check data integrity"""
+    add_debug(f"[DATA DEBUG] Total extracted rows: {len(extracted_data)}")
+    for i, row in enumerate(extracted_data):
+        add_debug(f"[DATA ROW {i+1}] Length: {len(row)}, SKU: '{row[0]}', Desc: '{row[1][:30]}...'")
+        if len(row) != 7:
+            add_debug(f"[DATA ERROR] Row {i+1} has {len(row)} columns instead of 7!")
+        if not row[0]:  # Check if SKU is empty
+            add_debug(f"[DATA ERROR] Row {i+1} has empty SKU!")
+        if i == 10:  # Row 11 specifically
+            add_debug(f"[ROW 11 SPECIFIC] Full content: {row}")
+    return extracted_data
+
+# ----------------------------------------------------------------------
 # Description correction
 # ----------------------------------------------------------------------
 def correct_descriptions(extracted_data, master_data=None):
@@ -78,13 +94,13 @@ def correct_descriptions(extracted_data, master_data=None):
     - If master_data uploaded: Use ONLY master CSV descriptions (blank if SKU not found)
     - If master_data NOT uploaded: Set ALL descriptions to blank
     - Never use PDF descriptions
-    Args:
-        extracted_data: List of extracted rows
-        master_data: Optional pandas DataFrame with columns like ['SKU', 'SKU DESCRIPTION']
     """
     corrected = []
     
     add_debug(f"[DESC CORRECTION] Starting with {len(extracted_data)} rows")
+    
+    # First debug the data before correction
+    debug_extracted_data(extracted_data)
     
     if master_data is not None:
         try:
@@ -119,6 +135,10 @@ def correct_descriptions(extracted_data, master_data=None):
         corrected = extracted_data
     
     add_debug(f"[DESC CORRECTION COMPLETE] Processed {len(corrected)} rows")
+    
+    # Debug after correction
+    add_debug(f"[AFTER CORRECTION] Row 11: {corrected[10] if len(corrected) > 10 else 'N/A'}")
+    
     return corrected
 
 # ----------------------------------------------------------------------
@@ -600,7 +620,7 @@ def extract_last_page_text(file_like) -> str:
     return result
 
 # ----------------------------------------------------------------------
-# Excel creation (keeping original as it's working)
+# Excel creation with enhanced debugging
 # ----------------------------------------------------------------------
 def create_styled_excel(
     data: list,
@@ -613,10 +633,13 @@ def create_styled_excel(
     """
     data rows: [SKU, Product Description, Quantity, Start Date, End Date, Unit Price AED, Total Price AED]
     """
+    add_debug(f"[EXCEL START] Creating Excel with {len(data)} rows")
+    
     wb = Workbook()
     ws = wb.active
     ws.title = "Quotation"
     ws.sheet_view.showGridLines = False
+    
     # --- Header / Branding ---
     ws.merge_cells("B2:C3")
     if logo_path and os.path.exists(logo_path):
@@ -628,6 +651,7 @@ def create_styled_excel(
     ws["D4"] = "Quotation"
     ws["D4"].font = Font(size=20, color="1F497D")
     ws["D4"].alignment = Alignment(horizontal="center", vertical="center")
+    
     # Balanced column widths - show full content but PDF-friendly
     ws.column_dimensions[get_column_letter(2)].width  = 8   # B (Sl) 
     ws.column_dimensions[get_column_letter(3)].width  = 15  # C (SKU)
@@ -637,6 +661,7 @@ def create_styled_excel(
     ws.column_dimensions[get_column_letter(7)].width  = 14  # G (End Date) 
     ws.column_dimensions[get_column_letter(8)].width  = 16  # H (Unit Price AED)
     ws.column_dimensions[get_column_letter(9)].width  = 16  # I (Total Price AED)
+    
     # Left block
     left_labels = ["Date:", "From:", "Email:", "Contact:", "", "Company:", "Attn:", "Email:"]
     left_values = [
@@ -657,11 +682,13 @@ def create_styled_excel(
         if value:
             ws[f"D{row}"] = value
             ws[f"D{row}"].font = Font(color="1F497D")
+    
     # IBM Opp no.
     ws["C15"] = "IBM Opportunity Number: "
     ws["C15"].font = Font(bold=True, underline="single", color="000000")
     ws["D15"] = header_info.get('IBM Opportunity Number', '')
     ws["D15"].font = Font(bold=True, italic=True, underline="single", color="000000")
+    
     # Right block
     right_labels = [
         "End User:", "Bid Number:", "Agreement Number:", "PA Site Number:", "",
@@ -682,6 +709,7 @@ def create_styled_excel(
         ws[f"H{row}"] = f"{label} {value}"
         ws[f"H{row}"].font = Font(bold=True, color="1F497D")
         ws[f"H{row}"].alignment = Alignment(horizontal="left", vertical="center")
+    
     # --- Table header (8 columns + serial) ---
     headers = ["Sl", "SKU", "Product Description", "Quantity", "Start Date", "End Date",
                "Unit Price in AED", "Total Price in AED"]
@@ -692,53 +720,70 @@ def create_styled_excel(
         cell.font = Font(bold=True, size=13, color="1F497D")
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         cell.fill = header_fill
-    # --- Data rows ---
+    
+    # --- Data rows with enhanced debugging ---
     row_fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
     start_row = 19
+    
     # Build a name->column index map from the header row for robust formatting
     headers_map = {ws.cell(row=17, column=c).value: c for c in range(2, 2 + len(headers))}
     col_unit = headers_map.get("Unit Price in AED")
     col_total = headers_map.get("Total Price in AED")
+    
     for idx, row in enumerate(data, start=1):
         excel_row = start_row + idx - 1
-        # Serial
+        
+        # Debug: Show what we're processing
+        add_debug(f"[EXCEL WRITE] Processing row {idx}: SKU={row[0]}, Desc={row[1][:30]}...")
+        
+        # Serial number in column B (2)
         cell_sl = ws.cell(row=excel_row, column=2, value=idx)
         cell_sl.font = Font(size=11, color="1F497D")
         cell_sl.alignment = Alignment(horizontal="center", vertical="center")
-        # Data columns C..I (8 values)
-        # Expected row = [SKU, Desc, Qty, Start, End, Unit AED, Total AED]
+        
+        # Data values in columns C-I (3-9)
         for j, value in enumerate(row):
-            excel_col = j + 3  # Column C = 3, D = 4, etc.
+            excel_col = j + 3  # C=3, D=4, E=5, F=6, G=7, H=8, I=9
             cell = ws.cell(row=excel_row, column=excel_col, value=value)
             cell.font = Font(size=11, color="1F497D")
             cell.alignment = Alignment(horizontal="center", vertical="center")
+            
+            # Debug specific problematic row
+            if idx == 11:
+                add_debug(f"[EXCEL ROW 11] Col {excel_col} ({get_column_letter(excel_col)}): Writing '{value}' (type: {type(value)})")
+        
         # Row fill
         for col in range(2, 2 + len(headers)):
             ws.cell(row=excel_row, column=col).fill = row_fill
+        
         # Description wrap & left align (column D = 4)
         ws.cell(row=excel_row, column=4).alignment = Alignment(wrap_text=True, horizontal="left", vertical="center")
+        
         # Currency formats
         if col_unit:
             ws.cell(row=excel_row, column=col_unit).number_format = '"AED"#,##0.00'
         if col_total:
             ws.cell(row=excel_row, column=col_total).number_format = '"AED"#,##0.00'
+    
     # --- Summary rows ---
     summary_row = start_row + len(data) + 2
     ws.merge_cells(f"C{summary_row}:G{summary_row}")
     ws[f"C{summary_row}"] = "TOTAL Bid Discounted Price"
     ws[f"C{summary_row}"].font = Font(bold=True, color="1F497D")
     ws[f"C{summary_row}"].alignment = Alignment(horizontal="right")
+    
     # Sum Total Price (index 6 in data list)
     total_bid_aed = sum((row[6] or 0) for row in data if len(row) >= 7 and row[6] is not None)
     ws[f"H{summary_row}"] = total_bid_aed
     ws[f"H{summary_row}"].number_format = '"AED"#,##0.00'
     ws[f"H{summary_row}"].font = Font(bold=True, color="1F497D")
     ws[f"H{summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+    
     # --- Dynamic Terms block (main sheet) ---
     total_price_sum = total_bid_aed
-    ws.merge_cells("B29:C29")
     terms = get_terms_section(header_info, total_price_sum)
-    def estimate_line_count(text, max_chars_per_line=80):  # Balanced for readability
+    
+    def estimate_line_count(text, max_chars_per_line=80):
         lines = text.split('\n')
         total_lines = 0
         for line in lines:
@@ -748,6 +793,7 @@ def create_styled_excel(
                 wrapped = len(line) // max_chars_per_line + (1 if (len(line) % max_chars_per_line) else 0)
                 total_lines += max(1, wrapped)
         return total_lines
+    
     # Calculate the actual end row of the table content dynamically
     table_end_row = start_row + len(data) + 4  # data rows + summary + spacing
     terms_start_row = max(29, table_end_row + 2)  # Ensure terms start after table
@@ -770,6 +816,7 @@ def create_styled_excel(
                 adjusted_terms.append((cell_addr, text, *style))
         except Exception as e:
             adjusted_terms.append((cell_addr, text, *style))
+    
     # Render the terms blocks
     for cell_addr, text, *style in adjusted_terms:
         try:
@@ -784,50 +831,49 @@ def create_styled_excel(
                 ws[cell_addr].alignment = Alignment(wrap_text=True, vertical="top")
                 # Height by estimated wrap - balanced for content visibility
                 line_count = estimate_line_count(text, max_chars_per_line=80)
-                total_height = max(18, line_count * 16)  # Restored reasonable height
+                total_height = max(18, line_count * 16)
                 if merge_rows:
                    per_row = total_height / merge_rows
                    for r in range(row_num, end_row + 1):
-                        ws.row_dimensions[r].height = per_row  # Allow natural height
+                        ws.row_dimensions[r].height = per_row
                 else:
-                    ws.row_dimensions[row_num].height = total_height  # Allow natural height
+                    ws.row_dimensions[row_num].height = total_height
                 if style and "bold" in style[0]:
                     ws[cell_addr].font = Font(**style[0])
         except Exception as e:
             pass
 
-    # Divider line across current header row if needed - only for our table columns
+    # Divider line across current header row
     border_row = 4
     bottom_border = Border(bottom=Side(style="thin", color="000000"))
-    table_last_col = 9  # Only go to column I (Total Price column)
+    table_last_col = 9  # Only go to column I
     for col in range(1, table_last_col + 1):
         ws.cell(row=border_row, column=col).border = bottom_border
     
-       # Calculate IBM Terms start position more safely
+    # Calculate IBM Terms start position
     try:
         last_terms_row = max([int(addr[1:]) + (style[0].get("merge_rows", 1) - 1) 
                              for addr, text, *style in adjusted_terms 
                              if style and len(addr) >= 2 and addr[1:].isdigit()], 
-                             default=terms_start_row + 10)  # Fallback with safe spacing
+                             default=terms_start_row + 10)
     except Exception:
-        last_terms_row = terms_start_row + 10  # Safe fallback
+        last_terms_row = terms_start_row + 10
         
     current_row = last_terms_row + 3
     
-    # IBM Terms header - blue like in the screenshot
+    # IBM Terms header
     ibm_header_cell = ws[f"C{current_row}"]
     ibm_header_cell.value = "IBM Terms and Conditions"
-    ibm_header_cell.font = Font(bold=True, size=12, color="1F497D")  # Blue header like screenshot
+    ibm_header_cell.font = Font(bold=True, size=12, color="1F497D")
     current_row += 2
     
-    # Add IBM Terms content with balanced formatting
+    # Add IBM Terms content
     lines = ibm_terms_text.splitlines()
     
     for i, line in enumerate(lines):
-        if line.strip():  # Only add non-empty lines
+        if line.strip():
             line_text = line.strip()
             
-            # Merge cells C to H for IBM terms (start from column C)
             ws.merge_cells(f"C{current_row}:H{current_row}")
             cell = ws[f"C{current_row}"]
             
@@ -837,36 +883,30 @@ def create_styled_excel(
             urls = re.findall(url_pattern, line_text)
             
             if urls:
-                # If line contains URLs, make them clickable hyperlinks
                 for url in urls:
                     cell.hyperlink = url
                     cell.value = line_text
-                    cell.font = Font(size=10, color="0563C1", underline="single")  # Blue hyperlink color
+                    cell.font = Font(size=10, color="0563C1", underline="single")
             else:
-                # Regular text in black
                 cell.value = line_text
-                cell.font = Font(size=10, color="000000")  # Standard readable size
+                cell.font = Font(size=10, color="000000")
             
             cell.alignment = Alignment(wrap_text=True, vertical="top")
             current_row += 1
             
-            # Only add spacing before "Useful/Important web resources" section
             if "Useful/Important web resources" in line_text:
-                current_row += 1  # One extra space before this section only
-    # Explicitly controlled page setup - prevent column 41 issues
-    first_col = 2  # Start from B (exclude column A for better margins)
-    last_col = 9   # I (Total Price column) - EXPLICITLY SET, not ws.max_column
+                current_row += 1
+    
+    # Page setup
+    first_col = 2
+    last_col = 9
     last_row = ws.max_row
     
-    # Set print area with explicit boundaries to avoid column 41+ issues
-    ws.print_area = f"B1:I{last_row}"  # Explicit range instead of calculated
-    
-    # Page orientation and scaling
+    ws.print_area = f"B1:I{last_row}"
     ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
     ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0  # Allow multiple pages vertically if needed
+    ws.page_setup.fitToHeight = 0
     
-    # Balanced margins - not too tight, not too loose
     ws.page_margins.left = 0.3
     ws.page_margins.right = 0.3
     ws.page_margins.top = 0.4
@@ -874,16 +914,13 @@ def create_styled_excel(
     ws.page_margins.header = 0.3
     ws.page_margins.footer = 0.3
     
-    # Additional PDF optimization settings
-    ws.page_setup.paperSize = ws.PAPERSIZE_A4  # Ensure A4 paper size
-    ws.page_setup.draft = False  # High quality output
-    ws.page_setup.blackAndWhite = False  # Keep colors for professional look
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.draft = False
+    ws.page_setup.blackAndWhite = False
+    ws.page_setup.scale = 85
+    ws.sheet_properties.pageSetUpPr.fitToPage = False
     
-    # Use intelligent scaling - start with 85% for better fit
-    ws.page_setup.scale = 85  # Better balance between readability and fit
-    
-    # Set print options for better PDF output
-    ws.sheet_properties.pageSetUpPr.fitToPage = False  # Use scale instead
+    add_debug(f"[EXCEL COMPLETE] Saved Excel with {len(data)} data rows")
     wb.save(output)
 
 # Function to get debug info for Streamlit display
