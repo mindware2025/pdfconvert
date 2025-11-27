@@ -147,6 +147,150 @@ if st.session_state.login_state == "login":
 elif st.session_state.login_state == "fail":
     show_fail()
     st.stop()
+        # Add this right after line 122 (after login success) and before the team selection
+    
+    # 🎉 Welcome celebration section
+    st.balloons()  # Immediate celebration!
+    
+    # Cool welcome message with animation-like styling
+    st.markdown("""
+    <div style="
+        text-align: center;
+        padding: 2rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 20px;
+        margin: 2rem 0;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    ">
+        <h1 style="
+            color: white;
+            font-size: 3rem;
+            margin: 0;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            animation: pulse 2s infinite;
+        ">
+            🚀 Welcome to Mindware Tools! 🚀
+        </h1>
+        <p style="
+            color: #f0f0f0;
+            font-size: 1.3rem;
+            margin-top: 1rem;
+        ">
+            Ready to supercharge your productivity? Let's get started! ⚡
+        </p>
+    </div>
+    
+    <style>
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Fun statistics dashboard
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.markdown("""
+        <div style="text-align: center; padding: 1rem; background: linear-gradient(45deg, #FF6B6B, #FF8E53); border-radius: 15px; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+            <h2 style="margin: 0; font-size: 2.5rem;">🛠️</h2>
+            <h3 style="margin: 0;">12</h3>
+            <p style="margin: 0;">Tools Available</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown("""
+        <div style="text-align: center; padding: 1rem; background: linear-gradient(45deg, #4ECDC4, #44A08D); border-radius: 15px; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+            <h2 style="margin: 0; font-size: 2.5rem;">⚡</h2>
+            <h3 style="margin: 0;">99.9%</h3>
+            <p style="margin: 0;">Accuracy Rate</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown("""
+        <div style="text-align: center; padding: 1rem; background: linear-gradient(45deg, #A8EDEA, #00C9FF); border-radius: 15px; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+            <h2 style="margin: 0; font-size: 2.5rem;">🚀</h2>
+            <h3 style="margin: 0;">10x</h3>
+            <p style="margin: 0;">Faster Processing</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col4:
+        st.markdown("""
+        <div style="text-align: center; padding: 1rem; background: linear-gradient(45deg, #F093FB, #F5576C); border-radius: 15px; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+            <h2 style="margin: 0; font-size: 2.5rem;">⏰</h2>
+            <h3 style="margin: 0;">24/7</h3>
+            <p style="margin: 0;">Always Ready</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Fun random motivational message
+    import random
+    motivational_messages = [
+        "🎯 Today's mission: Turn PDFs into Excel magic!",
+        "💪 You're about to save hours of manual work!",
+        "🧠 Smart tools for smart people like you!",
+        "🌟 Every file you process is a step towards efficiency!",
+        "🔥 Ready to automate the boring stuff?",
+        "✨ Making the impossible possible, one click at a time!",
+        "🎉 Time to show those spreadsheets who's boss!",
+        "🚀 Blast off to productivity paradise!"
+    ]
+    
+    selected_message = random.choice(motivational_messages)
+    
+    st.markdown(f"""
+    <div style="
+        text-align: center;
+        padding: 1.5rem;
+        background: linear-gradient(90deg, #ffecd2 0%, #fcb69f 100%);
+        border-radius: 15px;
+        margin: 1.5rem 0;
+        border-left: 5px solid #ff6b6b;
+    ">
+        <h3 style="margin: 0; color: #d63031; font-weight: bold;">
+            {selected_message}
+        </h3>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Time-based greeting
+    import datetime
+    current_hour = datetime.datetime.now().hour
+    
+    if current_hour < 12:
+        greeting = "🌅 Good Morning! Ready to conquer the day?"
+        emoji = "☕"
+    elif current_hour < 17:
+        greeting = "☀️ Good Afternoon! Let's get productive!"
+        emoji = "💼"
+    else:
+        greeting = "🌙 Good Evening! Working late? We've got you covered!"
+        emoji = "🌟"
+    
+    st.markdown(f"""
+    <div style="
+        text-align: center;
+        padding: 1rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        margin-bottom: 2rem;
+    ">
+        <h3 style="margin: 0;">{emoji} {greeting}</h3>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Add a small delay for dramatic effect
+    import time
+    time.sleep(0.5)
+    st.snow()  # Another fun effect after the delay!
+    
+    # Now the existing team selection continues below...
 team = st.radio("👥 Select your team:", ["Finance", "Operations", "Credit","Sales"], horizontal=True)
 
 
