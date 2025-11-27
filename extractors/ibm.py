@@ -621,8 +621,23 @@ def create_styled_excel(
                 wrapped = len(line) // max_chars_per_line + (1 if (len(line) % max_chars_per_line) else 0)
                 total_lines += max(1, wrapped)
         return total_lines
-    # Render the terms blocks
+       # Calculate the actual end row of the table content dynamically
+    table_end_row = start_row + len(data) + 4  # data rows + summary + spacing
+    terms_start_row = max(29, table_end_row + 2)  # Ensure terms start after table
+    
+    # Adjust terms positioning dynamically
+    adjusted_terms = []
+    row_offset = terms_start_row - 29  # Calculate offset from original row 29
+    
     for cell_addr, text, *style in terms:
+        # Extract row number and adjust it
+        col_letter = cell_addr[0]
+        original_row = int(cell_addr[1:])
+        new_row = original_row + row_offset
+        new_cell_addr = f"{col_letter}{new_row}"
+        adjusted_terms.append((new_cell_addr, text, *style))
+    # Render the terms blocks
+    for cell_addr, text, *style in adjusted_terms:
         row_num = int(cell_addr[1:])
         col_letter = cell_addr[0]
         merge_rows = style[0].get("merge_rows") if style else None
@@ -652,10 +667,10 @@ def create_styled_excel(
     for col in range(1, table_last_col + 1):
         ws.cell(row=border_row, column=col).border = bottom_border
     
-    # --- Add IBM Terms to the same sheet (below the main content) ---
-    # Based on current terms template: C39 (rows 39-41), C44 (rows 44-48)
-    # Start IBM Terms right after C44 ends at row 48
-    current_row = 49  # Start immediately after C44 ends
+    last_terms_row = max([int(addr[1:]) + (style[0].get("merge_rows", 1) - 1) 
+                         for addr, text, *style in adjusted_terms 
+                         if style], default=terms_start_row)
+    current_row = last_terms_row + 3
     
     # IBM Terms header - blue like in the screenshot
     ibm_header_cell = ws[f"C{current_row}"]
