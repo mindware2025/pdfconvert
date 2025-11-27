@@ -69,42 +69,53 @@ def correct_descriptions(extracted_data, master_data=None):
     """
     corrected = []
     
+    # Log initial state
+    logging.info(f"[DESC CORRECTION] Starting with {len(extracted_data)} rows")
+    for i, row in enumerate(extracted_data):
+        logging.info(f"[INPUT ROW {i}] SKU: '{row[0]}', Original Desc: '{row[1][:50]}...'")
+    
     if master_data is not None:
-        # Master CSV uploaded - use ONLY master data
         try:
             master_map = dict(zip(master_data['SKU'], master_data['SKU DESCRIPTION']))
             logging.info(f"[MASTER DATA] Using ONLY master CSV with {len(master_map)} SKU mappings")
             
-            for row in extracted_data:
+            # Log all master SKUs for debugging
+            logging.info(f"[MASTER SKUs] Available SKUs: {list(master_map.keys())[:10]}...")  # First 10 SKUs
+            
+            for i, row in enumerate(extracted_data):
                 try:
                     sku = row[0]
                     original_desc = row[1]
                     
                     if sku in master_map:
                         row[1] = master_map[sku]
-                        logging.info(f"[DESC FROM MASTER] SKU {sku}: '{original_desc}' -> '{row[1]}'")
+                        logging.info(f"[DESC FROM MASTER] Row {i} - SKU '{sku}': '{original_desc}' -> '{row[1]}'")
                     else:
                         row[1] = ""  # Blank if SKU not found in master
-                        logging.info(f"[DESC BLANK] SKU {sku} not found in master CSV, description set to blank")
+                        logging.warning(f"[DESC BLANK] Row {i} - SKU '{sku}' not found in master CSV, description set to blank")
                         
                 except Exception as e:
-                    logging.warning(f"[DESC CORRECTION ERROR] Error processing row: {e}")
-                    row[1] = ""  # Set to blank on error
+                    logging.error(f"[DESC CORRECTION ERROR] Row {i} - Error processing: {e}")
+                    row[1] = ""
                     
                 corrected.append(row)
                 
         except Exception as e:
-            logging.warning(f"[MASTER DATA ERROR] Could not process master data: {e}")
-            # On error with master data, set all descriptions to blank
+            logging.error(f"[MASTER DATA ERROR] Could not process master data: {e}")
             for row in extracted_data:
                 row[1] = ""
             corrected = extracted_data
     else:
-        # No master CSV uploaded - set ALL descriptions to blank
         logging.info(f"[NO MASTER DATA] Setting all descriptions to blank")
-        for row in extracted_data:
-            row[1] = ""  # Set all descriptions to blank
+        for i, row in enumerate(extracted_data):
+            logging.info(f"[BLANK DESC] Row {i} - SKU '{row[0]}' description set to blank")
+            row[1] = ""
         corrected = extracted_data
+    
+    # Log final results
+    logging.info(f"[DESC CORRECTION COMPLETE] Processed {len(corrected)} rows")
+    for i, row in enumerate(corrected):
+        logging.info(f"[OUTPUT ROW {i}] SKU: '{row[0]}', Final Desc: '{row[1][:50]}...'")
     
     return corrected
 
@@ -285,42 +296,68 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
             header_info["City"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
         if "Country:" in line:
             header_info["Country"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
+    
     extracted_data = []
     i = 0
     max_window = 12  # Try wider chunks first to capture wrapped rows
+    
+    logging.info(f"[EXTRACTION START] Beginning extraction from {len(lines)} lines")
+    
     while i < len(lines):
         matched = False
+        
+        # Log current position for debugging
+        if i % 50 == 0:  # Log every 50 lines to avoid spam
+            logging.info(f"[EXTRACTION PROGRESS] Processing line {i}/{len(lines)}")
+        
         # Prefer larger chunks first (helps capture qty + amounts in one chunk)
         for window in range(max_window, 0, -1):
             if i + window > len(lines):
                 continue
             chunk_lines = lines[i:i + window]
             chunk = " | ".join(chunk_lines)
+            
+            # Log chunk details for debugging
+            logging.debug(f"[CHUNK DEBUG] Lines {i}-{i+window}: {chunk[:100]}...")
+            
             # Skip header-ish chunks
             if header_blacklist_re.search(chunk):
+                logging.debug(f"[CHUNK SKIP] Header blacklist match in chunk starting at line {i}")
                 continue
             # Must have at least two date tokens
             dates = date_re.findall(chunk)
             if len(dates) < 2:
+                logging.debug(f"[CHUNK SKIP] Less than 2 dates found in chunk starting at line {i}: {dates}")
                 continue
             start_date, end_date = dates[0], dates[1]
+            logging.info(f"[DATES FOUND] Lines {i}-{i+window}: start='{start_date}', end='{end_date}'")
+            
             # Identify SKU and where description starts
             sku = None
             desc_start_index = None
+            
             # Pattern: optional leading serial number
             if chunk_lines[0].strip().isdigit() and len(chunk_lines) > 1 and looks_like_valid_sku(chunk_lines[1].strip()):
                 sku = chunk_lines[1].strip()
                 desc_start_index = 2
+                logging.info(f"[SKU FOUND] Pattern 1 - Serial+SKU: '{sku}' from chunk line 1 (line {i+1})")
             elif looks_like_valid_sku(chunk_lines[0].strip()):
                 sku = chunk_lines[0].strip()
                 desc_start_index = 1
+                logging.info(f"[SKU FOUND] Pattern 2 - Direct SKU: '{sku}' from chunk line 0 (line {i})")
             else:
                 # Try to find a token that looks like a SKU
                 t = token_sku_re.search(chunk)
                 if t and looks_like_valid_sku(t.group(0)):
                     sku = t.group(0)
+                    logging.info(f"[SKU FOUND] Pattern 3 - Token search: '{sku}' from chunk search")
+                    
             if not sku:
+                logging.warning(f"[SKU NOT FOUND] No valid SKU in chunk lines {i}-{i+window}: {chunk[:100]}...")
                 continue
+            else:
+                logging.info(f"[SKU EXTRACTED] Final SKU: '{sku}' for processing from lines {i}-{i+window}")
+            
             # Keep only chunks where a money token is "near" the start date (reduces false positives)
             pos_date = chunk.find(start_date)
             near_money = False
@@ -328,8 +365,11 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                 window_text = chunk[max(0, pos_date - 60): pos_date + len(start_date) + 60]
                 if money_with_sep_re.search(window_text):
                     near_money = True
+                    logging.info(f"[MONEY CHECK] Found money tokens near date for SKU '{sku}'")
             if not near_money:
+                logging.debug(f"[CHUNK SKIP] No money tokens near date for SKU '{sku}'")
                 continue
+            
             # Build description (text between SKU and first date) - will be overwritten by correct_descriptions
             if desc_start_index is not None:
                 desc_parts = []
@@ -338,17 +378,22 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                         break
                     desc_parts.append(ln)
                 desc = " ".join(desc_parts).strip()
+                logging.info(f"[DESC EXTRACTED] Pattern A - SKU '{sku}': '{desc[:50]}...'")
             else:
                 pos_sku = chunk.find(sku)
                 pos_date0 = chunk.find(start_date)
                 desc = chunk[pos_sku + len(sku):pos_date0].strip() if pos_sku >= 0 and pos_date0 > pos_sku else ""
+                logging.info(f"[DESC EXTRACTED] Pattern B - SKU '{sku}': '{desc[:50]}...'")
+            
             # ---- Robust Qty inference (ANY value) ----
             chunk_flat = " ".join(chunk_lines)
             all_date_matches = list(date_re.finditer(chunk_flat))
             if len(all_date_matches) < 2:
+                logging.warning(f"[QTY SKIP] Less than 2 date matches in flattened chunk for SKU '{sku}'")
                 continue
             end_date_match = all_date_matches[1]
             after_end = chunk_flat[end_date_match.end():].strip()
+            
             # Optional debug: show strict tokens
             m_first_dbg = money_with_sep_re.search(after_end)
             if m_first_dbg:
@@ -356,10 +401,12 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                 money_zone_dbg = after_end[m_first_dbg.start():]
                 dbg_ints = [int(x) for x in int_re.findall(ints_zone_dbg)]
                 dbg_amount = money_with_sep_re.findall(money_zone_dbg)
-                logging.info(f"[TOKENS STRICT] INTs(pre)={dbg_ints}  MONEY(after)={dbg_amount[:6]}")
+                logging.info(f"[TOKENS STRICT] SKU '{sku}' - INTs(pre)={dbg_ints}  MONEY(after)={dbg_amount[:6]}")
+            
             # 1) First pass qty + tokens
             qty, prorate, money_tokens = infer_qty_and_prorate(after_end, abs_tol=0.02)
             logging.info(f"[QTY] sku={sku} start={start_date} end={end_date} -> qty={qty}, prorate={prorate}")
+            
             # 2) If we didn't get all money tokens, extend with a few following lines
             if len(money_tokens) < 5:
                 extra = _extend_after_end_with_following_lines(lines, i, window, max_extra_lines=8)
@@ -371,9 +418,11 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                     if len(money_tokens2) > len(money_tokens):
                         money_tokens = money_tokens2
                         logging.info(f"[EXTENDED] Added tokens for sku={sku}: {money_tokens[:6]}")
+            
             if qty is None or not (1 <= qty <= 100000):
-                logging.info(f"[QTY ANOMALY] sku={sku} chunk={chunk_flat}")
+                logging.warning(f"[QTY ANOMALY] sku={sku} invalid qty={qty}, chunk={chunk_flat[:100]}...")
                 continue
+            
             # ---- Bid Unit/Ext SVP (via money token positions) ----
             bid_unit_svp = None
             bid_ext_svp = None
@@ -382,6 +431,7 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                     # tokens: [EntUnit, EntExt, Disc%, BidUnit, BidExt, ...]
                     bid_unit_svp = parse_euro_number(money_tokens[3])
                     bid_ext_svp  = parse_euro_number(money_tokens[4])
+                    logging.info(f"[SVP DIRECT] SKU '{sku}' - BidUnit={bid_unit_svp}, BidExt={bid_ext_svp}")
                 else:
                     logging.warning(f"[SVP TOKENS <5] sku={sku} tokens={money_tokens}")
                     # Fallback via Entitled + Disc%
@@ -396,18 +446,22 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                             logging.info(f"[SVP FALLBACK] sku={sku} ent=({ent_unit},{ent_ext}) disc={disc_pct}% -> bid=({bid_unit_svp},{bid_ext_svp})")
             except Exception as e:
                 logging.warning(f"[SVP PARSE ERROR] sku={sku} err={e}")
+            
             # Convert to AED
             bid_unit_svp_aed = round(bid_unit_svp * USD_TO_AED, 2) if bid_unit_svp is not None else None
             bid_ext_svp_aed  = round(bid_ext_svp  * USD_TO_AED, 2) if bid_ext_svp  is not None else None
+            
             # Clean description (will be replaced by correct_descriptions)
             desc = re.sub(r'\s{2,}', ' ', desc).strip()
             extracted_data.append([sku, desc, qty, start_date, end_date, bid_unit_svp_aed, bid_ext_svp_aed])
             i += window
             matched = True
-            logging.info(f"Extracted row: {extracted_data[-1]}")
+            logging.info(f"[ROW EXTRACTED] Row {len(extracted_data)}: {extracted_data[-1]}")
             break  # break window loop
         if not matched:
             i += 1
+    
+    logging.info(f"[EXTRACTION COMPLETE] Total rows extracted: {len(extracted_data)}")
     return extracted_data, header_info
 
 # ----------------------------------------------------------------------
