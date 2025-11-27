@@ -236,128 +236,222 @@ if not st.session_state.show_team_selection:
         </div>
         """, unsafe_allow_html=True)
 
-        # Replace the random motivational message section with this:
+        # Replace the motivational messages section with this better-designed version:
     
-        # Show ALL motivational messages (not random)
+        # Elegant motivational messages in a grid layout
         st.markdown("""
         <div style="
             text-align: center;
-            padding: 1.5rem;
-            background: linear-gradient(90deg, #ffecd2 0%, #fcb69f 100%);
-            border-radius: 15px;
-            margin: 1.5rem 0;
-            border-left: 5px solid #ff6b6b;
+            margin: 2rem 0;
         ">
-            <h3 style="margin: 0; color: #d63031; font-weight: bold;">
-                🎯 Today's mission: Turn PDFs into Excel magic!
-            </h3>
+            <h2 style="
+                color: #667eea;
+                font-size: 1.8rem;
+                margin-bottom: 1.5rem;
+                font-weight: 700;
+            ">
+                💡 Why You'll Love Our Tools
+            </h2>
         </div>
         """, unsafe_allow_html=True)
     
-        st.markdown("""
-        <div style="
-            text-align: center;
-            padding: 1.5rem;
-            background: linear-gradient(90deg, #e3f2fd 0%, #bbdefb 100%);
-            border-radius: 15px;
-            margin: 1.5rem 0;
-            border-left: 5px solid #2196f3;
-        ">
-            <h3 style="margin: 0; color: #1565c0; font-weight: bold;">
-                💪 You're about to save hours of manual work!
-            </h3>
-        </div>
-        """, unsafe_allow_html=True)
+        # Create a 2x4 grid for the messages
+        row1_col1, row1_col2 = st.columns(2)
+        row2_col1, row2_col2 = st.columns(2)
+        row3_col1, row3_col2 = st.columns(2)
+        row4_col1, row4_col2 = st.columns(2)
     
-        st.markdown("""
-        <div style="
-            text-align: center;
-            padding: 1.5rem;
-            background: linear-gradient(90deg, #f3e5f5 0%, #e1bee7 100%);
-            border-radius: 15px;
-            margin: 1.5rem 0;
-            border-left: 5px solid #9c27b0;
-        ">
-            <h3 style="margin: 0; color: #7b1fa2; font-weight: bold;">
-                🧠 Smart tools for smart people like you!
-            </h3>
-        </div>
-        """, unsafe_allow_html=True)
+        with row1_col1:
+            st.markdown("""
+            <div style="
+                padding: 1.2rem;
+                background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+                border-radius: 12px;
+                margin: 0.5rem 0;
+                color: white;
+                text-align: center;
+                box-shadow: 0 4px 15px rgba(255,154,158,0.3);
+                height: 120px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            ">
+                <div>
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">🎯</div>
+                    <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                        Turn PDFs into Excel magic!
+                    </p>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
     
-        st.markdown("""
-        <div style="
-            text-align: center;
-            padding: 1.5rem;
-            background: linear-gradient(90deg, #e8f5e8 0%, #c8e6c9 100%);
-            border-radius: 15px;
-            margin: 1.5rem 0;
-            border-left: 5px solid #4caf50;
-        ">
-            <h3 style="margin: 0; color: #388e3c; font-weight: bold;">
-                🌟 Every file you process is a step towards efficiency!
-            </h3>
-        </div>
-        """, unsafe_allow_html=True)
+        with row1_col2:
+            st.markdown("""
+            <div style="
+                padding: 1.2rem;
+                background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+                border-radius: 12px;
+                margin: 0.5rem 0;
+                color: white;
+                text-align: center;
+                box-shadow: 0 4px 15px rgba(168,237,234,0.3);
+                height: 120px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            ">
+                <div>
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">💪</div>
+                    <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                        Save hours of manual work!
+                    </p>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
     
-        st.markdown("""
-        <div style="
-            text-align: center;
-            padding: 1.5rem;
-            background: linear-gradient(90deg, #fff3e0 0%, #ffcc80 100%);
-            border-radius: 15px;
-            margin: 1.5rem 0;
-            border-left: 5px solid #ff9800;
-        ">
-            <h3 style="margin: 0; color: #f57c00; font-weight: bold;">
-                🔥 Ready to automate the boring stuff?
-            </h3>
-        </div>
-        """, unsafe_allow_html=True)
+        with row2_col1:
+            st.markdown("""
+            <div style="
+                padding: 1.2rem;
+                background: linear-gradient(135deg, #d299c2 0%, #fef9d7 100%);
+                border-radius: 12px;
+                margin: 0.5rem 0;
+                color: #5d4e75;
+                text-align: center;
+                box-shadow: 0 4px 15px rgba(210,153,194,0.3);
+                height: 120px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            ">
+                <div>
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">🧠</div>
+                    <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                        Smart tools for smart people!
+                    </p>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
     
-        st.markdown("""
-        <div style="
-            text-align: center;
-            padding: 1.5rem;
-            background: linear-gradient(90deg, #fce4ec 0%, #f8bbd9 100%);
-            border-radius: 15px;
-            margin: 1.5rem 0;
-            border-left: 5px solid #e91e63;
-        ">
-            <h3 style="margin: 0; color: #c2185b; font-weight: bold;">
-                ✨ Making the impossible possible, one click at a time!
-            </h3>
-        </div>
-        """, unsafe_allow_html=True)
+        with row2_col2:
+            st.markdown("""
+            <div style="
+                padding: 1.2rem;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border-radius: 12px;
+                margin: 0.5rem 0;
+                color: white;
+                text-align: center;
+                box-shadow: 0 4px 15px rgba(102,126,234,0.3);
+                height: 120px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            ">
+                <div>
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">🌟</div>
+                    <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                        Every file = efficiency step!
+                    </p>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
     
-        st.markdown("""
-        <div style="
-            text-align: center;
-            padding: 1.5rem;
-            background: linear-gradient(90deg, #e0f2f1 0%, #b2dfdb 100%);
-            border-radius: 15px;
-            margin: 1.5rem 0;
-            border-left: 5px solid #009688;
-        ">
-            <h3 style="margin: 0; color: #00695c; font-weight: bold;">
-                🎉 Time to show those spreadsheets who's boss!
-            </h3>
-        </div>
-        """, unsafe_allow_html=True)
+        with row3_col1:
+            st.markdown("""
+            <div style="
+                padding: 1.2rem;
+                background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+                border-radius: 12px;
+                margin: 0.5rem 0;
+                color: #8b4513;
+                text-align: center;
+                box-shadow: 0 4px 15px rgba(255,236,210,0.3);
+                height: 120px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            ">
+                <div>
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔥</div>
+                    <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                        Automate the boring stuff!
+                    </p>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
     
-        st.markdown("""
-        <div style="
-            text-align: center;
-            padding: 1.5rem;
-            background: linear-gradient(90deg, #e3f2fd 0%, #90caf9 100%);
-            border-radius: 15px;
-            margin: 1.5rem 0;
-            border-left: 5px solid #03a9f4;
-        ">
-            <h3 style="margin: 0; color: #0277bd; font-weight: bold;">
-                🚀 Blast off to productivity paradise!
-            </h3>
-        </div>
-        """, unsafe_allow_html=True)
+        with row3_col2:
+            st.markdown("""
+            <div style="
+                padding: 1.2rem;
+                background: linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%);
+                border-radius: 12px;
+                margin: 0.5rem 0;
+                color: white;
+                text-align: center;
+                box-shadow: 0 4px 15px rgba(137,247,254,0.3);
+                height: 120px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            ">
+                <div>
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">✨</div>
+                    <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                        Making impossible possible!
+                    </p>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+        with row4_col1:
+            st.markdown("""
+            <div style="
+                padding: 1.2rem;
+                background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+                border-radius: 12px;
+                margin: 0.5rem 0;
+                color: white;
+                text-align: center;
+                box-shadow: 0 4px 15px rgba(250,112,154,0.3);
+                height: 120px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            ">
+                <div>
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">🎉</div>
+                    <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                        Show spreadsheets who's boss!
+                    </p>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+        with row4_col2:
+            st.markdown("""
+            <div style="
+                padding: 1.2rem;
+                background: linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%);
+                border-radius: 12px;
+                margin: 0.5rem 0;
+                color: white;
+                text-align: center;
+                box-shadow: 0 4px 15px rgba(255,154,158,0.3);
+                height: 120px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            ">
+                <div>
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">🚀</div>
+                    <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                        Blast off to productivity!
+                    </p>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
     # Time-based greeting
     import datetime
