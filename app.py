@@ -1285,6 +1285,7 @@ elif tool == "Coface CSV Uploader":
     
     if uploaded_file:
         st.success("✅ File uploaded successfully.")
+        st.snow()
         zip_output = process_grouped_customer_files(uploaded_file)
     
         st.download_button(
