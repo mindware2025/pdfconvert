@@ -236,248 +236,232 @@ if not st.session_state.show_team_selection:
         </div>
         """, unsafe_allow_html=True)
 
-        # Add this BEFORE the motivational messages to close any open columns:
+        # REPLACE the entire motivational messages section with this:
     
-        # Close any open column structures first
-        st.markdown("</div>" * 10, unsafe_allow_html=True)  # Close any open divs
-        
-        # Reset the layout with a clean container
-        st.markdown("""
-        <div style="clear: both; width: 100%; margin: 2rem 0;">
-        </div>
-        """, unsafe_allow_html=True)
+        # FIRST - Close the col4 block properly
+        # (Remove any 'with col4:' or column indentation before this section)
     
-        # Elegant motivational messages in a clean, centered grid layout
+    # Close the statistics section completely and start fresh
+    st.markdown("---")  # Add a separator line
+    
+    # Motivational messages section - FULL WIDTH, NOT in any column
+    st.markdown("""
+    <div style="
+        text-align: center;
+        margin: 2rem 0;
+        width: 100%;
+    ">
+        <h2 style="
+            color: #667eea;
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            font-weight: 700;
+        ">
+            💡 Why You'll Love Our Tools
+        </h2>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Create fresh columns for messages - FULL WIDTH
+    msg_row1_col1, msg_row1_col2 = st.columns(2)
+    
+    with msg_row1_col1:
         st.markdown("""
         <div style="
+            padding: 1.2rem;
+            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+            border-radius: 12px;
+            margin: 0.5rem;
+            color: white;
             text-align: center;
-            margin: 2rem auto;
-            max-width: 100%;
-            padding: 0;
+            box-shadow: 0 4px 15px rgba(255,154,158,0.3);
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         ">
-            <h2 style="
-                color: #667eea;
-                font-size: 1.8rem;
-                margin-bottom: 1.5rem;
-                font-weight: 700;
-            ">
-                💡 Why You'll Love Our Tools
-            </h2>
+            <div>
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">🎯</div>
+                <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                    Turn PDFs into Excel magic!
+                </p>
+            </div>
         </div>
         """, unsafe_allow_html=True)
     
-        # Create properly centered 2x4 grid for the messages
-        st.markdown("<div style='width: 100%; padding: 0; margin: 0;'>", unsafe_allow_html=True)
-        
-        row1_col1, row1_col2 = st.columns(2, gap="medium")
-        
-        with row1_col1:
-            st.markdown("""
-            <div style="
-                padding: 1.2rem;
-                background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
-                border-radius: 12px;
-                margin: 0.5rem 0;
-                color: white;
-                text-align: center;
-                box-shadow: 0 4px 15px rgba(255,154,158,0.3);
-                height: 120px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                width: 100%;
-            ">
-                <div>
-                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">🎯</div>
-                    <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
-                        Turn PDFs into Excel magic!
-                    </p>
-                </div>
+    with msg_row1_col2:
+        st.markdown("""
+        <div style="
+            padding: 1.2rem;
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            border-radius: 12px;
+            margin: 0.5rem;
+            color: white;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(168,237,234,0.3);
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        ">
+            <div>
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">💪</div>
+                <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                    Save hours of manual work!
+                </p>
             </div>
-            """, unsafe_allow_html=True)
+        </div>
+        """, unsafe_allow_html=True)
     
-        with row1_col2:
-            st.markdown("""
-            <div style="
-                padding: 1.2rem;
-                background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
-                border-radius: 12px;
-                margin: 0.5rem 0;
-                color: white;
-                text-align: center;
-                box-shadow: 0 4px 15px rgba(168,237,234,0.3);
-                height: 120px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                width: 100%;
-            ">
-                <div>
-                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">💪</div>
-                    <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
-                        Save hours of manual work!
-                    </p>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+    msg_row2_col1, msg_row2_col2 = st.columns(2)
     
-        row2_col1, row2_col2 = st.columns(2, gap="medium")
-        
-        with row2_col1:
-            st.markdown("""
-            <div style="
-                padding: 1.2rem;
-                background: linear-gradient(135deg, #d299c2 0%, #fef9d7 100%);
-                border-radius: 12px;
-                margin: 0.5rem 0;
-                color: #5d4e75;
-                text-align: center;
-                box-shadow: 0 4px 15px rgba(210,153,194,0.3);
-                height: 120px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                width: 100%;
-            ">
-                <div>
-                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">🧠</div>
-                    <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
-                        Smart tools for smart people!
-                    </p>
-                </div>
+    with msg_row2_col1:
+        st.markdown("""
+        <div style="
+            padding: 1.2rem;
+            background: linear-gradient(135deg, #d299c2 0%, #fef9d7 100%);
+            border-radius: 12px;
+            margin: 0.5rem;
+            color: #5d4e75;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(210,153,194,0.3);
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        ">
+            <div>
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">🧠</div>
+                <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                    Smart tools for smart people!
+                </p>
             </div>
-            """, unsafe_allow_html=True)
+        </div>
+        """, unsafe_allow_html=True)
     
-        with row2_col2:
-            st.markdown("""
-            <div style="
-                padding: 1.2rem;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                border-radius: 12px;
-                margin: 0.5rem 0;
-                color: white;
-                text-align: center;
-                box-shadow: 0 4px 15px rgba(102,126,234,0.3);
-                height: 120px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                width: 100%;
-            ">
-                <div>
-                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">🌟</div>
-                    <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
-                        Every file = efficiency step!
-                    </p>
-                </div>
+    with msg_row2_col2:
+        st.markdown("""
+        <div style="
+            padding: 1.2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            margin: 0.5rem;
+            color: white;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(102,126,234,0.3);
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        ">
+            <div>
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">🌟</div>
+                <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                    Every file = efficiency step!
+                </p>
             </div>
-            """, unsafe_allow_html=True)
+        </div>
+        """, unsafe_allow_html=True)
     
-        row3_col1, row3_col2 = st.columns(2, gap="medium")
-        
-        with row3_col1:
-            st.markdown("""
-            <div style="
-                padding: 1.2rem;
-                background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
-                border-radius: 12px;
-                margin: 0.5rem 0;
-                color: #8b4513;
-                text-align: center;
-                box-shadow: 0 4px 15px rgba(255,236,210,0.3);
-                height: 120px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                width: 100%;
-            ">
-                <div>
-                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔥</div>
-                    <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
-                        Automate the boring stuff!
-                    </p>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+    msg_row3_col1, msg_row3_col2 = st.columns(2)
     
-        with row3_col2:
-            st.markdown("""
-            <div style="
-                padding: 1.2rem;
-                background: linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%);
-                border-radius: 12px;
-                margin: 0.5rem 0;
-                color: white;
-                text-align: center;
-                box-shadow: 0 4px 15px rgba(137,247,254,0.3);
-                height: 120px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                width: 100%;
-            ">
-                <div>
-                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">✨</div>
-                    <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
-                        Making impossible possible!
-                    </p>
-                </div>
+    with msg_row3_col1:
+        st.markdown("""
+        <div style="
+            padding: 1.2rem;
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            border-radius: 12px;
+            margin: 0.5rem;
+            color: #8b4513;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(255,236,210,0.3);
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        ">
+            <div>
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔥</div>
+                <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                    Automate the boring stuff!
+                </p>
             </div>
-            """, unsafe_allow_html=True)
+        </div>
+        """, unsafe_allow_html=True)
     
-        row4_col1, row4_col2 = st.columns(2, gap="medium")
-        
-        with row4_col1:
-            st.markdown("""
-            <div style="
-                padding: 1.2rem;
-                background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-                border-radius: 12px;
-                margin: 0.5rem 0;
-                color: white;
-                text-align: center;
-                box-shadow: 0 4px 15px rgba(250,112,154,0.3);
-                height: 120px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                width: 100%;
-            ">
-                <div>
-                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">🎉</div>
-                    <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
-                        Show spreadsheets who's boss!
-                    </p>
-                </div>
+    with msg_row3_col2:
+        st.markdown("""
+        <div style="
+            padding: 1.2rem;
+            background: linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%);
+            border-radius: 12px;
+            margin: 0.5rem;
+            color: white;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(137,247,254,0.3);
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        ">
+            <div>
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">✨</div>
+                <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                    Making impossible possible!
+                </p>
             </div>
-            """, unsafe_allow_html=True)
+        </div>
+        """, unsafe_allow_html=True)
     
-        with row4_col2:
-            st.markdown("""
-            <div style="
-                padding: 1.2rem;
-                background: linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%);
-                border-radius: 12px;
-                margin: 0.5rem 0;
-                color: white;
-                text-align: center;
-                box-shadow: 0 4px 15px rgba(255,154,158,0.3);
-                height: 120px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                width: 100%;
-            ">
-                <div>
-                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">🚀</div>
-                    <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
-                        Blast off to productivity!
-                    </p>
-                </div>
+    msg_row4_col1, msg_row4_col2 = st.columns(2)
+    
+    with msg_row4_col1:
+        st.markdown("""
+        <div style="
+            padding: 1.2rem;
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            border-radius: 12px;
+            margin: 0.5rem;
+            color: white;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(250,112,154,0.3);
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        ">
+            <div>
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">🎉</div>
+                <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                    Show spreadsheets who's boss!
+                </p>
             </div>
-            """, unsafe_allow_html=True)
-        
-        st.markdown("</div>", unsafe_allow_html=True)  # Close the container
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with msg_row4_col2:
+        st.markdown("""
+        <div style="
+            padding: 1.2rem;
+            background: linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%);
+            border-radius: 12px;
+            margin: 0.5rem;
+            color: white;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(255,154,158,0.3);
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        ">
+            <div>
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">🚀</div>
+                <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                    Blast off to productivity!
+                </p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
     # Time-based greeting
     import datetime
