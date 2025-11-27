@@ -85,32 +85,24 @@ def correct_descriptions(extracted_data, master_data=None):
     corrected = []
     
     add_debug(f"[DESC CORRECTION] Starting with {len(extracted_data)} rows")
-    for i, row in enumerate(extracted_data):
-        add_debug(f"[INPUT ROW {i}] SKU: '{row[0]}', Original Desc: '{row[1][:50]}...'")
     
     if master_data is not None:
         try:
             master_map = dict(zip(master_data['SKU'], master_data['SKU DESCRIPTION']))
-            add_debug(f"[MASTER DATA] Using ONLY master CSV with {len(master_map)} SKU mappings")
-            
-            # Log sample master SKUs for debugging
-            sample_skus = list(master_map.keys())[:10]
-            add_debug(f"[MASTER SKUs] Sample available: {sample_skus}")
+            add_debug(f"[MASTER DATA] Using master CSV with {len(master_map)} SKU mappings")
             
             for i, row in enumerate(extracted_data):
                 try:
                     sku = row[0]
-                    original_desc = row[1]
-                    
                     if sku in master_map:
                         row[1] = master_map[sku]
-                        add_debug(f"[DESC FROM MASTER] Row {i} - SKU '{sku}': Found in master CSV")
+                        add_debug(f"[DESC FROM MASTER] Row {i+1} - SKU '{sku}': Found in master CSV")
                     else:
                         row[1] = ""  # Blank if SKU not found in master
-                        add_debug(f"[DESC BLANK] Row {i} - SKU '{sku}' not found in master CSV")
+                        add_debug(f"[DESC BLANK] Row {i+1} - SKU '{sku}' not found in master CSV")
                         
                 except Exception as e:
-                    add_debug(f"[DESC ERROR] Row {i} - Error: {e}")
+                    add_debug(f"[DESC ERROR] Row {i+1} - Error: {e}")
                     row[1] = ""
                     
                 corrected.append(row)
@@ -130,7 +122,7 @@ def correct_descriptions(extracted_data, master_data=None):
     return corrected
 
 # ----------------------------------------------------------------------
-# Robust regexes
+# Enhanced regexes
 # ----------------------------------------------------------------------
 date_re = re.compile(r'\b\d{2}[‐‑–-][A-Za-z]{3}[‐‑–-]\d{4}\b')  # hyphen variants
 sku_line_re = re.compile(r'^[A-Z0-9\-\._/]{5,20}$')
@@ -146,11 +138,11 @@ header_blacklist_re = re.compile(
 )
 
 def looks_like_valid_sku(tok: str) -> bool:
-    """Enhanced SKU validation to avoid serial numbers"""
+    """Enhanced SKU validation for IBM part numbers"""
     if not tok:
         return False
     
-    # Skip obvious serial numbers
+    # CRITICAL: Explicitly reject serial numbers that start with IE and are long
     if tok.startswith('IE') and len(tok) > 8:
         return False
     
@@ -158,6 +150,7 @@ def looks_like_valid_sku(tok: str) -> bool:
     if tok.isdigit():
         return False
     
+    # Basic pattern check
     if not sku_line_re.match(tok):
         return False
     
@@ -167,11 +160,15 @@ def looks_like_valid_sku(tok: str) -> bool:
     if not re.search(r'\d', tok):
         return False
     
-    # IBM SKUs are typically 7-8 characters
-    if not (5 <= len(tok) <= 10):
+    # IBM SKUs are typically 7-8 characters, allow some flexibility
+    if not (6 <= len(tok) <= 9):
         return False
-        
-    return True
+    
+    # Additional IBM-specific patterns (most start with D0, Y0, etc.)
+    if re.match(r'^[A-Z]\d[A-Z0-9]{5,7}$', tok):
+        return True
+    
+    return False
 
 # ----------------------------------------------------------------------
 # Qty inference (ANY qty, no small-number assumptions)
@@ -325,7 +322,7 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
     extracted_data = []
     i = 0
     max_window = 12  # Try wider chunks first to capture wrapped rows
-    processed_skus = set()  # Track processed SKUs to avoid duplicates
+    processed_positions = set()  # Track processed line positions to avoid duplicates
     
     add_debug(f"[EXTRACTION START] Beginning extraction from {len(lines)} lines")
     
@@ -349,51 +346,56 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                 continue
             start_date, end_date = dates[0], dates[1]
             
-            # NEW: Enhanced SKU identification
+            # ENHANCED SKU identification - look for the ACTUAL SKU, not serial numbers
             sku = None
             desc_start_index = None
             
-            # Log all chunk lines for debugging
             add_debug(f"[CHUNK ANALYSIS] Lines {i}-{i+window}: {[line.strip() for line in chunk_lines]}")
             
-            # Look for SKU patterns in all lines
-            potential_skus = []
+            # Strategy: Find all valid SKUs, then pick the one that's NOT a serial number
+            valid_skus_found = []
             for line_idx, line in enumerate(chunk_lines):
                 line = line.strip()
-                # Skip obvious serial/row numbers
+                
+                # Skip obvious serial/row numbers  
                 if line.isdigit():
-                    add_debug(f"[SKIP SERIAL] Skipping digit-only line: '{line}'")
                     continue
                 
-                # Look for SKU patterns in the line
+                # Find SKU patterns in this line
                 sku_candidates = token_sku_re.findall(line)
                 for candidate in sku_candidates:
                     if looks_like_valid_sku(candidate):
-                        potential_skus.append((candidate, line_idx, line))
+                        # Additional check: reject obvious serial numbers
+                        if candidate.startswith('IE') and len(candidate) > 8:
+                            add_debug(f"[SKU REJECT] Serial number: '{candidate}' in line {line_idx}")
+                            continue
+                        
+                        valid_skus_found.append((candidate, line_idx, line))
                         add_debug(f"[SKU CANDIDATE] Found '{candidate}' in line {line_idx}: '{line}'")
 
-            # Pick the first valid SKU that's not a serial number or duplicate
-            for candidate_sku, line_idx, full_line in potential_skus:
-                # Skip obvious serial numbers like IE4693255O
-                if len(candidate_sku) > 10 or candidate_sku.startswith('IE'):
-                    add_debug(f"[SKU SKIP] Skipping likely serial: '{candidate_sku}'")
-                    continue
+            # Pick the BEST SKU (prefer shorter, IBM-style part numbers)
+            if valid_skus_found:
+                # Sort by: 1) Not starting with 'IE', 2) Length (shorter preferred), 3) Position
+                def sku_priority(sku_info):
+                    candidate, line_idx, line = sku_info
+                    starts_with_ie = candidate.startswith('IE')
+                    length = len(candidate)
+                    return (starts_with_ie, length, line_idx)
                 
-                # Create unique identifier for this SKU + date combination
-                sku_key = f"{candidate_sku}_{start_date}_{end_date}"
-                if sku_key in processed_skus:
-                    add_debug(f"[SKU DUPLICATE] Skipping duplicate: '{candidate_sku}' for dates {start_date}-{end_date}")
-                    continue
-                
-                sku = candidate_sku
-                desc_start_index = line_idx + 1
-                processed_skus.add(sku_key)
-                add_debug(f"[SKU SELECTED] Selected SKU: '{sku}' from line {line_idx}")
-                break
-
-            if not sku:
-                add_debug(f"[SKU NOT FOUND] No valid SKU in chunk lines {i}-{i+window}")
+                best_sku_info = sorted(valid_skus_found, key=sku_priority)[0]
+                sku, sku_line_idx, _ = best_sku_info
+                desc_start_index = sku_line_idx + 1  # Description starts after SKU line
+                add_debug(f"[SKU SELECTED] Best SKU: '{sku}' from {len(valid_skus_found)} candidates")
+            else:
+                add_debug(f"[SKU NOT FOUND] No valid SKUs in chunk lines {i}-{i+window}")
                 continue
+
+            # Additional validation: Avoid processing same position multiple times 
+            position_key = f"{i}_{window}"
+            if position_key in processed_positions:
+                add_debug(f"[POSITION SKIP] Already processed position {i}-{i+window}")
+                continue
+            processed_positions.add(position_key)
             
             # Keep only chunks where a money token is "near" the start date (reduces false positives)
             pos_date = chunk.find(start_date)
@@ -501,7 +503,7 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
         if not matched:
             i += 1
     
-    add_debug(f"[EXTRACTION COMPLETE] Total unique rows extracted: {len(extracted_data)}")
+    add_debug(f"[EXTRACTION COMPLETE] Total rows extracted: {len(extracted_data)}")
     return extracted_data, header_info
 
 # ----------------------------------------------------------------------
@@ -514,7 +516,6 @@ def extract_last_page_text(file_like) -> str:
     
     # Filter to extract IBM terms content
     lines = full_text.splitlines()
-    filtered_lines = []
     
     # First, collect the "Useful/Important web resources" section if it appears before IBM Terms
     useful_resources_section = []
@@ -599,7 +600,7 @@ def extract_last_page_text(file_like) -> str:
     return result
 
 # ----------------------------------------------------------------------
-# Excel creation
+# Excel creation (keeping original as it's working)
 # ----------------------------------------------------------------------
 def create_styled_excel(
     data: list,
