@@ -511,30 +511,32 @@ if not st.session_state.show_team_selection:
     # Stop here - don't show team selection yet
     st.stop()
 
-# 🎯 Team Selection Page (only show after "Get Started" is clicked)
+# Replace the team selection section with this cleaner, smaller version:
+
+# 🎯 Team Selection Section (only show after "Get Started" is clicked)
 if st.session_state.show_team_selection:
-    # Cool team selection page
+    # Smaller, cleaner team selection header
     st.markdown("""
     <div style="
         text-align: center;
-        padding: 2.5rem;
+        padding: 1.5rem;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 20px;
-        margin: 2rem 0;
-        box-shadow: 0 20px 40px rgba(102,126,234,0.3);
+        border-radius: 15px;
+        margin: 1.5rem 0;
+        box-shadow: 0 8px 25px rgba(102,126,234,0.25);
         color: white;
     ">
-        <h1 style="
-            font-size: 2.8rem;
+        <h2 style="
+            font-size: 1.8rem;
             margin: 0;
-            text-shadow: 2px 2px 10px rgba(0,0,0,0.3);
-            font-weight: 700;
+            text-shadow: 1px 1px 5px rgba(0,0,0,0.3);
+            font-weight: 600;
         ">
             🎯 Choose Your Team
-        </h1>
+        </h2>
         <p style="
-            font-size: 1.2rem;
-            margin-top: 1rem;
+            font-size: 1rem;
+            margin: 0.5rem 0 0 0;
             opacity: 0.9;
         ">
             Select your department to access specialized tools
@@ -542,29 +544,13 @@ if st.session_state.show_team_selection:
     </div>
     """, unsafe_allow_html=True)
 
-    # Team selection with enhanced styling
-    st.markdown("""
-    <div style="
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-        padding: 3px;
-        border-radius: 15px;
-        margin: 1.5rem 0;
-    ">
-        <div style="
-            background: white;
-            border-radius: 12px;
-            padding: 1.5rem;
-        ">
-    """, unsafe_allow_html=True)
-
+    # Clean team selection radio buttons - NO extra divs
     team = st.radio(
         "👥 **Select your team:**", 
         ["Finance", "Operations", "Credit", "Sales"], 
         horizontal=True,
         help="Choose your department to see relevant tools!"
     )
-
-    st.markdown("</div></div>", unsafe_allow_html=True)
 
     # Show confirmation with team-specific styling
     if team:
@@ -585,25 +571,27 @@ if st.session_state.show_team_selection:
         st.markdown(f"""
         <div style="
             text-align: center;
-            padding: 2rem;
+            padding: 1.2rem;
             background: {team_colors.get(team, team_colors['Finance'])};
-            border-radius: 15px;
-            margin: 1.5rem 0;
+            border-radius: 12px;
+            margin: 1rem 0;
             color: white;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.1);
         ">
-            <h2 style="
+            <h3 style="
                 margin: 0; 
-                text-shadow: 1px 1px 5px rgba(0,0,0,0.3);
-                font-size: 1.8rem;
+                text-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+                font-size: 1.3rem;
             ">
                 🎉 Perfect! Welcome to team {team}! {team_emojis.get(team, '🎯')}
-            </h2>
-            <p style="margin: 0.8rem 0 0 0; opacity: 0.9; font-size: 1.1rem;">
-                Your specialized tools are loading below... ✨
+            </h3>
+            <p style="margin: 0.5rem 0 0 0; opacity: 0.9; font-size: 0.9rem;">
+                Your specialized tools are ready below ✨
             </p>
         </div>
         """, unsafe_allow_html=True)
+
+# Continue with your existing code...
 
 # Continue with the rest of your existing code for team-specific tools...
 
