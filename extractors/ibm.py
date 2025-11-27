@@ -621,45 +621,62 @@ def create_styled_excel(
                 wrapped = len(line) // max_chars_per_line + (1 if (len(line) % max_chars_per_line) else 0)
                 total_lines += max(1, wrapped)
         return total_lines
-       # Calculate the actual end row of the table content dynamically
+    # Calculate the actual end row of the table content dynamically
     table_end_row = start_row + len(data) + 4  # data rows + summary + spacing
     terms_start_row = max(29, table_end_row + 2)  # Ensure terms start after table
+    
+    # Log the calculated positions for debugging
+    logging.info(f"[TERMS POSITIONING] start_row={start_row}, data_rows={len(data)}, table_end={table_end_row}, terms_start={terms_start_row}")
     
     # Adjust terms positioning dynamically
     adjusted_terms = []
     row_offset = terms_start_row - 29  # Calculate offset from original row 29
     
     for cell_addr, text, *style in terms:
-        # Extract row number and adjust it
-        col_letter = cell_addr[0]
-        original_row = int(cell_addr[1:])
-        new_row = original_row + row_offset
-        new_cell_addr = f"{col_letter}{new_row}"
-        adjusted_terms.append((new_cell_addr, text, *style))
+        try:
+            # Extract row number and adjust it
+            if len(cell_addr) >= 2 and cell_addr[1:].isdigit():
+                col_letter = cell_addr[0]
+                original_row = int(cell_addr[1:])
+                new_row = original_row + row_offset
+                new_cell_addr = f"{col_letter}{new_row}"
+                logging.info(f"[TERMS ADJUST] {cell_addr} -> {new_cell_addr} (offset={row_offset})")
+                adjusted_terms.append((new_cell_addr, text, *style))
+            else:
+                # Keep original if parsing fails
+                adjusted_terms.append((cell_addr, text, *style))
+        except Exception as e:
+            logging.error(f"[TERMS ADJUST ERROR] Failed to adjust {cell_addr}: {e}")
+            adjusted_terms.append((cell_addr, text, *style))
     # Render the terms blocks
     for cell_addr, text, *style in adjusted_terms:
-        row_num = int(cell_addr[1:])
-        col_letter = cell_addr[0]
-        merge_rows = style[0].get("merge_rows") if style else None
-        end_row = row_num + (merge_rows - 1 if merge_rows else 0)
-        
-        # Debug: Log what we're rendering
-        logging.info(f"Rendering term at {cell_addr}, rows {row_num}-{end_row}, merge_rows={merge_rows}")
-        
-        ws.merge_cells(f"{col_letter}{row_num}:H{end_row}")
-        ws[cell_addr] = text
-        ws[cell_addr].alignment = Alignment(wrap_text=True, vertical="top")
-        # Height by estimated wrap - balanced for content visibility
-        line_count = estimate_line_count(text, max_chars_per_line=80)
-        total_height = max(18, line_count * 16)  # Restored reasonable height
-        if merge_rows:
-            per_row = total_height / merge_rows
-            for r in range(row_num, end_row + 1):
-                ws.row_dimensions[r].height = per_row  # Allow natural height
-        else:
-            ws.row_dimensions[row_num].height = total_height  # Allow natural height
-        if style and "bold" in style[0]:
-            ws[cell_addr].font = Font(**style[0])
+        try:
+            if len(cell_addr) >= 2 and cell_addr[1:].isdigit():
+                row_num = int(cell_addr[1:])
+                col_letter = cell_addr[0]
+                merge_rows = style[0].get("merge_rows") if style else None
+                end_row = row_num + (merge_rows - 1 if merge_rows else 0)
+                
+                # Debug: Log what we're rendering
+                logging.info(f"[TERMS RENDER] {cell_addr}, rows {row_num}-{end_row}, merge_rows={merge_rows}")
+                
+                ws.merge_cells(f"{col_letter}{row_num}:H{end_row}")
+                ws[cell_addr] = text
+                ws[cell_addr].alignment = Alignment(wrap_text=True, vertical="top")
+                # Height by estimated wrap - balanced for content visibility
+                line_count = estimate_line_count(text, max_chars_per_line=80)
+                total_height = max(18, line_count * 16)  # Restored reasonable height
+                if merge_rows:
+                   per_row = total_height / merge_rows
+                   for r in range(row_num, end_row + 1):
+                        ws.row_dimensions[r].height = per_row  # Allow natural height
+                else:
+                    ws.row_dimensions[row_num].height = total_height  # Allow natural height
+                if style and "bold" in style[0]:
+                    ws[cell_addr].font = Font(**style[0])
+        except Exception as e:
+            logging.error(f"[TERMS RENDER ERROR] Failed to render {cell_addr}: {e}")
+
     # Divider line across current header row if needed - only for our table columns
     border_row = 4
     bottom_border = Border(bottom=Side(style="thin", color="000000"))
@@ -667,10 +684,18 @@ def create_styled_excel(
     for col in range(1, table_last_col + 1):
         ws.cell(row=border_row, column=col).border = bottom_border
     
-    last_terms_row = max([int(addr[1:]) + (style[0].get("merge_rows", 1) - 1) 
-                         for addr, text, *style in adjusted_terms 
-                         if style], default=terms_start_row)
+       # Calculate IBM Terms start position more safely
+    try:
+        last_terms_row = max([int(addr[1:]) + (style[0].get("merge_rows", 1) - 1) 
+                             for addr, text, *style in adjusted_terms 
+                             if style and len(addr) >= 2 and addr[1:].isdigit()], 
+                             default=terms_start_row + 10)  # Fallback with safe spacing
+    except Exception:
+        last_terms_row = terms_start_row + 10  # Safe fallback
+        
     current_row = last_terms_row + 3
+    logging.info(f"[IBM TERMS START] Starting IBM Terms at row {current_row}")
+    
     
     # IBM Terms header - blue like in the screenshot
     ibm_header_cell = ws[f"C{current_row}"]
