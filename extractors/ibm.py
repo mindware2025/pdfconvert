@@ -53,13 +53,31 @@ def parse_euro_number(value: str):
 # ----------------------------------------------------------------------
 # SKU map (for description correction)
 # ----------------------------------------------------------------------
-def _load_sku_map(csv_path="Quotation IBM PriceList csv.csv"):
-    if not os.path.exists(csv_path):
-        logging.warning(f"[SKU MAP] CSV not found at {csv_path}. Descriptions will not be auto-corrected.")
-        return {}
+def _load_sku_map(csv_path=None):
+    if csv_path is None:
+        # Try multiple possible locations
+        possible_paths = [
+            "Quotation IBM PriceList csv.csv",  # Same directory as script
+            os.path.join(os.path.dirname(__file__), "Quotation IBM PriceList csv.csv"),  # extractors folder
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), "Quotation IBM PriceList csv.csv"),  # parent folder
+            "/mount/src/pdfconvert/Quotation IBM PriceList csv.csv",  # Streamlit Cloud path
+            "./Quotation IBM PriceList csv.csv"  # Current working directory
+        ]
+        
+        csv_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                csv_path = path
+                logging.info(f"[SKU MAP] Found CSV at: {path}")
+                break
+        
+        if csv_path is None:
+            logging.warning(f"[SKU MAP] CSV not found in any of these locations: {possible_paths}")
+            return {}
     try:
         sku_map_df = pd.read_csv(csv_path, usecols=["SKU", "SKU DESCRIPTION"])
         sku_map_df.dropna(subset=["SKU", "SKU DESCRIPTION"], inplace=True)
+        logging.info(f"[SKU MAP] Successfully loaded {len(sku_map_df)} SKU mappings")
         return dict(zip(sku_map_df["SKU"], sku_map_df["SKU DESCRIPTION"]))
     except Exception as e:
         logging.warning(f"[SKU MAP] Could not load CSV: {e}")
