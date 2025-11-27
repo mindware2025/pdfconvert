@@ -598,12 +598,13 @@ elif tool == "💻 IBM Quotation":
 
     if uploaded_file:
        file_bytes = uploaded_file.read()
-       file_stream = io.BytesIO(file_bytes)
        ibm_terms_text = extract_last_page_text(io.BytesIO(file_bytes))
        st.success("✅ PDF uploaded successfully.")
     
-       # Pass master_data to your extraction function
-       data, header_info = extract_ibm_data_from_pdf(io.BytesIO(file_bytes), master_data=master_data)
+       # Extract data (NO master_data parameter)
+       data, header_info = extract_ibm_data_from_pdf(io.BytesIO(file_bytes))
+       
+       # Correct descriptions using master data
        corrected_data = correct_descriptions(data, master_data=master_data)
        
        if corrected_data and len(corrected_data) > 0:
