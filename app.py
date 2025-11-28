@@ -285,7 +285,8 @@ if not st.session_state.show_team_selection:
             margin-bottom: 1.5rem;
             font-weight: 700;
         ">
-            💡 Why You'll Love Our Tools
+          💡 Why Our Tools Will Make You the Office Hero
+          🎭 Warning: These Tools May Cause Extreme Productivity
         </h2>
     </div>
     """, unsafe_allow_html=True)
