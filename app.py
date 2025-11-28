@@ -153,23 +153,141 @@ CORRECT_PASSWORD = os.getenv("PASSWORD")
 
 if "login_state" not in st.session_state:
     st.session_state.login_state = "login" 
+# def show_login():
+    
+#     for _ in range(10):
+#         st.write("")
+   
+#     col1, col2, col3 = st.columns([1,2,1])
+#     with col2:
+#         st.title("🔒 Login to PDF to Excel")
+#         username = st.text_input("Username", key="login_user")
+#         password = st.text_input("Password", type="password", key="login_pass")
+#         if st.button("Login", key="login_btn"):
+#             if username == CORRECT_USERNAME and password == CORRECT_PASSWORD:
+#                 st.session_state.login_state = "success"
+#             else:
+#                 st.session_state.login_state = "fail"
+
 def show_login():
+    # Add Christmas styling and animations
+    st.markdown("""
+    <style>
+    @keyframes snowfall {
+        0% { transform: translateY(-10px) rotate(0deg); opacity: 1; }
+        100% { transform: translateY(100vh) rotate(360deg); opacity: 0; }
+    }
+    @keyframes glow {
+        0%, 100% { text-shadow: 0 0 10px #1a73e8, 0 0 20px #1a73e8; }
+        50% { text-shadow: 0 0 20px #1a73e8, 0 0 30px #1a73e8, 0 0 40px #1a73e8; }
+    }
+    @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-8px); }
+    }
+    .login-snow {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: -1;
+    }
+    .snowflake {
+        position: absolute;
+        color: rgba(26, 115, 232, 0.6);
+        user-select: none;
+        animation: snowfall linear infinite;
+    }
+    .login-container {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e3f2fd 100%);
+        border-radius: 20px;
+        padding: 2rem;
+        box-shadow: 0 15px 35px rgba(26, 115, 232, 0.1);
+        border: 2px solid #e3f2fd;
+        margin: 2rem 0;
+        position: relative;
+        overflow: hidden;
+    }
+    .login-title {
+        animation: glow 3s ease-in-out infinite;
+        color: #1a73e8;
+        text-align: center;
+        margin-bottom: 1rem;
+        position: relative;
+    }
+    .christmas-icon {
+        animation: float 2s ease-in-out infinite;
+        display: inline-block;
+        font-size: 1.5rem;
+        margin: 0 0.5rem;
+    }
+    </style>
+    
+    <!-- Animated snowflakes -->
+    <div class="login-snow">
+        <div class="snowflake" style="left: 10%; animation-duration: 3s; animation-delay: 0s;">❄️</div>
+        <div class="snowflake" style="left: 20%; animation-duration: 4s; animation-delay: 1s;">🎄</div>
+        <div class="snowflake" style="left: 30%; animation-duration: 3.5s; animation-delay: 0.5s;">❄️</div>
+        <div class="snowflake" style="left: 40%; animation-duration: 5s; animation-delay: 2s;">⭐</div>
+        <div class="snowflake" style="left: 50%; animation-duration: 3.2s; animation-delay: 1.5s;">❄️</div>
+        <div class="snowflake" style="left: 60%; animation-duration: 4.5s; animation-delay: 0.8s;">🎁</div>
+        <div class="snowflake" style="left: 70%; animation-duration: 3.8s; animation-delay: 2.2s;">❄️</div>
+        <div class="snowflake" style="left: 80%; animation-duration: 4.2s; animation-delay: 1.2s;">🌟</div>
+        <div class="snowflake" style="left: 90%; animation-duration: 3.6s; animation-delay: 0.3s;">❄️</div>
+    </div>
+    """, unsafe_allow_html=True)
     
     for _ in range(10):
         st.write("")
    
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.title("🔒 Login to PDF to Excel")
-        username = st.text_input("Username", key="login_user")
-        password = st.text_input("Password", type="password", key="login_pass")
-        if st.button("Login", key="login_btn"):
+        # Enhanced login container
+        st.markdown('<div class="login-container">', unsafe_allow_html=True)
+        
+        # Animated title with Christmas emojis
+        st.markdown("""
+        <h1 class="login-title">
+            <span class="christmas-icon" style="animation-delay: 0s;">🎄</span>
+            🎄 Mindware Productivity Portal 🎄
+            <span class="christmas-icon" style="animation-delay: 1s;">🎄</span>
+        </h1>
+        """, unsafe_allow_html=True)
+        
+        # Input fields with Christmas emojis
+        username = st.text_input("👤 Username", key="login_user", placeholder="Enter your username...")
+        password = st.text_input("🔐 Password", type="password", key="login_pass", placeholder="Enter your password...")
+        
+        # Enhanced login button
+        if st.button("🎄 **Login** 🎄", key="login_btn", use_container_width=True, type="primary"):
             if username == CORRECT_USERNAME and password == CORRECT_PASSWORD:
                 st.session_state.login_state = "success"
+                st.balloons()
+                st.snow()
             else:
                 st.session_state.login_state = "fail"
+        
+        # Christmas footer
+        st.markdown("""
+        <div style="
+            text-align: center;
+            margin-top: 2rem;
+            padding: 1rem;
+            background: linear-gradient(90deg, #e3f2fd, #f3e5f5);
+            border-radius: 10px;
+            border: 1px solid #e1f5fe;
+        ">
+            <p style="margin: 0; color: #1a73e8; font-weight: 500;">
+                Made with ❤️ by Mindware✨<br>
+                <small style="opacity: 0.8;">Happy holidays and productive work! 🌟</small>
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown('</div>', unsafe_allow_html=True)  # Close login container
 def show_fail():
-    st.image("data:image/png;base64,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", width=350)
     st.error("Oops! Wrong credentials... Nice try, but no entry! 😜")
     if st.button("Back to Login", key="back_login"):
         st.session_state.login_state = "login"
