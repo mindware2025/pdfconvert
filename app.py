@@ -310,9 +310,9 @@ if not st.session_state.show_team_selection:
             justify-content: center;
         ">
             <div>
-                <div style="font-size: 2rem; margin-bottom: 0.5rem;">🎯</div>
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">🧠</div>
                 <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
-                    Turn PDFs into Excel magic!
+                    Smart tools for smart people like you
                 </p>
             </div>
         </div>
@@ -360,7 +360,7 @@ if not st.session_state.show_team_selection:
             justify-content: center;
         ">
             <div>
-                <div style="font-size: 2rem; margin-bottom: 0.5rem;">🧠</div>
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">🎯</div>
                 <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
                     Smart tools for smart people like you
                 </p>
