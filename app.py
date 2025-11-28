@@ -179,7 +179,450 @@ if st.session_state.login_state == "login":
 elif st.session_state.login_state == "fail":
     show_fail()
     st.stop()
-team = st.radio("👥 Select your team:", ["Finance", "Operations", "Credit"], horizontal=True)
+
+# Initialize session state for welcome flow
+if "show_team_selection" not in st.session_state:
+    st.session_state.show_team_selection = False
+
+# 🎉 Welcome Page (only show if team selection not started)
+if not st.session_state.show_team_selection:
+    st.balloons()  # Immediate celebration!
+
+    # Cool welcome message with animation-like styling
+    st.markdown("""
+    <div style="
+        text-align: center;
+        padding: 2rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 20px;
+        margin: 2rem 0;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    ">
+        <h1 style="
+            color: white;
+            font-size: 3rem;
+            margin: 0;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            animation: pulse 2s infinite;
+        ">
+            🎄 Ho Ho Ho! Welcome to Mindware Tools! 🎄
+        </h1>
+        <p style="
+            color: #f0f0f0;
+            font-size: 1.3rem;
+            margin-top: 1rem;
+        ">
+            Ready to supercharge your productivity? Let's get started! ⚡
+        </p>
+    </div>
+
+    <style>
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Fun statistics dashboard
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.markdown("""
+        <div style="text-align: center; padding: 1rem; background: linear-gradient(45deg, #FF6B6B, #FF8E53); border-radius: 15px; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+            <h2 style="margin: 0; font-size: 2.5rem;">🛠️</h2>
+            <h3 style="margin: 0;">12</h3>
+            <p style="margin: 0;">Tools Available</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown("""
+        <div style="text-align: center; padding: 1rem; background: linear-gradient(45deg, #4ECDC4, #44A08D); border-radius: 15px; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+            <h2 style="margin: 0; font-size: 2.5rem;">⚡</h2>
+            <h3 style="margin: 0;">99.9%</h3>
+            <p style="margin: 0;">Accuracy Rate</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        st.markdown("""
+        <div style="text-align: center; padding: 1rem; background: linear-gradient(45deg, #A8EDEA, #00C9FF); border-radius: 15px; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+            <h2 style="margin: 0; font-size: 2.5rem;">🚀</h2>
+            <h3 style="margin: 0;">10x</h3>
+            <p style="margin: 0;">Faster Processing</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col4:
+        st.markdown("""
+        <div style="text-align: center; padding: 1rem; background: linear-gradient(45deg, #F093FB, #F5576C); border-radius: 15px; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+            <h2 style="margin: 0; font-size: 2.5rem;">⏰</h2>
+            <h3 style="margin: 0;">24/7</h3>
+            <p style="margin: 0;">Always Ready</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # REPLACE the entire motivational messages section with this:
+    
+        # FIRST - Close the col4 block properly
+        # (Remove any 'with col4:' or column indentation before this section)
+    
+    # Close the statistics section completely and start fresh
+    st.markdown("---")  # Add a separator line
+    
+    # Motivational messages section - FULL WIDTH, NOT in any column
+    st.markdown("""
+    <div style="
+        text-align: center;
+        margin: 2rem 0;
+        width: 100%;
+    ">
+        <h2 style="
+            color: #667eea;
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            font-weight: 700;
+        ">
+            💡 Why You'll Love Our Tools
+        </h2>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Create fresh columns for messages - FULL WIDTH
+    msg_row1_col1, msg_row1_col2 = st.columns(2)
+    
+    with msg_row1_col1:
+        st.markdown("""
+        <div style="
+            padding: 1.2rem;
+            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+            border-radius: 12px;
+            margin: 0.5rem;
+            color: white;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(255,154,158,0.3);
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        ">
+            <div>
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">🎯</div>
+                <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                    Turn PDFs into Excel magic!
+                </p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with msg_row1_col2:
+        st.markdown("""
+        <div style="
+            padding: 1.2rem;
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            border-radius: 12px;
+            margin: 0.5rem;
+            color: white;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(168,237,234,0.3);
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        ">
+            <div>
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">💪</div>
+                <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                    Save hours of manual work!
+                </p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    msg_row2_col1, msg_row2_col2 = st.columns(2)
+    
+    with msg_row2_col1:
+        st.markdown("""
+        <div style="
+            padding: 1.2rem;
+            background: linear-gradient(135deg, #d299c2 0%, #fef9d7 100%);
+            border-radius: 12px;
+            margin: 0.5rem;
+            color: #5d4e75;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(210,153,194,0.3);
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        ">
+            <div>
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">🧠</div>
+                <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                    Smart tools for smart people like you
+                </p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with msg_row2_col2:
+        st.markdown("""
+        <div style="
+            padding: 1.2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            margin: 0.5rem;
+            color: white;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(102,126,234,0.3);
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        ">
+            <div>
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">🌟</div>
+                <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                    Every file = efficiency step!
+                    
+                </p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    msg_row3_col1, msg_row3_col2 = st.columns(2)
+    
+    with msg_row3_col1:
+        st.markdown("""
+        <div style="
+            padding: 1.2rem;
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            border-radius: 12px;
+            margin: 0.5rem;
+            color: #8b4513;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(255,236,210,0.3);
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        ">
+            <div>
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔥</div>
+                <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                    Ready to automate the boring stuff?
+                </p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with msg_row3_col2:
+        st.markdown("""
+        <div style="
+            padding: 1.2rem;
+            background: linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%);
+            border-radius: 12px;
+            margin: 0.5rem;
+            color: white;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(137,247,254,0.3);
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        ">
+            <div>
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">✨</div>
+                <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                    Making the impossible possible, one click at a time!
+                </p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    msg_row4_col1, msg_row4_col2 = st.columns(2)
+    
+    with msg_row4_col1:
+        st.markdown("""
+        <div style="
+            padding: 1.2rem;
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            border-radius: 12px;
+            margin: 0.5rem;
+            color: white;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(250,112,154,0.3);
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        ">
+            <div>
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">🎉</div>
+                <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                    Time to show those spreadsheets who's boss!
+                </p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with msg_row4_col2:
+        st.markdown("""
+        <div style="
+            padding: 1.2rem;
+            background: linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%);
+            border-radius: 12px;
+            margin: 0.5rem;
+            color: white;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(255,154,158,0.3);
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        ">
+            <div>
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">🚀</div>
+                <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                    Blast off to productivity!
+                </p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Time-based greeting
+    import datetime
+    current_hour = datetime.datetime.now().hour
+
+    if current_hour < 12:
+        greeting = "🌅 Good Morning! Ready to conquer the day?"
+        emoji = "☕"
+    elif current_hour < 17:
+        greeting = "☀️ Good Afternoon! Let's get productive!"
+        emoji = "💼"
+    else:
+        greeting = "🌙 Good Evening! Working late? We've got you covered!"
+        emoji = "🌟"
+
+    st.markdown(f"""
+    <div style="
+        text-align: center;
+        padding: 1rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        margin-bottom: 2rem;
+    ">
+        <h3 style="margin: 0;">{emoji} {greeting}</h3>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Add a small delay for dramatic effect
+    import time
+    time.sleep(0.5)
+    st.snow()  # Another fun effect after the delay!
+
+    # Big "Get Started" Button
+    st.markdown("<br>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("🚀 **GET STARTED!** 🚀", 
+                     use_container_width=True, 
+                     type="primary",
+                     help="Click to proceed to team selection!"):
+            st.session_state.show_team_selection = True
+            st.balloons()
+            st.snow()
+            st.rerun()
+
+    # Stop here - don't show team selection yet
+    st.stop()
+
+# Replace the team selection section with this cleaner, smaller version:
+
+# 🎯 Team Selection Section (only show after "Get Started" is clicked)
+if st.session_state.show_team_selection:
+    # Smaller, cleaner team selection header
+    st.markdown("""
+    <div style="
+        text-align: center;
+        padding: 1.5rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 15px;
+        margin: 1.5rem 0;
+        box-shadow: 0 8px 25px rgba(102,126,234,0.25);
+        color: white;
+    ">
+        <h2 style="
+            font-size: 1.8rem;
+            margin: 0;
+            text-shadow: 1px 1px 5px rgba(0,0,0,0.3);
+            font-weight: 600;
+        ">
+            🎯 Choose Your Team
+        </h2>
+        <p style="
+            font-size: 1rem;
+            margin: 0.5rem 0 0 0;
+            opacity: 0.9;
+        ">
+            Select your department to access specialized tools
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Clean team selection radio buttons - NO extra divs
+    team = st.radio(
+        "👥 **Select your team:**", 
+        ["Finance", "Operations", "Credit", "Sales"], 
+        horizontal=True,
+        help="Choose your department to see relevant tools!"
+    )
+
+    # Show confirmation with team-specific styling
+    if team:
+        team_colors = {
+            "Finance": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+            "Operations": "linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)", 
+            "Credit": "linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)",
+            "Sales": "linear-gradient(135deg, #d299c2 0%, #fef9d7 100%)"
+        }
+
+        team_emojis = {
+            "Finance": "💰",
+            "Operations": "⚙️", 
+            "Credit": "📊",
+            "Sales": "📈"
+        }
+
+        st.markdown(f"""
+        <div style="
+            text-align: center;
+            padding: 1.2rem;
+            background: {team_colors.get(team, team_colors['Finance'])};
+            border-radius: 12px;
+            margin: 1rem 0;
+            color: white;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+        ">
+            <h3 style="
+                margin: 0; 
+                text-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+                font-size: 1.3rem;
+            ">
+                🎉 Perfect! Welcome to team {team}! {team_emojis.get(team, '🎯')}
+            </h3>
+            <p style="margin: 0.5rem 0 0 0; opacity: 0.9; font-size: 0.9rem;">
+                Your specialized tools are ready below ✨
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+# Continue with your existing code...
+
+# Continue with the rest of your existing code for team-specific tools...
 
 def validate_customer_code(df, file_name="File"):
     """

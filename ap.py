@@ -13,10 +13,11 @@
 # from openpyxl.utils import get_column_letter
 # import gspread
 # from google.oauth2.service_account import Credentials
-# from extractors.barcode import barcode_tool
 # from extractors.barcodeper50 import barcode_tooll
 # from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_multiple_aws_pdfs
 # from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
+# from extractors.insurance import process_insurance_excel
+# from extractors.insurance2  import process_grouped_customer_files
 # from utils.helpers import format_amount, format_invoice_date, format_month_year
 # from dotenv import load_dotenv
 # load_dotenv()
@@ -57,8 +58,7 @@
 # gc = gspread.authorize(creds)
 
 # tool_sheet = gc.open(SHEET_NAME).worksheet("Sheet1")     # Main usage sheet
-# feedback_sheet = gc.open(SHEET_NAME).worksheet("Feedback")  # Feedback sheet
-
+# env = st.secrets.get("env", "live")  # Default to live if not set
 
 # def update_usage(tool_name, team):
 #     month = datetime.today().strftime("%b-%Y")
@@ -74,10 +74,6 @@
 
 #     if not found:
 #         tool_sheet.append_row([tool_name, month, 1, team])
-# def log_feedback(tool_name, team, user="", feedback=""):
-#     if feedback.strip():  # Only log if user wrote something
-#         feedback_sheet.append_row([tool_name, datetime.today().strftime("%b-%Y"), team, user, feedback, datetime.now().strftime("%Y-%m-%d %H:%M")])
-
 
 
 
@@ -183,9 +179,22 @@
 # elif st.session_state.login_state == "fail":
 #     show_fail()
 #     st.stop()
-# team = st.radio("👥 Select your team:", ["Finance", "Operations"], horizontal=True)
-# user_name = st.text_input("👤 Enter your name (optional):")
-# feedback = st.text_area("💬 Any feedback about this tool? (optional)")
+# team = st.radio("👥 Select your team:", ["Finance", "Operations", "Credit"], horizontal=True)
+
+# def validate_customer_code(df, file_name="File"):
+#     """
+#     Validates that Customer Code column has no empty or missing values.
+#     Shows Streamlit error and stops processing if invalid.
+#     """
+#     if "CustomerCode" not in df.columns:
+#         st.error(f"❌ {file_name}: Missing 'Customer Code' column.")
+#         st.stop()
+
+#     # Check for missing or empty values
+#     if df["CustomerCode"].isna().any() or (df["CustomerCode"].astype(str).str.strip() == "").any():
+#         st.error(f"❌ {file_name}: Kindly check the 'Customer Code' column — it cannot be empty.")
+#         st.stop()
+     
 
 
 # def extractor_workflow(
@@ -235,8 +244,7 @@
 #                     file_name=file_name,
 #                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 #                     on_click=lambda: (
-#                             update_usage("Google Automation", team),
-#                             log_feedback("google Automation", team, user_name, feedback)
+#                             update_usage("Google Automation", team)
 #                         ),
 #                     key=f"download_{extractor_name}"
 #                 )
@@ -249,7 +257,10 @@
 #                     label="Download as Excel",
 #                     data=towrite,
 #                     file_name=file_name,
-#                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+#                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+#                     on_click=lambda: (
+#                             update_usage("google Automation", team)
+#                         ),
 #                 )
 #         else:
 #             st.warning("No table data found in the uploaded PDF.")
@@ -275,8 +286,12 @@
 #         "-- Select a tool --",
 #         "💻 Dell Invoice Extractor",
 #         "🧾 Cloud Invoice Tool",
-#         "📦 Barcode PDF Generator",
 #         "📦 Barcode PDF Generator grouped"
+#     ]
+# elif team == "Credit":
+#     TOOL_OPTIONS = [
+#         "AR to EDD file",
+#         "Coface CSV Uploader"
 #     ]
 # else:
 #     TOOL_OPTIONS = ["-- Select a tool --"]
@@ -373,8 +388,7 @@
 #                 file_name="claims_output.xlsx",
 #                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 #                 on_click=lambda: (
-#                             update_usage("Claims Automation", team),
-#                             log_feedback("Claims Automation", team, user_name, feedback)
+#                             update_usage("Claims Automation", team)
 #                         ),
 #                 key="claims_download"
 #             )
@@ -437,6 +451,9 @@
 #         else:
 #             st.error("Unsupported file format. Please upload a CSV or Excel file.")
 #             st.stop()
+#             # --- Validate Customer Code before proceeding ---
+#         validate_customer_code(df, "Cloud Invoice File")
+
 #         # Process invoice data
 #         final_df = build_cloud_invoice_df(df)
 #         final_df = map_invoice_numbers(final_df)
@@ -491,11 +508,11 @@
         
 #         # Create Excel workbook with formulas
 #         red_fill = PatternFill(start_color="FF9999", end_color="FF9999", fill_type="solid")
-#         positive_only_df = sorted_df[sorted_df["Gross Value"].astype(float) >= 0]
-#         if "_highlight_end_user" in positive_only_df.columns:
-#             df_to_write = positive_only_df.drop(columns=["_highlight_end_user"])
-#         else:
-#             df_to_write = positive_only_df.copy()
+#         df_to_write = sorted_df.copy()
+        
+#         # Remove highlight flag column before writing
+#         if "_highlight_end_user" in df_to_write.columns:
+#             df_to_write = df_to_write.drop(columns=["_highlight_end_user"])
         
 #         # Get index of 'End User' column (1-based for Excel)
 #         try:
@@ -558,13 +575,15 @@
 #             file_name="cloud_invoice.xlsx",
 #             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 #             on_click=lambda: (
-#                             update_usage("Cloud Automation", team),
-#                             log_feedback("Cloud Automation", team, user_name, feedback)
+#                             update_usage("Cloud Automation", team)
 #                         ),
 
 #         )
-#         # --- Download SRCL File ---
 #         srcl_buffer = create_srcl_file(neg_df)  # only negative invoices
+
+
+  
+
 
 
 #         st.download_button(
@@ -572,37 +591,12 @@
 #            data=srcl_buffer.getvalue(),
 #            file_name="srcl_file.xlsx",
 #            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-#            on_click=lambda: (
-#                             update_usage("Cloud Automation (SRCL)", team),
-#                             log_feedback("Cloud Automation (SRCL)", team, user_name, feedback)
-#                         ),
+         
 # )
-        
+     
 
-# elif tool == "📦 Barcode PDF Generator":
-#     st.title("📦 Barcode PDF Generator")
-#     st.write("Upload a CSV file with PalletID and IMEIs to generate barcode PDF.")
-
-#     pdf_bytes, success = barcode_tool()
-
-#     if success and pdf_bytes:
-#         st.success("✅ Barcode PDF is ready!")
-
-#         # Create ZIP buffer and write PDF into it
-#         zip_buffer = io.BytesIO()
-#         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-#             zip_file.writestr("pallet_barcodes_fullpage.pdf", pdf_bytes)
-#         zip_buffer.seek(0)
-
-#         st.download_button(
-#             label="📥 Download Full-Page Barcode PDF (Zipped)",
-#             data=zip_buffer,
-#             file_name="pallet_barcodes_fullpage.zip",
-#             mime="application/zip"
-#         )
 
 # elif tool == "📦 Barcode PDF Generator grouped":
-#     st.title("📦 Barcode PDF Generator grouped")
 #     st.write("Upload a CSV file with PalletID and IMEIs to generate barcode PDF.")
 
 #     pdf_bytes, success = barcode_tooll()
@@ -618,9 +612,12 @@
 
 #         st.download_button(
 #             label="📥 Download Full-Page Barcode PDF (Zipped)",
-#             data=zip_buffer,
+#             data=pdf_bytes,
 #             file_name="pallet_barcodes_fullpage.zip",
-#             mime="application/zip"
+#             mime="application/zip",
+#             on_click=lambda: (
+#                             update_usage("barcode Automation", team)
+#                         ),
 
 #         )
 
@@ -896,8 +893,7 @@
 #                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 #                 key="download_dell_pre_alert",
 #                 on_click=lambda: (
-#                             update_usage("Dell Automation", team),
-#                             log_feedback("DELL Automation", team, user_name, feedback)
+#                             update_usage("Dell Automation", team)
 #                         ),
 #             )
 #         else:
@@ -960,15 +956,65 @@
 #                     mime="application/zip",
              
 #                     on_click=lambda: (
-#                             update_usage("AWS Automation", team),
-#                             log_feedback("AWS Automation", team, user_name, feedback)
+#                             update_usage("AWS Automation", team)
 #                         ),
 #                 )
 #             else:
 #                 st.warning("No data extracted from the uploaded AWS PDFs.")
 #         else:
 #             st.info("Please upload one or more AWS invoice PDFs to begin.")
+            
+# elif tool == "Coface CSV Uploader":
+    
+#     st.write("Upload an Excel file with customer invoice data to generate grouped outputs by customer code.")
+    
+#     uploaded_file = st.file_uploader("📤 Upload Excel File", type=["xlsx"])
+    
+#     if uploaded_file:
+#         st.success("✅ File uploaded successfully.")
+#         zip_output = process_grouped_customer_files(uploaded_file)
+    
+#         st.download_button(
+#             label="⬇️ Download All Customer Files (ZIP)",
+#             data=zip_output.getvalue(),
+#             file_name="customer_outputs.zip",
+#             mime="application/zip",
+#             on_click=lambda: (
+#                             update_usage("credit format by customer", team)
+#                         ),
+#         )
+# elif tool == "AR to EDD file":
+#     st.title("AR to EDD file")
+#     st.write("Upload the insurance Excel file (starting from row 16) to filter and extract relevant data.")
 
+#     ageing_threshold = st.number_input(
+#         label="📅 Minimum Ageing Threshold (days)",
+#         min_value=0,
+#         value=200,
+#         step=10,
+#         help="Only include records with ageing greater than this number"
+#     )
+
+#     uploaded_file = st.file_uploader(
+#         "Choose Insurance Excel File", type=["xlsx"], key="insurance_upload"
+#     )
+
+#     if uploaded_file:
+#         output_excel = process_insurance_excel(
+#             uploaded_file,
+#             ageing_filter=True,
+#             ageing_threshold=ageing_threshold
+#         )
+
+#         st.download_button(
+#             label="⬇️ Download AR to EDD file",
+#             data=output_excel.getvalue(),
+#             file_name="EDD.xlsx",
+#             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+#             on_click=lambda: (
+#                             update_usage("credit Automation ", team)
+#                         ),
+#         )
 # elif tool == "Other":
 #     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
 #     st.info("Currently, only the Google DNTS Extractor tool is available. More tools can be added based on your requirements.")
