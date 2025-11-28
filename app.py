@@ -177,7 +177,7 @@ if not st.session_state.show_team_selection:
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
             animation: pulse 2s infinite;
         ">
-            🚀 Welcome to Mindware Tools! 🚀
+            🎄 Ho Ho Ho! Welcome to Mindware Tools! 🎄
         </h1>
         <p style="
             color: #f0f0f0;
