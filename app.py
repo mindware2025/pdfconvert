@@ -386,7 +386,6 @@ if not st.session_state.show_team_selection:
                 <div style="font-size: 2rem; margin-bottom: 0.5rem;">🌟</div>
                 <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">
                     Every file = efficiency step!
-                    
                 </p>
             </div>
         </div>
