@@ -244,8 +244,6 @@ def show_login():
    
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        # Enhanced login container
-        st.markdown('<div class="login-container">', unsafe_allow_html=True)
         
         # Animated title with Christmas emojis
         st.markdown("""
