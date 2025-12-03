@@ -492,7 +492,7 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                 for line_idx, line in enumerate(chunk_lines[:8]):  # Check first 8 lines
                     line = line.strip()
                     # Check for decimal numbers that could be quantities
-                    if re.match(r'^\d+\.\d{3}$', line):  # Pattern like 1.780
+                    if re.match(r'^\d+\.\d{4}$', line):  # Pattern like 1.780
                         # Parse but maintain 3-decimal precision
                         try:
                             decimal_val = float(line)
