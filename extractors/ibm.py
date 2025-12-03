@@ -498,9 +498,9 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                         # Check for decimal numbers that could be quantities
                         if re.match(r'^\d+\.\d{3}$', line):  # Pattern like 1.780
                             decimal_qty = float(line)
-                            if 1 <= decimal_qty <= 100000:
-                                qty = int(decimal_qty)  # Convert 1.780 to 1780
-                                add_debug(f"[DECIMAL QTY] sku={sku} converted {line} to {qty}")
+                            if 0.1 <= decimal_qty <= 100000:  # Allow decimal quantities
+                                qty = decimal_qty  # Keep as decimal: 1.780 stays 1.780
+                                add_debug(f"[DECIMAL QTY] sku={sku} keeping decimal qty={qty}")
                                 break
                         # Check for comma-separated thousands (like 1,780)
                         elif re.match(r'^\d{1,3}(,\d{3})+$', line):  # Pattern like 1,780
@@ -510,9 +510,9 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                                 add_debug(f"[COMMA QTY] sku={sku} converted {line} to {qty}")
                                 break
             
-            if qty is None or not (1 <= qty <= 100000):
-                add_debug(f"[QTY INVALID] sku={sku} invalid qty={qty}")
-                continue
+            if qty is None or not (0.1 <= qty <= 100000):  # Allow decimal quantities >= 0.1
+                 add_debug(f"[QTY INVALID] sku={sku} invalid qty={qty}")
+                 continue
             
             # ---- Bid Unit/Ext SVP (via money token positions) ----
             bid_unit_svp = None
