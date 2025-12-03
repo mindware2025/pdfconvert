@@ -482,13 +482,33 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
             
             
             
+                        # Replace the fallback quantity detection section around line 395-405:
+            
             # To this (more permissive):
             if qty is None:
-                # Try simple first-line detection
+                # Strategy 1: Try simple first-line detection
                 first_line = chunk_lines[0].strip()
                 if first_line.isdigit() and 1 <= int(first_line) <= 100000:
                     qty = int(first_line)
                     add_debug(f"[FALLBACK QTY] sku={sku} using first line qty={qty}")
+                else:
+                    # Strategy 2: Look for decimal quantities (like 1.780)
+                    for line in chunk_lines[:5]:  # Check first 5 lines
+                        line = line.strip()
+                        # Check for decimal numbers that could be quantities
+                        if re.match(r'^\d+\.\d{3}$', line):  # Pattern like 1.780
+                            decimal_qty = float(line)
+                            if 1 <= decimal_qty <= 100000:
+                                qty = int(decimal_qty)  # Convert 1.780 to 1780
+                                add_debug(f"[DECIMAL QTY] sku={sku} converted {line} to {qty}")
+                                break
+                        # Check for comma-separated thousands (like 1,780)
+                        elif re.match(r'^\d{1,3}(,\d{3})+$', line):  # Pattern like 1,780
+                            comma_qty = int(line.replace(',', ''))
+                            if 1 <= comma_qty <= 100000:
+                                qty = comma_qty
+                                add_debug(f"[COMMA QTY] sku={sku} converted {line} to {qty}")
+                                break
             
             if qty is None or not (1 <= qty <= 100000):
                 add_debug(f"[QTY INVALID] sku={sku} invalid qty={qty}")
