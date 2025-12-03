@@ -484,35 +484,37 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
             
                         # Replace the fallback quantity detection section around line 395-405:
             
-            # To this (more permissive):
-            if qty is None:
-                # Strategy 1: Try simple first-line detection
-                first_line = chunk_lines[0].strip()
-                if first_line.isdigit() and 1 <= int(first_line) <= 100000:
-                    qty = int(first_line)
-                    add_debug(f"[FALLBACK QTY] sku={sku} using first line qty={qty}")
-                else:
-                    # Strategy 2: Look for decimal quantities (like 1.780)
-                    for line in chunk_lines[:5]:  # Check first 5 lines
-                        line = line.strip()
-                        # Check for decimal numbers that could be quantities
-                        if re.match(r'^\d+\.\d{3}$', line):  # Pattern like 1.780
-                            decimal_qty = float(line)
-                            if 0.1 <= decimal_qty <= 100000:  # Allow decimal quantities
-                                qty = decimal_qty  # Keep as decimal: 1.780 stays 1.780
-                                add_debug(f"[DECIMAL QTY] sku={sku} keeping decimal qty={qty}")
-                                break
-                        # Check for comma-separated thousands (like 1,780)
-                        elif re.match(r'^\d{1,3}(,\d{3})+$', line):  # Pattern like 1,780
-                            comma_qty = int(line.replace(',', ''))
-                            if 1 <= comma_qty <= 100000:
-                                qty = comma_qty
-                                add_debug(f"[COMMA QTY] sku={sku} converted {line} to {qty}")
-                                break
+                        # Replace the fallback quantity detection:
             
-            if qty is None or not (0.1 <= qty <= 100000):  # Allow decimal quantities >= 0.1
-                 add_debug(f"[QTY INVALID] sku={sku} invalid qty={qty}")
-                 continue
+            if qty is None:
+                # Strategy 1: Look for decimal quantities FIRST (like 1.780)
+                for line_idx, line in enumerate(chunk_lines[:8]):  # Check first 8 lines
+                    line = line.strip()
+                    # Check for decimal numbers that could be quantities
+                    if re.match(r'^\d+\.\d{3}$', line):  # Pattern like 1.780
+                        decimal_qty = float(line)
+                        if 0.1 <= decimal_qty <= 100000:
+                            qty = decimal_qty
+                            add_debug(f"[DECIMAL QTY] sku={sku} found decimal qty={qty} at position {line_idx}")
+                            break
+                    # Check for comma-separated thousands (like 1,780)
+                    elif re.match(r'^\d{1,3}(,\d{3})+$', line):
+                        comma_qty = int(line.replace(',', ''))
+                        if 1 <= comma_qty <= 100000:
+                            qty = comma_qty
+                            add_debug(f"[COMMA QTY] sku={sku} converted {line} to {qty} at position {line_idx}")
+                            break
+                
+                # Strategy 2: Only use first line if no decimal found
+                if qty is None:
+                    first_line = chunk_lines[0].strip()
+                    if first_line.isdigit() and 1 <= int(first_line) <= 100000:
+                        qty = int(first_line)
+                        add_debug(f"[FALLBACK QTY] sku={sku} using first line qty={qty}")
+            
+            if qty is None or not (0.1 <= qty <= 100000):
+                add_debug(f"[QTY INVALID] sku={sku} invalid qty={qty}")
+                continue
             
             # ---- Bid Unit/Ext SVP (via money token positions) ----
             bid_unit_svp = None
