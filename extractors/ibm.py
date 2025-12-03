@@ -480,6 +480,16 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                         money_tokens = money_tokens2
                         add_debug(f"[EXTENDED] Extended tokens for sku={sku}: {len(money_tokens)} tokens")
             
+            
+            
+            # To this (more permissive):
+            if qty is None:
+                # Try simple first-line detection
+                first_line = chunk_lines[0].strip()
+                if first_line.isdigit() and 1 <= int(first_line) <= 100000:
+                    qty = int(first_line)
+                    add_debug(f"[FALLBACK QTY] sku={sku} using first line qty={qty}")
+            
             if qty is None or not (1 <= qty <= 100000):
                 add_debug(f"[QTY INVALID] sku={sku} invalid qty={qty}")
                 continue
