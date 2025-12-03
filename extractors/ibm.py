@@ -493,15 +493,15 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                     line = line.strip()
                     # Check for decimal numbers that could be quantities
                     if re.match(r'^\d+\.\d{3}$', line):  # Pattern like 1.780
-                        # Parse but maintain 3-decimal precision
+                        # Use Decimal to preserve exact precision
                         try:
-                            decimal_val = float(line)
-                            if 0.1 <= decimal_val <= 100000:
-                                # Round to 3 decimal places to preserve original precision
-                                qty = round(decimal_val, 3)
-                                add_debug(f"[DECIMAL QTY] sku={sku} found decimal qty={qty:.3f} from '{line}' at position {line_idx}")
+                            from decimal import Decimal
+                            decimal_qty = Decimal(line)  # "1.780" stays as exact 1.780
+                            if Decimal('0.1') <= decimal_qty <= Decimal('100000'):
+                                qty = float(str(decimal_qty))  # Convert back preserving precision
+                                add_debug(f"[DECIMAL QTY] sku={sku} found decimal qty={qty} from '{line}' at position {line_idx}")
                                 break
-                        except ValueError:
+                        except (ValueError, ImportError):
                             continue
                     # Check for comma-separated thousands (like 1,780)
                     elif re.match(r'^\d{1,3}(,\d{3})+$', line):
