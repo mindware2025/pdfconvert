@@ -1,4 +1,5 @@
 # ibm.py
+from decimal import Decimal
 import os
 import re
 import logging
