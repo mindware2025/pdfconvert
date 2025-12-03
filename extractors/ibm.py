@@ -493,15 +493,14 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                     line = line.strip()
                     # Check for decimal numbers that could be quantities
                     if re.match(r'^\d+\.\d{3}$', line):  # Pattern like 1.780
-                        # Use Decimal to preserve exact precision
+                        # Convert decimal to integer by multiplying by 1000
                         try:
-                            from decimal import Decimal
-                            decimal_qty = Decimal(line)  # "1.780" stays as exact 1.780
-                            if Decimal('0.1') <= decimal_qty <= Decimal('100000'):
-                                qty = float(str(decimal_qty))  # Convert back preserving precision
-                                add_debug(f"[DECIMAL QTY] sku={sku} found decimal qty={qty} from '{line}' at position {line_idx}")
+                            decimal_qty = float(line)
+                            if 0.1 <= decimal_qty <= 100:  # Allow up to 100.999 (becomes 100,999)
+                                qty = int(decimal_qty * 1000)  # 1.780 * 1000 = 1780
+                                add_debug(f"[DECIMAL QTY] sku={sku} converted {line} to {qty} (x1000) at position {line_idx}")
                                 break
-                        except (ValueError, ImportError):
+                        except ValueError:
                             continue
                     # Check for comma-separated thousands (like 1,780)
                     elif re.match(r'^\d{1,3}(,\d{3})+$', line):
@@ -518,7 +517,7 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                         qty = int(first_line)
                         add_debug(f"[FALLBACK QTY] sku={sku} using first line qty={qty}")
             
-            if qty is None or not (0.1 <= qty <= 100000):
+            if qty is None or not (1 <= qty <= 999999):
                 add_debug(f"[QTY INVALID] sku={sku} invalid qty={qty}")
                 continue
             
