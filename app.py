@@ -1325,6 +1325,25 @@ elif tool == "💻 IBM Quotation":
                 for msg in debug_messages[-20:]:  # Show last 20 debug messages
                     st.text(msg)
                 
+                # ADD THIS: Total Price AED Debugging
+                st.markdown("**💰 Total Price AED Calculation Debug:**")
+                if corrected_data:
+                    for i, row in enumerate(corrected_data[:5]):  # Show first 5 rows
+                        sku = row[0]
+                        qty = row[2]
+                        cost = row[6] if len(row) > 6 else 0  # bid_ext_svp_aed
+                        
+                        # Calculate what should happen
+                        calculated_total = round(cost * 3.6725, 2) if cost else 0
+                        unit_price = round(calculated_total / qty, 2) if qty > 0 else 0
+                        
+                        st.write(f"**Row {i+1} - SKU: {sku}**")
+                        st.write(f"  • Cost (bid_ext_svp_aed): {cost}")
+                        st.write(f"  • Quantity: {qty}")
+                        st.write(f"  • Total Price AED = {cost} × 3.6725 = {calculated_total}")
+                        st.write(f"  • Unit Price AED = {calculated_total} ÷ {qty} = {unit_price}")
+                        st.write("---")
+                
                 st.markdown("**Header Info:**")
                 st.json(header_info)
         
