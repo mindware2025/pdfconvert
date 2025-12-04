@@ -326,7 +326,7 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
         if "Bid Number:" in line:
             header_info["Bid Number"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
         if "PA Agreement Number:" in line:
-            header_info["PA Agreement Number"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
+            header_info["PA Agreement Number"] = ""
         if "PA Site Number:" in line:
             header_info["PA Site Number"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
         if "Select Territory:" in line:
@@ -689,16 +689,17 @@ def create_styled_excel(
     ws["D4"].font = Font(size=20, color="1F497D")
     ws["D4"].alignment = Alignment(horizontal="center", vertical="center")
     
-    # Balanced column widths - show full content but PDF-friendly
     ws.column_dimensions[get_column_letter(2)].width  = 8   # B (Sl) 
     ws.column_dimensions[get_column_letter(3)].width  = 15  # C (SKU)
     ws.column_dimensions[get_column_letter(4)].width  = 50  # D (Description) - balanced width
     ws.column_dimensions[get_column_letter(5)].width  = 10  # E (Qty)
     ws.column_dimensions[get_column_letter(6)].width  = 14  # F (Start Date)
     ws.column_dimensions[get_column_letter(7)].width  = 14  # G (End Date) 
-    ws.column_dimensions[get_column_letter(8)].width  = 16  # H (Unit Price AED)
-    ws.column_dimensions[get_column_letter(9)].width  = 16  # I (Total Price AED)
-    
+    ws.column_dimensions[get_column_letter(8)].width  = 15  # H (Unit Price in AED)
+    ws.column_dimensions[get_column_letter(9)].width  = 15  # I (Cost)
+    ws.column_dimensions[get_column_letter(10)].width = 18  # J (Total Price in AED)
+    ws.column_dimensions[get_column_letter(11)].width = 15  # K (Partner Discount)
+    ws.column_dimensions[get_column_letter(12)].width = 18  # L (Partner Price in AED)
     # Left block
     left_labels = ["Date:", "From:", "Email:", "Contact:", "", "Company:", "Attn:", "Email:"]
     left_values = [
@@ -739,7 +740,7 @@ def create_styled_excel(
         "",
         header_info.get('Select Territory', ''),
         header_info.get('Government Entity (GOE)', ''),
-        "empty"
+        "As aligned with Mindware"
     ]
     for row, label, value in zip(row_positions, right_labels, right_values):
         ws.merge_cells(f"H{row}:I{row}")  # Only merge to column I to stay within table bounds
@@ -748,8 +749,19 @@ def create_styled_excel(
         ws[f"H{row}"].alignment = Alignment(horizontal="left", vertical="center")
     
     # --- Table header (8 columns + serial) ---
-    headers = ["Sl", "SKU", "Product Description", "Quantity", "Start Date", "End Date",
-               "Unit Price in AED", "Total Price in AED"]
+    headers = [
+    "Sl",                      # Column A - Serial number
+    "SKU",                     # Column B - Product code  
+    "Product Description",     # Column C - Description
+    "Quantity",                # Column D - Number of units
+    "Start Date",              # Column E - Coverage start
+    "End Date",                # Column F - Coverage end
+    "Unit Price in AED",       # Column G - Price per unit
+    "Cost",                    # Column H - Base cost
+    "Total Price in AED",      # Column I - Final amount
+    "Partner Discount",        # Column J - Discount percentage
+    "Partner Price in AED"     # Column K - Discounted price
+]
     header_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
     for col, header in enumerate(headers, start=2):
         ws.merge_cells(start_row=17, start_column=col, end_row=18, end_column=col)
@@ -779,16 +791,36 @@ def create_styled_excel(
         cell_sl.alignment = Alignment(horizontal="center", vertical="center")
         
         # Data values in columns C-I (3-9)
-        for j, value in enumerate(row):
-            excel_col = j + 3  # C=3, D=4, E=5, F=6, G=7, H=8, I=9
+                # Extract and calculate data for 11-column structure
+        sku = row[0] if len(row) > 0 else ""
+        desc = row[1] if len(row) > 1 else ""
+        qty = row[2] if len(row) > 2 else 0
+        start_date = row[3] if len(row) > 3 else ""
+        end_date = row[4] if len(row) > 4 else ""
+        bid_unit_svp_aed = row[5] if len(row) > 5 else 0
+        bid_ext_svp_aed = row[6] if len(row) > 6 else 0
+        
+        # Calculate new columns
+        cost = bid_ext_svp_aed
+        total_price_aed = round(cost * 3.6725, 2) if cost else 0
+        unit_price_aed = round(total_price_aed / qty, 2) if qty > 0 and total_price_aed else 0
+        partner_discount = round(unit_price_aed * 0.99, 2) if unit_price_aed else 0
+        partner_price_aed = round(partner_discount * qty, 2) if partner_discount and qty else 0
+        
+        # Write 10 columns (C-L)
+        excel_data = [sku, desc, qty, start_date, end_date, unit_price_aed, cost, total_price_aed, partner_discount, partner_price_aed]
+        for j, value in enumerate(excel_data):
+            excel_col = j + 3  # C=3, D=4, E=5, F=6, G=7, H=8, I=9, J=10, K=11, L=12
             cell = ws.cell(row=excel_row, column=excel_col, value=value)
             cell.font = Font(size=11, color="1F497D")
             cell.alignment = Alignment(horizontal="center", vertical="center")
             
-            # Debug specific problematic row
             if idx == 11:
                 add_debug(f"[EXCEL ROW 11] Col {excel_col} ({get_column_letter(excel_col)}): Writing '{value}' (type: {type(value)})")
         
+        # Currency formatting for price columns (H=8, I=9, J=10, K=11, L=12)
+        for price_col in [8, 9, 10, 11, 12]:
+            ws.cell(row=excel_row, column=price_col).number_format = '"AED"#,##0.00'
         # Row fill
         for col in range(2, 2 + len(headers)):
             ws.cell(row=excel_row, column=col).fill = row_fill
@@ -810,12 +842,14 @@ def create_styled_excel(
     ws[f"C{summary_row}"].alignment = Alignment(horizontal="right")
     
     # Sum Total Price (index 6 in data list)
-    total_bid_aed = sum((row[6] or 0) for row in data if len(row) >= 7 and row[6] is not None)
-    ws[f"H{summary_row}"] = total_bid_aed
-    ws[f"H{summary_row}"].number_format = '"AED"#,##0.00'
-    ws[f"H{summary_row}"].font = Font(bold=True, color="1F497D")
-    ws[f"H{summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+        # Replace around line 825:
     
+    # Sum Total Price in AED (calculated as cost * 3.6725)
+    total_bid_aed = sum((row[6] * 3.6725 if len(row) >= 7 and row[6] else 0) for row in data)
+    ws[f"J{summary_row}"] = total_bid_aed  # Put total in Total Price AED column (J)
+    ws[f"J{summary_row}"].number_format = '"AED"#,##0.00'
+    ws[f"J{summary_row}"].font = Font(bold=True, color="1F497D")
+    ws[f"J{summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
     # --- Dynamic Terms block (main sheet) ---
     total_price_sum = total_bid_aed
     terms = get_terms_section(header_info, total_price_sum)

@@ -463,7 +463,6 @@ if not st.session_state.show_team_selection:
         </div>
         """, unsafe_allow_html=True)
 
-    # Time-based greeting
     import datetime
     current_hour = datetime.datetime.now().hour
 
@@ -493,9 +492,9 @@ if not st.session_state.show_team_selection:
     # Add a small delay for dramatic effect
     import time
     time.sleep(0.5)
-    st.snow()  # Another fun effect after the delay!
+    st.snow()  
 
-    # Big "Get Started" Button
+
     st.markdown("<br>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
