@@ -504,7 +504,7 @@ if not st.session_state.show_team_selection:
                      type="primary",
                      help="Click to proceed to team selection!"):
             st.session_state.show_team_selection = True
-            st.balloons()
+            #st.balloons()
             st.snow()
             st.rerun()
 
