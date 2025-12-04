@@ -804,12 +804,17 @@ def create_styled_excel(
         cost = bid_ext_svp_aed
         total_price_aed = round(cost * 3.6725, 2) if cost else 0
         
-        # DEBUG: Total Price calculation
-        add_debug(f"[TOTAL PRICE DEBUG] Row {idx}: SKU={sku}")
-        add_debug(f"[TOTAL PRICE DEBUG] Cost (bid_ext_svp_aed): {cost}")
-        add_debug(f"[TOTAL PRICE DEBUG] Total Price AED (cost * 3.6725): {total_price_aed}")
-        add_debug(f"[TOTAL PRICE DEBUG] Calculation: {cost} * 3.6725 = {cost * 3.6725 if cost else 0}")
+        # LIVE DEBUG: Total Price calculation
+        print(f"🔍 ROW {idx} DEBUG:")
+        print(f"   SKU: {sku}")
+        print(f"   bid_ext_svp_aed (cost): {bid_ext_svp_aed}")
+        print(f"   cost: {cost}")
+        print(f"   total_price_aed calculation: {cost} * 3.6725 = {total_price_aed}")
+        print(f"   Raw calculation: {cost * 3.6725 if cost else 0}")
+        print("---")
         
+        # Also add to debug log
+        add_debug(f"[LIVE DEBUG] Row {idx}: cost={cost}, total_price_aed={total_price_aed}")
         unit_price_aed = round(total_price_aed / qty, 2) if qty > 0 and total_price_aed else 0
         partner_discount = round(unit_price_aed * 0.99, 2) if unit_price_aed else 0
         partner_price_aed = round(partner_discount * qty, 2) if partner_discount and qty else 0
@@ -821,9 +826,7 @@ def create_styled_excel(
             cell.font = Font(size=11, color="1F497D")
             cell.alignment = Alignment(horizontal="center", vertical="center")
             
-            if idx == 11:
-                add_debug(f"[EXCEL ROW 11] Col {excel_col} ({get_column_letter(excel_col)}): Writing '{value}' (type: {type(value)})")
-        
+            
         # Currency formatting for price columns (H=8, I=9, J=10, K=11, L=12)
         for price_col in [8, 9, 10, 11, 12]:
             ws.cell(row=excel_row, column=price_col).number_format = '"AED"#,##0.00'
