@@ -803,10 +803,16 @@ def create_styled_excel(
         # Calculate new columns
         cost = bid_ext_svp_aed
         total_price_aed = round(cost * 3.6725, 2) if cost else 0
+        
+        # DEBUG: Total Price calculation
+        add_debug(f"[TOTAL PRICE DEBUG] Row {idx}: SKU={sku}")
+        add_debug(f"[TOTAL PRICE DEBUG] Cost (bid_ext_svp_aed): {cost}")
+        add_debug(f"[TOTAL PRICE DEBUG] Total Price AED (cost * 3.6725): {total_price_aed}")
+        add_debug(f"[TOTAL PRICE DEBUG] Calculation: {cost} * 3.6725 = {cost * 3.6725 if cost else 0}")
+        
         unit_price_aed = round(total_price_aed / qty, 2) if qty > 0 and total_price_aed else 0
         partner_discount = round(unit_price_aed * 0.99, 2) if unit_price_aed else 0
         partner_price_aed = round(partner_discount * qty, 2) if partner_discount and qty else 0
-        
         # Write 10 columns (C-L)
         excel_data = [sku, desc, qty, start_date, end_date, unit_price_aed, cost, total_price_aed, partner_discount, partner_price_aed]
         for j, value in enumerate(excel_data):
