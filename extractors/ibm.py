@@ -912,7 +912,7 @@ def create_styled_excel(
         "As aligned with Mindware"
     ]
     for row, label, value in zip(row_positions, right_labels, right_values):
-        ws.merge_cells(f"H{row}:I{row}")  # Only merge to column I to stay within table bounds
+        ws.merge_cells(f"H{row}:L{row}")  # Extend to column L to use full width
         ws[f"H{row}"] = f"{label} {value}"
         ws[f"H{row}"].font = Font(bold=True, color="1F497D")
         ws[f"H{row}"].alignment = Alignment(horizontal="left", vertical="center")
