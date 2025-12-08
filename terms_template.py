@@ -1,13 +1,19 @@
+
 def get_terms_section(header_info, total_price_sum):
     quote_validity = header_info.get("Bid Expiration Date", "N/A")
     company_name = header_info.get("Reseller Name", "Company")
     end_user = header_info.get("Customer Name", "End User")
-    formatted_price = f"AED {total_price_sum:,.2f}"
+    # Use MEP from PDF if available, otherwise fallback to calculated total
+    mep_value = header_info.get("Maximum End User Price (MEP)", "")
+    if mep_value:
+        formatted_price = f"USD {mep_value}"
+    else:
+        formatted_price = f" "
     return [
         ("B29", "Terms and Conditions:", {"bold": True, "size": 11, "color": "1F497D"}),
         # Main terms paragraph
         ("C30", f"""THIS DOCUMENT WILL BE GOVERNED BY THE TERMS AND CONDITIONS MENTIONED BELOW, THE AGREEMENT ENTERED INTO WITH MINDWARE AND ANY ASSOCIATED IBM TERMS AND CONDITIONS, AS APPLICABLE.
-• 30 Days from POE Date.
+• Payment Terms: As aligned with Mindware
 • Quote Validity: {quote_validity}
 • Customer Price should not exceed {formatted_price}
 • Pricing valid for this transaction only."""
@@ -23,11 +29,10 @@ def get_terms_section(header_info, total_price_sum):
 • Attached quote does not include installation services and training
 • Conversion Rate $1 US = 3.6725 AED"""
         ),
-
         # Compliance statement
         ("C32", f"""Please include the following phrase as per IBM Compliance within your PO:
 This is to confirm that {company_name} has accepted a firm and final order from {end_user} 
-and the Final end-customer price for IBM SW licenses is not higher than {formatted_price}"""
+and the Final end-customer price for IBM SW licenses is not higher than {mep_value}"""
         ),
         ("C33", f"""This documents confirms {company_name} commitment to place a firm order on IBM through Mindware FZ-LLC consistent with the End Customer Purchase Order (PO) or any other legally binding document {company_name} received from the end customer.
 """

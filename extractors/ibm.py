@@ -33,8 +33,32 @@ def clear_debug():
     debug_info.clear()
 
 # ----------------------------------------------------------------------
-# Simplified logging for live environment
+# Minimal logging for Excel verification
 # ----------------------------------------------------------------------
+def setup_debug_logging():
+    """Setup minimal debug logging to debug.log file"""
+    debug_logger = logging.getLogger('ibm_debug')
+    debug_logger.setLevel(logging.INFO)  # Only INFO and above
+    
+    # Remove existing handlers
+    for handler in debug_logger.handlers[:]:
+        debug_logger.removeHandler(handler)
+    
+    # Create file handler for debug.log
+    file_handler = logging.FileHandler('debug.log', mode='w', encoding='utf-8')
+    file_handler.setLevel(logging.INFO)
+    
+    # Create simple formatter
+    formatter = logging.Formatter('%(message)s')  # Simple format
+    file_handler.setFormatter(formatter)
+    
+    debug_logger.addHandler(file_handler)
+    return debug_logger
+
+# Initialize debug logger
+debug_logger = setup_debug_logging()
+
+# Also keep simplified logging for live environment
 logging.basicConfig(level=logging.ERROR)  # Only log errors in live
 
 # ----------------------------------------------------------------------
@@ -96,6 +120,7 @@ def correct_descriptions(extracted_data, master_data=None):
     - If master_data NOT uploaded: Set ALL descriptions to blank
     - Never use PDF descriptions
     """
+    debug_logger.info("=== DESCRIPTION CORRECTION ===")
     corrected = []
     
     add_debug(f"[DESC CORRECTION] Starting with {len(extracted_data)} rows")
@@ -104,25 +129,34 @@ def correct_descriptions(extracted_data, master_data=None):
     debug_extracted_data(extracted_data)
     
     if master_data is not None:
+        debug_logger.info(f"Using master CSV with {len(master_data)} records")
         try:
             master_map = dict(zip(master_data['SKU'], master_data['SKU DESCRIPTION']))
             add_debug(f"[MASTER DATA] Using master CSV with {len(master_map)} SKU mappings")
             
+            corrections_made = 0
+            corrections_blank = 0
+            
             for i, row in enumerate(extracted_data):
                 try:
                     sku = row[0]
+                    
                     if sku in master_map:
                         row[1] = master_map[sku]
                         add_debug(f"[DESC FROM MASTER] Row {i+1} - SKU '{sku}': Found in master CSV")
+                        corrections_made += 1
                     else:
                         row[1] = ""  # Blank if SKU not found in master
                         add_debug(f"[DESC BLANK] Row {i+1} - SKU '{sku}' not found in master CSV")
+                        corrections_blank += 1
                         
                 except Exception as e:
                     add_debug(f"[DESC ERROR] Row {i+1} - Error: {e}")
                     row[1] = ""
                     
                 corrected.append(row)
+            
+            debug_logger.info(f"Corrections: {corrections_made} updated, {corrections_blank} blank")
                 
         except Exception as e:
             add_debug(f"[MASTER DATA ERROR] Could not process master data: {e}")
@@ -131,11 +165,13 @@ def correct_descriptions(extracted_data, master_data=None):
             corrected = extracted_data
     else:
         add_debug(f"[NO MASTER DATA] Setting all descriptions to blank")
+        debug_logger.info("No master data - setting descriptions to blank")
         for i, row in enumerate(extracted_data):
             row[1] = ""
         corrected = extracted_data
     
     add_debug(f"[DESC CORRECTION COMPLETE] Processed {len(corrected)} rows")
+    debug_logger.info(f"Description correction complete: {len(corrected)} rows")
     
     # Debug after correction
     add_debug(f"[AFTER CORRECTION] Row 11: {corrected[10] if len(corrected) > 10 else 'N/A'}")
@@ -154,7 +190,9 @@ money_with_sep_re = re.compile(r'\d[\d.,]*[.,]\d+')
 header_blacklist_re = re.compile(
     r'\b('
     r'Bid Number|Bid Request|Opportunity Number|Distributor|Distributor Name|Supplier|'
-    r'Page \d+ of|IBM Ireland Product Distribution Limited|IBM Terms|Customer Information'
+    r'Page \d+ of|IBM Ireland Product Distribution Limited|IBM Terms|Customer Information|'
+    r'PA Anniversary Date|MEP|Maximum End User Price|Parts Information|Current PA Price Level|'
+    r'SVP|GV|Yes|No'
     r')\b', re.I
 )
 
@@ -289,21 +327,28 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
           [sku, desc, qty, start_date, end_date, bid_unit_svp_aed, bid_ext_svp_aed]
       - header_info: dict of customer/bid metadata
     """
+    debug_logger.info("=== IBM PDF EXTRACTION STARTED ===")
     clear_debug()  # Clear previous debug info
     
     # Open PDF
     doc = fitz.open(stream=file_like.read(), filetype="pdf")
+    debug_logger.info(f"PDF: {len(doc)} pages, extracting data...")
+    
     # Collect lines
     lines = []
-    for page in doc:
+    for page_num, page in enumerate(doc):
         page_text = page.get_text("text") or page.get_text()
+        page_lines = []
         for l in page_text.splitlines():
             if l and l.strip():
                 lines.append(l.rstrip())
+                page_lines.append(l.rstrip())
     
+    debug_logger.info(f"Total lines extracted: {len(lines)}")
     add_debug(f"[PDF INFO] Total lines extracted: {len(lines)}")
     
     # Header fields
+    debug_logger.info("Extracting header information...")
     header_info = {
         "Customer Name": "",
         "Bid Number": "",
@@ -314,13 +359,16 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
         "IBM Opportunity Number": "",
         "Reseller Name": "",
         "City": "",
-        "Country": ""
+        "Country": "",
+        "Maximum End User Price (MEP)": ""
     }
     
     # Parse header info (simple look-ahead by 1 line)
+    header_fields_found = 0
     for i, line in enumerate(lines):
         if "Customer Name:" in line:
             header_info["Customer Name"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
+            header_fields_found += 1
         if "Reseller Name:" in line:
             header_info["Reseller Name"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
         if "Bid Number:" in line:
@@ -329,17 +377,50 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
             header_info["PA Agreement Number"] = ""
         if "PA Site Number:" in line:
             header_info["PA Site Number"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
+            header_fields_found += 1
         if "Select Territory:" in line:
             header_info["Select Territory"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
+            header_fields_found += 1
         if "Government Entity" in line:
             header_info["Government Entity (GOE)"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
+            header_fields_found += 1
         if "IBM Opportunity Number:" in line:
             header_info["IBM Opportunity Number"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
+            header_fields_found += 1
         if "City:" in line:
             header_info["City"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
+            header_fields_found += 1
         if "Country:" in line:
             header_info["Country"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
+            header_fields_found += 1
+        if "Maximum End User Price" in line or "MEP" in line:
+            # Look for MEP value in same line or next line
+            if ":" in line:
+                mep_part = line.split(":", 1)[1].strip()
+                if mep_part:
+                    # Remove currency suffixes like "USD", "AED", etc.
+                    mep_clean = re.sub(r'\s*(USD).*$', '', mep_part).strip()
+                    # Parse European number format and convert to proper value
+                    mep_value = parse_euro_number(mep_clean)
+                    if mep_value:
+                        header_info["Maximum End User Price (MEP)"] = f"{mep_value:,.2f}"
+                        debug_logger.info(f"MEP found in same line: '{mep_part}' -> cleaned: '{mep_clean}' -> {mep_value}")
+                        header_fields_found += 1
+                elif i + 1 < len(lines):
+                    next_line = lines[i + 1].strip()
+                    # Remove currency suffixes like "USD", "AED", etc.
+                    next_clean = re.sub(r'\s*(USD|AED|EUR).*$', '', next_line).strip()
+                    mep_value = parse_euro_number(next_clean)
+                    if mep_value:
+                        header_info["Maximum End User Price (MEP)"] = f"{mep_value:,.2f}"
+                        debug_logger.info(f"MEP found in next line: '{next_line}' -> cleaned: '{next_clean}' -> {mep_value}")
+                        header_fields_found += 1
     
+    debug_logger.info(f"Header fields found: {header_fields_found}")
+    debug_logger.info(f"MEP extracted: '{header_info.get('Maximum End User Price (MEP)', 'Not found')}')")
+    
+    # === Line Item Extraction ===
+    debug_logger.info("Extracting line items...")
     extracted_data = []
     i = 0
     max_window = 12  # Try wider chunks first to capture wrapped rows
@@ -407,16 +488,17 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                 sku, sku_line_idx, _ = best_sku_info
                 desc_start_index = sku_line_idx + 1  # Description starts after SKU line
                 add_debug(f"[SKU SELECTED] Best SKU: '{sku}' from {len(valid_skus_found)} candidates")
+                    
             else:
                 add_debug(f"[SKU NOT FOUND] No valid SKUs in chunk lines {i}-{i+window}")
                 continue
 
-            # Additional validation: Avoid processing same position multiple times 
-            position_key = f"{i}_{window}"
-            if position_key in processed_positions:
-                add_debug(f"[POSITION SKIP] Already processed position {i}-{i+window}")
+            # Additional validation: Avoid processing same SKU position multiple times 
+            sku_position_key = f"{i + sku_line_idx}_{sku}"  # Use SKU line position + SKU name
+            if sku_position_key in processed_positions:
+                add_debug(f"[POSITION SKIP] Already processed SKU '{sku}' at position {i + sku_line_idx}")
                 continue
-            processed_positions.add(position_key)
+            processed_positions.add(sku_position_key)
             
             # Keep only chunks where a money token is "near" the start date (reduces false positives)
             pos_date = chunk.find(start_date)
@@ -467,6 +549,15 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
             
             # 1) First pass qty + tokens
             qty, prorate, money_tokens = infer_qty_and_prorate(after_end, abs_tol=0.02)
+            
+            # Show raw PDF content for debugging
+            debug_logger.info(f"=== RAW PDF CONTENT FOR SKU {sku} ===")
+            debug_logger.info(f"Chunk lines from PDF:")
+            for idx, line in enumerate(chunk_lines):
+                debug_logger.info(f"  Line {idx}: '{line.strip()}'")
+            debug_logger.info(f"Money tokens found: {money_tokens}")
+            debug_logger.info(f"Date range: {start_date} to {end_date}")
+            debug_logger.info("=" * 50)
             add_debug(f"[QTY] sku={sku} qty={qty}, money_tokens={len(money_tokens)}")
             
             # 2) If we didn't get all money tokens, extend with a few following lines
@@ -521,29 +612,92 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                 add_debug(f"[QTY INVALID] sku={sku} invalid qty={qty}")
                 continue
             
-            # ---- Bid Unit/Ext SVP (via money token positions) ----
+            # ---- Extract Standard/List Price instead of Bid Price ----
             bid_unit_svp = None
             bid_ext_svp = None
             try:
-                if len(money_tokens) >= 5:
-                    # tokens: [EntUnit, EntExt, Disc%, BidUnit, BidExt, ...]
+                # Strategy: Look for the highest value in money_tokens as it's likely the Standard Price
+                if len(money_tokens) >= 1:
+                    debug_logger.info(f"=== PRICE ANALYSIS FOR SKU {sku} ===")
+                    debug_logger.info(f"All money tokens from PDF: {money_tokens}")
+                    
+                    # Parse all money values and find the Standard Price (usually the highest unit price)
+                    parsed_values = []
+                    for i, token in enumerate(money_tokens):
+                        try:
+                            value = parse_euro_number(token)
+                            if value and value > 0:
+                                parsed_values.append((value, i, token))
+                                debug_logger.info(f"  Token {i}: '{token}' = {value}")
+                        except:
+                            debug_logger.info(f"  Token {i}: '{token}' = PARSE ERROR")
+                            continue
+                    
+                    if parsed_values:
+                        debug_logger.info(f"All parsed values:")
+                        for val, idx, token in parsed_values:
+                            debug_logger.info(f"  Position {idx}: '{token}' = {val}")
+                        
+                        # Strategy: Extract both unit cost and extended cost from positions 4 & 5
+                        cost_value = None
+                        cost_token = None
+                        ext_cost_value = None
+                        ext_cost_token = None
+                        
+                        # Look for position 4 (extended cost) and position 5 (unit cost) 
+                        for val, idx, token in parsed_values:
+                            if idx == 4:  # Extended cost is typically at position 4
+                                ext_cost_value = val
+                                ext_cost_token = token
+                                debug_logger.info(f"FOUND EXTENDED COST: Position 4 '{token}' = {val}")
+                            elif idx == 5:  # Unit cost at position 5
+                                cost_value = val
+                                cost_token = token
+                                debug_logger.info(f"FOUND UNIT COST: Position 5 '{token}' = {val}")
+                        
+                        # Use extended cost if found, otherwise fallback logic
+                        if ext_cost_value is not None and ext_cost_value > 10:  # Allow smaller extended costs
+                            bid_unit_svp = cost_value if cost_value and cost_value > 100 else ext_cost_value / qty if qty > 0 else ext_cost_value
+                            bid_ext_svp = ext_cost_value
+                            debug_logger.info(f"USING EXTENDED COST: Unit={bid_unit_svp}, Extended={bid_ext_svp}")
+                        elif cost_value is not None and cost_value > 100:
+                            bid_unit_svp = cost_value
+                            bid_ext_svp = cost_value * qty if qty else cost_value
+                            debug_logger.info(f"USING UNIT COST: Unit={bid_unit_svp}, Extended={bid_ext_svp}")
+                        else:
+                            # Fallback to highest reasonable value
+                            reasonable_values = [x for x in parsed_values if x[0] > 1000]
+                            if reasonable_values:
+                                reasonable_values.sort(key=lambda x: x[0], reverse=True)
+                                fallback_value = reasonable_values[0][0]
+                                fallback_token = reasonable_values[0][2]
+                                debug_logger.info(f"FALLBACK TO HIGHEST REASONABLE: '{fallback_token}' = {fallback_value}")
+                                bid_unit_svp = fallback_value
+                                bid_ext_svp = fallback_value * qty if qty else fallback_value
+                            else:
+                                # Last resort: use highest value regardless
+                                parsed_values.sort(key=lambda x: x[0], reverse=True)
+                                fallback_value = parsed_values[0][0]
+                                fallback_token = parsed_values[0][2]
+                                debug_logger.info(f"FALLBACK TO HIGHEST: '{fallback_token}' = {fallback_value}")
+                                bid_unit_svp = fallback_value
+                                bid_ext_svp = fallback_value * qty if qty else fallback_value
+                        
+                        debug_logger.info(f"SELECTED: Using Extended={bid_ext_svp}, Unit={bid_unit_svp}")
+                        debug_logger.info(f"FINAL: Unit={bid_unit_svp}, Total={bid_ext_svp}")
+                        debug_logger.info("=" * 50)
+                        
+                        add_debug(f"[COST PRICE] SKU '{sku}' - Unit={bid_unit_svp}, Extended={bid_ext_svp}")
+                    
+                if bid_unit_svp is None and len(money_tokens) >= 5:
+                    # Fallback to original logic if Standard Price detection fails
                     bid_unit_svp = parse_euro_number(money_tokens[3])
                     bid_ext_svp  = parse_euro_number(money_tokens[4])
-                    add_debug(f"[SVP DIRECT] SKU '{sku}' - BidUnit={bid_unit_svp}, BidExt={bid_ext_svp}")
-                else:
-                    add_debug(f"[SVP TOKENS <5] sku={sku} tokens={money_tokens}")
-                    # Fallback via Entitled + Disc%
-                    if len(money_tokens) >= 3:
-                        ent_unit = parse_euro_number(money_tokens[0])
-                        ent_ext  = parse_euro_number(money_tokens[1])
-                        disc_pct = parse_euro_number(money_tokens[2])  # e.g., 84,196 -> 84.196%
-                        if ent_unit is not None and ent_ext is not None and disc_pct is not None:
-                            factor = max(0.0, 1.0 - (disc_pct / 100.0))
-                            bid_unit_svp = round(ent_unit * factor, 2)
-                            bid_ext_svp  = round(ent_ext  * factor, 2)
-                            add_debug(f"[SVP FALLBACK] sku={sku} -> bid=({bid_unit_svp},{bid_ext_svp})")
+                    debug_logger.info(f"FALLBACK: Using tokens[3]={money_tokens[3]} -> {bid_unit_svp}")
+                    add_debug(f"[FALLBACK PRICE] SKU '{sku}' - BidUnit={bid_unit_svp}, BidExt={bid_ext_svp}")
+                    
             except Exception as e:
-                add_debug(f"[SVP ERROR] sku={sku} err={e}")
+                add_debug(f"[PRICE ERROR] sku={sku} err={e}")
             
             # Convert to AED
             bid_unit_svp_aed = round(bid_unit_svp * USD_TO_AED, 2) if bid_unit_svp is not None else None
@@ -561,6 +715,18 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
             i += 1
     
     add_debug(f"[EXTRACTION COMPLETE] Total rows extracted: {len(extracted_data)}")
+    debug_logger.info(f"=== EXTRACTION COMPLETE ===")
+    debug_logger.info(f"Total line items: {len(extracted_data)}")
+    
+    # Log summary for Excel verification
+    if extracted_data:
+        total_value = sum(row[6] for row in extracted_data if len(row) > 6 and row[6])
+        debug_logger.info(f"Total quotation value: AED {total_value:,.2f}")
+        debug_logger.info("=== FINAL EXCEL DATA ===")
+        for i, row in enumerate(extracted_data, 1):
+            if len(row) >= 7:
+                debug_logger.info(f"Row {i}: {row[0]} | Qty: {row[2]} | Unit: AED {row[5]:.2f} | Total: AED {row[6]:.2f}")
+    
     return extracted_data, header_info
 
 # ----------------------------------------------------------------------
@@ -678,16 +844,16 @@ def create_styled_excel(
     ws.sheet_view.showGridLines = False
     
     # --- Header / Branding ---
-    ws.merge_cells("B2:C3")
+    ws.merge_cells("B1:C2")  # Move logo to row 1-2
     if logo_path and os.path.exists(logo_path):
         img = Image(logo_path)
         img.width = 1.87 * 96  # 1.87 inches * 96 dpi
         img.height = 0.56 * 96
-        ws.add_image(img, "B2")
-    ws.merge_cells("D4:G4")
-    ws["D4"] = "Quotation"
-    ws["D4"].font = Font(size=20, color="1F497D")
-    ws["D4"].alignment = Alignment(horizontal="center", vertical="center")
+        ws.add_image(img, "B1")  # Logo starts at B1
+    ws.merge_cells("D3:G3")  # Move title to row 3
+    ws["D3"] = "Quotation"
+    ws["D3"].font = Font(size=20, color="1F497D")
+    ws["D3"].alignment = Alignment(horizontal="center", vertical="center")
     
     ws.column_dimensions[get_column_letter(2)].width  = 8   # B (Sl) 
     ws.column_dimensions[get_column_letter(3)].width  = 15  # C (SKU)
@@ -712,7 +878,7 @@ def create_styled_excel(
         "empty",
         "empty"
     ]
-    row_positions = [6, 7, 8, 9, 10, 11, 12, 13]
+    row_positions = [5, 6, 7, 8, 9, 10, 11, 12]  # Move up by 1 row
     for row, label, value in zip(row_positions, left_labels, left_values):
         if label:
             ws[f"C{row}"] = label
@@ -722,10 +888,10 @@ def create_styled_excel(
             ws[f"D{row}"].font = Font(color="1F497D")
     
     # IBM Opp no.
-    ws["C15"] = "IBM Opportunity Number: "
-    ws["C15"].font = Font(bold=True, underline="single", color="000000")
-    ws["D15"] = header_info.get('IBM Opportunity Number', '')
-    ws["D15"].font = Font(bold=True, italic=True, underline="single", color="000000")
+    ws["C14"] = "IBM Opportunity Number: "  # Move up by 1 row
+    ws["C14"].font = Font(bold=True, underline="single", color="000000")
+    ws["D14"] = header_info.get('IBM Opportunity Number', '')
+    ws["D14"].font = Font(bold=True, italic=True, underline="single", color="000000")
     
     # Right block
     right_labels = [
@@ -757,25 +923,25 @@ def create_styled_excel(
     "Start Date",              # Column E - Coverage start
     "End Date",                # Column F - Coverage end
     "Unit Price in AED",       # Column G - Price per unit
-    "Cost",                    # Column H - Base cost
+    "Cost (USD)",              # Column H - Base cost in USD
     "Total Price in AED",      # Column I - Final amount
     "Partner Discount",        # Column J - Discount percentage
     "Partner Price in AED"     # Column K - Discounted price
 ]
     header_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
     for col, header in enumerate(headers, start=2):
-        ws.merge_cells(start_row=17, start_column=col, end_row=18, end_column=col)
-        cell = ws.cell(row=17, column=col, value=header)
+        ws.merge_cells(start_row=16, start_column=col, end_row=17, end_column=col)  # Move up by 1 row
+        cell = ws.cell(row=16, column=col, value=header)  # Move up by 1 row
         cell.font = Font(bold=True, size=13, color="1F497D")
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         cell.fill = header_fill
     
     # --- Data rows with enhanced debugging ---
     row_fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
-    start_row = 19
+    start_row = 18  # Move up by 1 row
     
     # Build a name->column index map from the header row for robust formatting
-    headers_map = {ws.cell(row=17, column=c).value: c for c in range(2, 2 + len(headers))}
+    headers_map = {ws.cell(row=16, column=c).value: c for c in range(2, 2 + len(headers))}  # Update header row reference
     col_unit = headers_map.get("Unit Price in AED")
     col_total = headers_map.get("Total Price in AED")
     
@@ -800,26 +966,32 @@ def create_styled_excel(
         bid_unit_svp_aed = row[5] if len(row) > 5 else 0
         bid_ext_svp_aed = row[6] if len(row) > 6 else 0
         
-        # Calculate new columns
-        cost = bid_ext_svp_aed
-        total_price_aed = round(cost * 3.6725, 2) if cost else 0
+        # Calculate new columns - Cost shows Extended Cost in USD, Unit Price and Total Price in AED
+        # Extract USD values from the AED values (reverse conversion)
+        bid_unit_svp = bid_unit_svp_aed / USD_TO_AED if bid_unit_svp_aed else 0  # Unit cost in USD 
+        bid_ext_svp = bid_ext_svp_aed / USD_TO_AED if bid_ext_svp_aed else 0  # Extended cost in USD 
+        cost_usd = bid_ext_svp  # Cost column shows EXTENDED cost in USD (e.g., 90,571.95)
+        total_price_aed = cost_usd * USD_TO_AED if cost_usd else 0  # Total Price = Extended Cost × conversion
+        unit_price_aed = total_price_aed / qty if qty and qty > 0 else 0  # Unit Price = Total / Quantity
         
-        # LIVE DEBUG: Total Price calculation
+        # LIVE DEBUG: Cost column calculation
         print(f"🔍 ROW {idx} DEBUG:")
         print(f"   SKU: {sku}")
-        print(f"   bid_ext_svp_aed (cost): {bid_ext_svp_aed}")
-        print(f"   cost: {cost}")
-        print(f"   total_price_aed calculation: {cost} * 3.6725 = {total_price_aed}")
-        print(f"   Raw calculation: {cost * 3.6725 if cost else 0}")
+        print(f"   Quantity: {qty}")
+        print(f"   bid_unit_svp_aed (Unit AED): {bid_unit_svp_aed}")
+        print(f"   bid_ext_svp_aed (Ext AED): {bid_ext_svp_aed}")
+        print(f"   bid_ext_svp (Ext USD): {bid_ext_svp}")
+        print(f"   cost_usd (Extended Cost): {cost_usd}")
+        print(f"   total_price_aed (ext cost × 3.6725): {total_price_aed}")
+        print(f"   unit_price_aed (total / qty): {unit_price_aed}")
         print("---")
         
         # Also add to debug log
-        add_debug(f"[LIVE DEBUG] Row {idx}: cost={cost}, total_price_aed={total_price_aed}")
-        unit_price_aed = round(total_price_aed / qty, 2) if qty > 0 and total_price_aed else 0
+        add_debug(f"[COST DEBUG] Row {idx}: qty={qty}, cost_usd={cost_usd}, total_price_aed={total_price_aed}, unit_price_aed={unit_price_aed}")
         partner_discount = round(unit_price_aed * 0.99, 2) if unit_price_aed else 0
         partner_price_aed = round(partner_discount * qty, 2) if partner_discount and qty else 0
-        # Write 10 columns (C-L)
-        excel_data = [sku, desc, qty, start_date, end_date, unit_price_aed, cost, total_price_aed, partner_discount, partner_price_aed]
+        # Write 10 columns (C-L) - Cost in USD, others in AED
+        excel_data = [sku, desc, qty, start_date, end_date, unit_price_aed, cost_usd, total_price_aed, partner_discount, partner_price_aed]
         for j, value in enumerate(excel_data):
             excel_col = j + 3  # C=3, D=4, E=5, F=6, G=7, H=8, I=9, J=10, K=11, L=12
             cell = ws.cell(row=excel_row, column=excel_col, value=value)
@@ -827,9 +999,11 @@ def create_styled_excel(
             cell.alignment = Alignment(horizontal="center", vertical="center")
             
             
-        # Currency formatting for price columns (H=8, I=9, J=10, K=11, L=12)
-        for price_col in [8, 9, 10, 11, 12]:
+        # Currency formatting for price columns - Cost (I=9) in USD, others in AED
+        for price_col in [8, 10, 11, 12]:  # AED columns: Unit Price, Total, Partner Discount, Partner Price
             ws.cell(row=excel_row, column=price_col).number_format = '"AED"#,##0.00'
+        # USD formatting for Cost column (I=9)
+        ws.cell(row=excel_row, column=9).number_format = '"USD"#,##0.00'
         # Row fill
         for col in range(2, 2 + len(headers)):
             ws.cell(row=excel_row, column=col).fill = row_fill
@@ -853,12 +1027,38 @@ def create_styled_excel(
     # Sum Total Price (index 6 in data list)
         # Replace around line 825:
     
-    # Sum Total Price in AED (calculated as cost * 3.6725)
-    total_bid_aed = sum((row[6] * 3.6725 if len(row) >= 7 and row[6] else 0) for row in data)
+    # Sum Total Price in AED (sum of cost × USD_TO_AED for each row)
+    total_bid_aed = sum(((row[5] / USD_TO_AED * USD_TO_AED) if len(row) >= 6 and row[5] else 0) for row in data)
     ws[f"J{summary_row}"] = total_bid_aed  # Put total in Total Price AED column (J)
     ws[f"J{summary_row}"].number_format = '"AED"#,##0.00'
     ws[f"J{summary_row}"].font = Font(bold=True, color="1F497D")
     ws[f"J{summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+    
+    # Second summary row - TOTAL BP Special Discounted Price
+    bp_summary_row = summary_row + 1
+    ws.merge_cells(f"C{bp_summary_row}:G{bp_summary_row}")
+    ws[f"C{bp_summary_row}"] = "TOTAL BP Special Discounted Price excluding VAT:"
+    ws[f"C{bp_summary_row}"].font = Font(bold=True, color="1F497D")
+    ws[f"C{bp_summary_row}"].alignment = Alignment(horizontal="right")
+    
+    # Calculate sum of Partner Price in AED (column L values)
+    # Partner price is calculated as: partner_discount * qty for each row
+    total_bp_special = 0
+    for row in data:
+        if len(row) >= 3:  # Need at least sku, desc, qty
+            qty = row[2] if row[2] else 0
+            bid_unit_svp_aed = row[5] if len(row) > 5 and row[5] else 0
+            cost_usd = bid_unit_svp_aed / USD_TO_AED if bid_unit_svp_aed else 0
+            total_price_aed = cost_usd * USD_TO_AED if cost_usd else 0
+            unit_price_aed = total_price_aed / qty if qty and qty > 0 else 0
+            partner_discount = unit_price_aed * 0.99 if unit_price_aed else 0
+            partner_price_aed = partner_discount * qty if partner_discount and qty else 0
+            total_bp_special += partner_price_aed
+    
+    ws[f"L{bp_summary_row}"] = total_bp_special  # Put total in Partner Price AED column (L)
+    ws[f"L{bp_summary_row}"].number_format = '"AED"#,##0.00'
+    ws[f"L{bp_summary_row}"].font = Font(bold=True, color="1F497D")
+    ws[f"L{bp_summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
     # --- Dynamic Terms block (main sheet) ---
     total_price_sum = total_bid_aed
     terms = get_terms_section(header_info, total_price_sum)
@@ -874,8 +1074,8 @@ def create_styled_excel(
                 total_lines += max(1, wrapped)
         return total_lines
     
-    # Calculate the actual end row of the table content dynamically
-    table_end_row = start_row + len(data) + 4  # data rows + summary + spacing
+    # Calculate the actual end row of the table content dynamically (now includes BP Special row)
+    table_end_row = start_row + len(data) + 5  # data rows + 2 summary rows + spacing
     terms_start_row = max(29, table_end_row + 2)  # Ensure terms start after table
     
     # Adjust terms positioning dynamically
@@ -941,64 +1141,76 @@ def create_styled_excel(
         
     current_row = last_terms_row + 3
     
+    # Force a page break before IBM Terms section to prevent awkward splits
+    ws.row_breaks.append(current_row - 1)
+    
     # IBM Terms header
     ibm_header_cell = ws[f"C{current_row}"]
     ibm_header_cell.value = "IBM Terms and Conditions"
     ibm_header_cell.font = Font(bold=True, size=12, color="1F497D")
     current_row += 2
     
-    # Add IBM Terms content
-    lines = ibm_terms_text.splitlines()
+    # Add IBM Terms content - use complete paragraphs with proper text wrapping
+    # Split by double newlines to get complete paragraphs
+    paragraphs = [p.strip() for p in ibm_terms_text.split('\n\n') if p.strip()]
     
-    for i, line in enumerate(lines):
-        if line.strip():
-            line_text = line.strip()
-            
+    for paragraph in paragraphs:
+        if paragraph:
+            # Use one cell per complete paragraph - let Excel handle text wrapping
             ws.merge_cells(f"C{current_row}:H{current_row}")
             cell = ws[f"C{current_row}"]
             
-            # Check if line contains a URL
+            # Check if paragraph contains a URL
             url_pattern = r'https?://[^\s]+'
-            import re
-            urls = re.findall(url_pattern, line_text)
+            urls = re.findall(url_pattern, paragraph)
             
             if urls:
                 for url in urls:
                     cell.hyperlink = url
-                    cell.value = line_text
+                    cell.value = paragraph
                     cell.font = Font(size=10, color="0563C1", underline="single")
             else:
-                cell.value = line_text
+                cell.value = paragraph
                 cell.font = Font(size=10, color="000000")
             
-            cell.alignment = Alignment(wrap_text=True, vertical="top")
+            # Enable text wrapping for proper paragraph display
+            cell.alignment = Alignment(wrap_text=True, vertical="top", horizontal="left")
+            
+            # Calculate row height based on paragraph length
+            estimated_lines = max(2, len(paragraph) // 100 + 1)  # More generous estimation
+            row_height = max(25, estimated_lines * 15)  # 15 points per line
+            ws.row_dimensions[current_row].height = row_height
+            
             current_row += 1
             
-            if "Useful/Important web resources" in line_text:
+            # Add extra spacing between major sections
+            if "Useful/Important web resources" in paragraph:
+                current_row += 1
                 current_row += 1
     
-    # Page setup
+    # Page setup - optimized for 11 columns (B through L)
     first_col = 2
-    last_col = 9
+    last_col = 12  # Column L
     last_row = ws.max_row
     
-    ws.print_area = f"B1:I{last_row}"
+    ws.print_area = f"B1:L{last_row}"
     ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0
+    ws.page_setup.fitToWidth = 1  # Fit all columns to page width
+    ws.page_setup.fitToHeight = 0  # Allow multiple pages vertically
     
-    ws.page_margins.left = 0.3
-    ws.page_margins.right = 0.3
-    ws.page_margins.top = 0.4
-    ws.page_margins.bottom = 0.4
-    ws.page_margins.header = 0.3
-    ws.page_margins.footer = 0.3
+    # Reduced margins to maximize space for 11 columns
+    ws.page_margins.left = 0.2
+    ws.page_margins.right = 0.2
+    ws.page_margins.top = 0.3
+    ws.page_margins.bottom = 0.3
+    ws.page_margins.header = 0.2
+    ws.page_margins.footer = 0.2
     
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.page_setup.draft = False
     ws.page_setup.blackAndWhite = False
-    ws.page_setup.scale = 85
-    ws.sheet_properties.pageSetUpPr.fitToPage = False
+    # Remove fixed scale - let fitToWidth handle scaling automatically
+    ws.sheet_properties.pageSetUpPr.fitToPage = True  # Enable fit-to-page
     
     add_debug(f"[EXCEL COMPLETE] Saved Excel with {len(data)} data rows")
     wb.save(output)
