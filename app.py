@@ -158,7 +158,7 @@ if "show_team_selection" not in st.session_state:
 
 # 🎉 Welcome Page (only show if team selection not started)
 if not st.session_state.show_team_selection:
-    st.balloons()  # Immediate celebration!
+    
 
     # Cool welcome message with animation-like styling
     st.markdown("""
@@ -1299,7 +1299,7 @@ elif tool == "💻 IBM Quotation":
                         )
 
                         st.success("✅ Excel file generated successfully!")
-                        st.balloons()
+                        
                     except Exception as e:
                         st.error(f"❌ Error generating Excel: {str(e)}")
                         st.exception(e)
