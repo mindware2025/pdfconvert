@@ -174,12 +174,14 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                 debug_log(f"Original GUID: '{found_guid}' -> Normalized: '{normalized_guid}'")
                 out_row["Subscription Id"] = normalized_guid
                 
-                # Parse additional info using semicolon, colon, and hash delimiters
+                # Parse additional info using semicolon, colon, hash, and tab delimiters
                 parts = item_desc_raw.split(';')
                 if len(parts) == 1:  # No semicolons, try colons
                     parts = item_desc_raw.split(':')
                 if len(parts) == 1:  # No colons either, try hash symbols
                     parts = item_desc_raw.split('#')
+                if len(parts) == 1:  # No hash symbols either, try tabs
+                    parts = item_desc_raw.split('\t')
                 debug_log(f"Split item description by delimiters: {parts}")
                 
                 # Look for item code in parts or use keyword mapping
@@ -225,14 +227,16 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                 # Parse LPO from the item description
                 # Multiple LPO patterns to handle different formats
                 lpo_patterns = [
-                    r'(?:^|-)?\s*LPO\s*:\s*([A-Z0-9]+)',  # "LPO: XXXXX" or "- LPO: XXXXX"
-                    r'(?:^|-)?\s*LPO\s*-?\s*([A-Z0-9]+)',  # "LPO- XXXXX" or "- LPO- XXXXX"
-                    r'PO\s*#\s*(\d+)',    # Pattern like "PO # 158068"
-                    r'\b([A-Z]\d{8})\b',  # Pattern like P00040411
-                    r'\b(PO\d+)\b',       # Pattern like PO00159398
-                    r'\b(APO\d+)\b',      # Pattern like APO2503065
-                    r'\b(DPO\d+)\b',      # Pattern like DPO2500101
-                    r'\b(T\d{4}PO\d+)\b', # Pattern like T2025PO20240
+                    r'(?:^|-)?\s*LPO\s*:\s*([A-Z0-9]+)',     # "LPO: XXXXX" or "- LPO: XXXXX"
+                    r'(?:^|-)?\s*LPO\s*-?\s*([A-Z0-9]+)',    # "LPO- XXXXX" or "- LPO- XXXXX"
+                    r'LPO\s*-\s*(PO\d+)',                    # "LPO- PO00155411"
+                    r'PO\s*#\s*(\d+)',                       # Pattern like "PO # 158068"
+                    r'\b(PO-\d+)\b',                         # Pattern like "PO-01076"
+                    r'\b([A-Z]\d{8})\b',                     # Pattern like P00040411
+                    r'\b(PO\d+)\b',                          # Pattern like PO00159398
+                    r'\b(APO\d+)\b',                         # Pattern like APO2503065
+                    r'\b(DPO\d+)\b',                         # Pattern like DPO2500101
+                    r'\b(T\d{4}PO\d+)\b',                    # Pattern like T2025PO20240
                 ]
                 
                 lpo_found = False
@@ -273,8 +277,10 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                 # Pattern 2: "EU -Name" or "EU- Name" in the full description (for cases without semicolons/colons)
                 if not end_user_found:
                     eu_patterns = [
-                        r'EU\s*-\s*([^:\-\n]+?)(?:\s*$|\s*-|$)',  # "EU- Name" or "EU -Name" 
-                        r'EU\s*:\s*([^:\-\n]+?)(?:\s*$|\s*-|$)',  # "EU: Name"
+                        r'EU\s*-\s*([^:\-\n]+?)(?:\s*$|\s*:|$)',      # "EU- Name" or "EU -Name" 
+                        r'EU\s*:\s*([^:\-\n]+?)(?:\s*$|\s*:|$)',      # "EU: Name"
+                        r':\s*EU\s*-\s*([^:\-\n]+?)(?:\s*$|\s*:|$)',  # ": EU - alkhalij"
+                        r':\s*([A-Za-z][^:\n]*?)\s*$',                # ": Fidu Properties" (colon followed by name at end)
                     ]
                     
                     for pattern in eu_patterns:
@@ -315,8 +321,120 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                 debug_log(f"Final manual processing result - Sub ID: '{out_row.get('Subscription Id')}', Item Code: '{out_row.get('ITEM Code')}', LPO: '{out_row.get('LPO Number')}', End User: '{out_row.get('End User')}'")
             else:
                 debug_log(f"No GUID found after manual, using default sub_id_clean: '{sub_id_clean}'")
-                # Step 4: No GUID found after manual, use default
+                # Step 4: No GUID found after manual, use default but still try to extract LPO and End User
                 out_row["Subscription Id"] = sub_id_clean
+                
+                # Still parse LPO and End User even without GUID
+                # Parse additional info using semicolon, colon, hash, and tab delimiters
+                parts = item_desc_raw.split(';')
+                if len(parts) == 1:  # No semicolons, try colons
+                    parts = item_desc_raw.split(':')
+                if len(parts) == 1:  # No colons either, try hash symbols
+                    parts = item_desc_raw.split('#')
+                if len(parts) == 1:  # No hash symbols either, try tabs
+                    parts = item_desc_raw.split('\t')
+                debug_log(f"Split item description by delimiters (no GUID): {parts}")
+                
+                # Look for item code in parts or use keyword mapping
+                item_code_found = False
+                if len(parts) >= 2:
+                    for i, part in enumerate(parts):
+                        part_clean = part.strip()
+                        # Check if this part looks like an item code
+                        if re.match(r'^[A-Z]{2,4}[-\s]*[A-Z]*$', part_clean) and len(part_clean) >= 2:
+                            out_row["ITEM Code"] = part_clean
+                            debug_log(f"Found item code in description part {i} (no GUID): '{part_clean}'")
+                            item_code_found = True
+                            break
+                
+                # If no item code found in parts, use keyword mapping
+                if not item_code_found:
+                    for keywords, code in keyword_map.items():
+                        for keyword in keywords:  # Iterate through each keyword in the tuple
+                            if keyword in item_desc_lower:
+                                out_row["ITEM Code"] = code
+                                debug_log(f"Found item code using keyword mapping (no GUID): '{keyword}' -> '{code}'")
+                                item_code_found = True
+                                break
+                        if item_code_found:
+                            break
+                
+                # Parse LPO from the item description
+                lpo_patterns = [
+                    r'(?:^|-)?\s*LPO\s*:\s*([A-Z0-9]+)',     # "LPO: XXXXX" or "- LPO: XXXXX"
+                    r'(?:^|-)?\s*LPO\s*-?\s*([A-Z0-9]+)',    # "LPO- XXXXX" or "- LPO- XXXXX"
+                    r'LPO\s*-\s*(PO\d+)',                    # "LPO- PO00155411"
+                    r'PO\s*#\s*(\d+)',                       # Pattern like "PO # 158068"
+                    r'\b(PO-\d+)\b',                         # Pattern like "PO-01076"
+                    r'\b([A-Z]\d{8})\b',                     # Pattern like P00040411
+                    r'\b(PO\d+)\b',                          # Pattern like PO00159398
+                    r'\b(APO\d+)\b',                         # Pattern like APO2503065
+                    r'\b(DPO\d+)\b',                         # Pattern like DPO2500101
+                    r'\b(T\d{4}PO\d+)\b',                    # Pattern like T2025PO20240
+                ]
+                
+                lpo_found = False
+                for pattern in lpo_patterns:
+                    lpo_match = re.search(pattern, item_desc_raw, re.IGNORECASE)
+                    if lpo_match:
+                        lpo_value = lpo_match.group(1).strip()
+                        out_row["LPO Number"] = lpo_value[:30]
+                        debug_log(f"Found and set LPO Number (no GUID): '{lpo_value}' using pattern: '{pattern}'")
+                        lpo_found = True
+                        break
+                
+                if not lpo_found:
+                    debug_log(f"No LPO pattern found in item description (no GUID)")
+                
+                # Parse End User from the item description
+                end_user_found = False
+                
+                # Pattern 1: "EU:Name" or "EU: Name" in semicolon/colon parts
+                if len(parts) >= 3:
+                    remaining_parts = parts[2:]
+                    for part in remaining_parts:
+                        part_clean = part.strip()
+                        if 'eu:' in part_clean.lower() or 'eu -' in part_clean.lower():
+                            # Extract after EU: or EU-
+                            eu_match = re.search(r'eu\s*[:\-]\s*([^;:]+)', part_clean, re.IGNORECASE)
+                            if eu_match:
+                                end_user_raw = eu_match.group(1).strip()
+                                # Clean up - remove extra spaces, semicolons, and encoding issues
+                                end_user_clean = re.sub(r'\s*[;:]\s*\w+$', '', end_user_raw)
+                                end_user_clean = re.sub(r'_x000D_', '', end_user_clean).strip()
+                                if end_user_clean:
+                                    out_row["End User"] = end_user_clean
+                                    debug_log(f"Set End User from description parts (no GUID): '{end_user_clean}'")
+                                    end_user_found = True
+                                    break
+                
+                # Pattern 2: "EU -Name" or "EU- Name" in the full description
+                if not end_user_found:
+                    eu_patterns = [
+                        r'EU\s*-\s*([^:\-\n]+?)(?:\s*$|\s*:|$)',      # "EU- Name" or "EU -Name" 
+                        r'EU\s*:\s*([^:\-\n]+?)(?:\s*$|\s*:|$)',      # "EU: Name"
+                        r':\s*EU\s*-\s*([^:\-\n]+?)(?:\s*$|\s*:|$)',  # ": EU - alkhalij"
+                        r':\s*([A-Za-z][^:\n]*?)\s*$',                # ": Fidu Properties" (colon followed by name at end)
+                    ]
+                    
+                    for pattern in eu_patterns:
+                        eu_match = re.search(pattern, item_desc_raw, re.IGNORECASE)
+                        if eu_match:
+                            end_user_clean = eu_match.group(1).strip()
+                            # Remove trailing dashes, encoding issues and extra content
+                            end_user_clean = re.sub(r'\s*-+\s*$', '', end_user_clean)
+                            end_user_clean = re.sub(r'_x000D_', '', end_user_clean).strip()
+                            if end_user_clean:
+                                out_row["End User"] = end_user_clean
+                                debug_log(f"Set End User from full description (no GUID): '{end_user_clean}' using pattern: '{pattern}'")
+                                end_user_found = True
+                                break
+                
+                if not end_user_found:
+                    debug_log(f"No End User pattern found in item description (no GUID)")
+                
+                debug_log(f"Final manual processing result (no GUID) - Sub ID: '{out_row.get('Subscription Id')}', Item Code: '{out_row.get('ITEM Code')}', LPO: '{out_row.get('LPO Number')}', End User: '{out_row.get('End User')}'")
+        
         
         # === Existing Logic ===
         elif item_code == "az-cns":
