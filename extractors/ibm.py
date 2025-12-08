@@ -847,9 +847,12 @@ def create_styled_excel(
     ws.merge_cells("B1:C2")  # Move logo to row 1-2
     if logo_path and os.path.exists(logo_path):
         img = Image(logo_path)
-        img.width = 1.87 * 96  # 1.87 inches * 96 dpi
-        img.height = 0.56 * 96
+        img.width = 1.87 * 96  # Restored original size: 1.87 inches * 96 dpi
+        img.height = 0.56 * 96  # Restored original size: 0.56
         ws.add_image(img, "B1")  # Logo starts at B1
+        # Set explicit row heights for logo rows to prevent excessive height
+        ws.row_dimensions[1].height = 25  # Row 1
+        ws.row_dimensions[2].height = 25  # Row 2
     ws.merge_cells("D3:G3")  # Move title to row 3
     ws["D3"] = "Quotation"
     ws["D3"].font = Font(size=20, color="1F497D")
@@ -1106,7 +1109,16 @@ def create_styled_excel(
                 merge_rows = style[0].get("merge_rows") if style else None
                 end_row = row_num + (merge_rows - 1 if merge_rows else 0)
                 
-                ws.merge_cells(f"{col_letter}{row_num}:H{end_row}")
+                # Check if this is a bold title (should span less width)
+                is_bold_title = style and "bold" in style[0] and style[0].get("bold") == True
+                
+                if is_bold_title:
+                    # Bold titles span only to column E for better layout
+                    ws.merge_cells(f"{col_letter}{row_num}:E{end_row}")
+                else:
+                    # Regular content spans full width C to H
+                    ws.merge_cells(f"{col_letter}{row_num}:H{end_row}")
+                
                 ws[cell_addr] = text
                 ws[cell_addr].alignment = Alignment(wrap_text=True, vertical="top")
                 # Height by estimated wrap - balanced for content visibility
@@ -1140,9 +1152,6 @@ def create_styled_excel(
         last_terms_row = terms_start_row + 10
         
     current_row = last_terms_row + 3
-    
-    # Force a page break before IBM Terms section to prevent awkward splits
-    ws.row_breaks.append(current_row - 1)
     
     # IBM Terms header
     ibm_header_cell = ws[f"C{current_row}"]
@@ -1193,18 +1202,18 @@ def create_styled_excel(
     last_col = 12  # Column L
     last_row = ws.max_row
     
-    ws.print_area = f"B1:L{last_row}"
+    ws.print_area = f"A1:L{last_row}"  # Include column A in print area
     ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
     ws.page_setup.fitToWidth = 1  # Fit all columns to page width
     ws.page_setup.fitToHeight = 0  # Allow multiple pages vertically
     
     # Reduced margins to maximize space for 11 columns
-    ws.page_margins.left = 0.2
-    ws.page_margins.right = 0.2
-    ws.page_margins.top = 0.3
-    ws.page_margins.bottom = 0.3
-    ws.page_margins.header = 0.2
-    ws.page_margins.footer = 0.2
+    ws.page_margins.left = 0.15  # Slightly smaller left margin
+    ws.page_margins.right = 0.15  # Slightly smaller right margin
+    ws.page_margins.top = 0.25   # Smaller top margin
+    ws.page_margins.bottom = 0.25
+    ws.page_margins.header = 0.15
+    ws.page_margins.footer = 0.15
     
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.page_setup.draft = False
