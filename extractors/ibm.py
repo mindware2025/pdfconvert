@@ -360,7 +360,8 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
         "Reseller Name": "",
         "City": "",
         "Country": "",
-        "Maximum End User Price (MEP)": ""
+        "Maximum End User Price (MEP)": "",
+        "Bid Expiration Date": ""
     }
     
     # Parse header info (simple look-ahead by 1 line)
@@ -393,6 +394,9 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
         if "Country:" in line:
             header_info["Country"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
             header_fields_found += 1
+        if "Bid Expiration Date:" in line:
+            header_info["Bid Expiration Date"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
+            header_fields_found += 1
         if "Maximum End User Price" in line or "MEP" in line:
             # Look for MEP value in same line or next line
             if ":" in line:
@@ -418,7 +422,11 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
     
     debug_logger.info(f"Header fields found: {header_fields_found}")
     debug_logger.info(f"MEP extracted: '{header_info.get('Maximum End User Price (MEP)', 'Not found')}')")
-    
+    debug_logger.info(f"Bid Expiration Date: '{header_info.get('Bid Expiration Date', 'Not found')}')")
+
+    # === Line Item Extraction ===
+    # ...existing line item extraction code continues here...
+
     # === Line Item Extraction ===
     debug_logger.info("Extracting line items...")
     extracted_data = []
@@ -1058,6 +1066,7 @@ def create_styled_excel(
     ws[f"J{summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
     
     # Second summary row - TOTAL BP Special Discounted Price
+        # Second summary row - TOTAL BP Special Discounted Price
     bp_summary_row = summary_row + 1
     ws.merge_cells(f"C{bp_summary_row}:G{bp_summary_row}")
     ws[f"C{bp_summary_row}"] = "TOTAL BP Special Discounted Price excluding VAT:"
@@ -1071,6 +1080,21 @@ def create_styled_excel(
     ws[f"L{bp_summary_row}"].number_format = '"AED"#,##0.00'
     ws[f"L{bp_summary_row}"].font = Font(bold=True, color="1F497D")
     ws[f"L{bp_summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+
+    # Add customer price validation row
+    validation_row = bp_summary_row + 2
+    ws.merge_cells(f"C{validation_row}:G{validation_row}")
+    ws[f"C{validation_row}"] = "Customer Price should not exceed:"
+    ws[f"C{validation_row}"].font = Font(bold=True, color="1F497D")
+    ws[f"C{validation_row}"].alignment = Alignment(horizontal="right")
+    
+    # Formula: Total BP Special Price * 3.3657
+    validation_formula = f"=L{bp_summary_row}*3.3657"
+    ws[f"L{validation_row}"] = validation_formula
+    ws[f"L{validation_row}"].number_format = '"AED"#,##0.00'
+    ws[f"L{validation_row}"].font = Font(bold=True, color="FF0000")  # Red color for emphasis
+    ws[f"L{validation_row}"].fill = PatternFill(start_color="FFEEEE", end_color="FFEEEE", fill_type="solid")
+
     # --- Dynamic Terms block (main sheet) ---
     total_price_sum = sum(((row[6] if len(row) > 6 and row[6] else 0) for row in data))
     terms = get_terms_section(header_info, total_price_sum)
@@ -1086,10 +1110,9 @@ def create_styled_excel(
                 total_lines += max(1, wrapped)
         return total_lines
     
-    # Calculate the actual end row of the table content dynamically (now includes BP Special row)
-    table_end_row = start_row + len(data) + 5  # data rows + 2 summary rows + spacing
+    # Calculate the actual end row of the table content dynamically (now includes validation row)
+    table_end_row = start_row + len(data) + 7  # data rows + 3 summary rows + spacing
     terms_start_row = max(29, table_end_row + 2)  # Ensure terms start after table
-    
     # Adjust terms positioning dynamically
     adjusted_terms = []
     row_offset = terms_start_row - 29  # Calculate offset from original row 29
