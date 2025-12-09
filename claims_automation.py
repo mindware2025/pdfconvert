@@ -30,7 +30,6 @@ EXCEL_DOUBLE_LF = EXCEL_LF + EXCEL_LF
 
 logger = logging.getLogger(__name__)
 
-
 OUTPUT_HEADERS: List[str] = [
     "Doc No", "Doc Dt", "Seq No", "Ref Seq No", "Manual Entry Y/N",
     "Main A/C", "Sub A/C", "Div", "Dept", "Anly1", "Anly2", "Acty1", "Acty2",
@@ -39,7 +38,9 @@ OUTPUT_HEADERS: List[str] = [
     "Doc Ref", "TH Doc ref", "Due Dt",
 ] + [f"FLEX_{i:02d}" for i in range(1, 51)] + [
     "Party Code", "NOP/NOR", "Tax Code", "Expense Code", "DISC Code",
-] + [f"TH_FLEX_{i:02d}" for i in range(1, 51)]
+] + [f"TH_FLEX_{i:02d}" for i in range(1, 51)] + [
+    "Employee Name"  # Add employee name as the new column after AB
+]
 
 
 SOURCE1_EXPECTED_COLS: List[str] = [
@@ -452,6 +453,8 @@ def _extract_duplicate_header_values(row: Dict[str, Any], header_label: str) -> 
     return values
 
 
+# Replace the build_detail_narration_for_credit function:
+
 def build_detail_narration_for_credit(
     src_row: Dict[str, Any],
     user_id_col: Optional[str],
@@ -462,6 +465,10 @@ def build_detail_narration_for_credit(
     """Build the Detail Narration for a credit line.
 
     If inputs are incomplete, fall back to the source detail narration.
+    If the result exceeds 240 characters, truncate to 200 characters and append 
+    "other expenses + Employee Name".
+    If there are multiple expenses for the same employee, add "other expenses" 
+    after the first 200 characters.
     """
     if not user_id_col or not master1_map or not source2_rows:
         return fallback_detail
@@ -487,14 +494,33 @@ def build_detail_narration_for_credit(
         return "-".join(parts)
 
     body = " ".join(snippet(r) for r in matches)
+    
+    # Check if there are multiple expenses (more than 1 match)
+    has_multiple_expenses = len(matches) > 1
+    
+    # Build the result
     result = f"{body} {employee_name}".strip()
 
-    # Ensure the final result does not exceed 240 characters
-    if len(result) > 240:
-        result = result[:237] + "..."
+    # Check if result exceeds 240 characters OR if there are multiple expenses
+    if len(result) > 240 or has_multiple_expenses:
+        # Take first 200 characters from the original narration
+        truncated_narration = body[:200].strip()
+        
+        # Add "other expenses" and employee name
+        result = f"{truncated_narration} other expenses {employee_name}".strip()
+        
+        # Ensure final result doesn't exceed 240 characters
+        if len(result) > 240:
+            # If still too long, truncate the narration part further
+            max_narration_length = 240 - len(f" other expenses {employee_name}")
+            if max_narration_length > 0:
+                truncated_narration = body[:max_narration_length].strip()
+                result = f"{truncated_narration} other expenses {employee_name}".strip()
+            else:
+                # Fallback if employee name itself is very long
+                result = f"other expenses {employee_name}"[:240]
 
     return result
-
 
 def build_output_rows_from_source1(
     src_rows: List[Dict[str, Any]],
@@ -558,7 +584,16 @@ def build_output_rows_from_source1(
         set_col("TH Doc ref", doc_ref_src)
         # Per requirement: Due Dt should be the same as Doc Dt for all rows
         set_col("Due Dt", doc_dt_str)
+# Add this at the end of the function, before rows_out.append(row):
 
+        # Set Employee Name in the new column
+        if master1_map and user_id_col:
+            user_id_val = r.get(user_id_col, "")
+            user_id = str(user_id_val).strip() if user_id_val is not None else ""
+            employee_name = master1_map.get(user_id, "").strip() if user_id else ""
+            set_col("Employee Name", employee_name)
+        
+       
         rows_out.append(row)
 
     logger.info("Built %d output rows", len(rows_out))
@@ -657,14 +692,28 @@ def build_debit_rows_from_source2(
 
         if acty1_value:
             set_col("Acty1", acty1_value)
+
+        # ACTY2 Logic
+        if main_ac_val == "54901":
+            # Search in narration for GCC countries
+            gcc_countries = ["bahrain", "kuwait", "oman", "qatar", "saudi arabia", "uae"]
             
-        division = division_map.get(orion_id, "").strip().upper() if division_map else ""
-        if main_ac_val == "54902":
+            # Build full narration text to search in
+            purpose = str(src.get("Purpose/Description", "") or "").lower()
+            benefit_item_text = str(src.get("Benefit Item", "") or "").lower()
+            benefit_amount_text = str(src.get("Benefit Amount", "") or "").lower()
+            employee_text = str(src.get("Employee", "") or "").lower()
+            full_narration = f"{purpose} {benefit_item_text} {benefit_amount_text} {employee_text}".lower()
+            
+            # Check if any GCC country is mentioned
+            is_gcc = any(country in full_narration for country in gcc_countries)
+            acty2_value = "GCC" if is_gcc else "NON_GCC"
+            set_col("Acty2", acty2_value)
+            
+        elif main_ac_val == "54902":
             division = division_map.get(orion_id, "").strip().upper() if division_map else ""
             acty2_value = "OMOBIL" if division in ["POMN", "PKWT"] else "NET ETSL"
             set_col("Acty2", acty2_value)
-            if 'acty2_value' in locals() and acty2_value:
-                set_col("Acty2", acty2_value)
 
         if default_div is not None and str(default_div).strip() != "":
             set_col("Div", str(default_div).strip())
@@ -695,7 +744,13 @@ def build_debit_rows_from_source2(
         if debit_detail:
             set_col("Detail Narration", debit_detail)
             set_col("Header Narration", debit_detail)
+# Add this at the end of the function, before rows_out.append(row):
 
+        # Set Employee Name in the new column
+        employee_name = str(src.get("Employee", "") or "").strip()
+        set_col("Employee Name", employee_name)
+
+       
         rows_out.append(row)
 
     #logger.info("Built %d debit rows from Source File 2", len(rows_out))
