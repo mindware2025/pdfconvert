@@ -38,9 +38,7 @@ OUTPUT_HEADERS: List[str] = [
     "Doc Ref", "TH Doc ref", "Due Dt",
 ] + [f"FLEX_{i:02d}" for i in range(1, 51)] + [
     "Party Code", "NOP/NOR", "Tax Code", "Expense Code", "DISC Code",
-] + [f"TH_FLEX_{i:02d}" for i in range(1, 51)] + [
-    "Employee Name"  # Add employee name as the new column after AB
-]
+] + [f"TH_FLEX_{i:02d}" for i in range(1, 51)]
 
 
 SOURCE1_EXPECTED_COLS: List[str] = [
@@ -584,14 +582,13 @@ def build_output_rows_from_source1(
         set_col("TH Doc ref", doc_ref_src)
         # Per requirement: Due Dt should be the same as Doc Dt for all rows
         set_col("Due Dt", doc_dt_str)
-# Add this at the end of the function, before rows_out.append(row):
 
-        # Set Employee Name in the new column
+        # Set Employee Name in FLEX_02 column (column AD)
         if master1_map and user_id_col:
             user_id_val = r.get(user_id_col, "")
             user_id = str(user_id_val).strip() if user_id_val is not None else ""
             employee_name = master1_map.get(user_id, "").strip() if user_id else ""
-            set_col("Employee Name", employee_name)
+            set_col("FLEX_02", employee_name)
         
        
         rows_out.append(row)
@@ -744,11 +741,10 @@ def build_debit_rows_from_source2(
         if debit_detail:
             set_col("Detail Narration", debit_detail)
             set_col("Header Narration", debit_detail)
-# Add this at the end of the function, before rows_out.append(row):
 
-        # Set Employee Name in the new column
+        # Set Employee Name in FLEX_02 column (column AD)
         employee_name = str(src.get("Employee", "") or "").strip()
-        set_col("Employee Name", employee_name)
+        set_col("FLEX_02", employee_name)
 
        
         rows_out.append(row)
