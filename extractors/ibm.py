@@ -991,16 +991,34 @@ def create_styled_excel(
         
         # Also add to debug log
         add_debug(f"[COST DEBUG] Row {idx}: qty={qty}, cost_usd={cost_usd}, total_price_aed={total_price_aed}, unit_price_aed={unit_price_aed}")
-        partner_discount = round(unit_price_aed * 0.99, 2) if unit_price_aed else 0
-        partner_price_aed = round(partner_discount * qty, 2) if partner_discount and qty else 0
-        # Write 10 columns (C-L) - Cost in USD, others in AED
-        excel_data = [sku, desc, qty, start_date, end_date, unit_price_aed, cost_usd, total_price_aed, partner_discount, partner_price_aed]
+            # Write first 7 columns with actual values (C through I)
+        excel_data = [sku, desc, qty, start_date, end_date, unit_price_aed, cost_usd]
+        
         for j, value in enumerate(excel_data):
-            excel_col = j + 3  # C=3, D=4, E=5, F=6, G=7, H=8, I=9, J=10, K=11, L=12
+            excel_col = j + 3  # C=3, D=4, E=5, F=6, G=7, H=8, I=9
             cell = ws.cell(row=excel_row, column=excel_col, value=value)
             cell.font = Font(size=11, color="1F497D")
             cell.alignment = Alignment(horizontal="center", vertical="center")
-            
+        
+        # Add FORMULAS for calculated columns (J, K, L)
+        
+        # Column J: Total Price in AED = Cost (I) * USD_TO_AED
+        total_formula = f"=I{excel_row}*{USD_TO_AED}"
+        ws.cell(row=excel_row, column=10, value=total_formula)
+        ws.cell(row=excel_row, column=10).font = Font(size=11, color="1F497D")
+        ws.cell(row=excel_row, column=10).alignment = Alignment(horizontal="center", vertical="center")
+        
+        # Column K: Partner Discount = Unit Price (H) * 0.99 (1% discount)
+        discount_formula = f"=H{excel_row}*0.99"
+        ws.cell(row=excel_row, column=11, value=discount_formula)
+        ws.cell(row=excel_row, column=11).font = Font(size=11, color="1F497D")
+        ws.cell(row=excel_row, column=11).alignment = Alignment(horizontal="center", vertical="center")
+        
+        # Column L: Partner Price in AED = Partner Discount (K) * Quantity (E)
+        partner_price_formula = f"=K{excel_row}*E{excel_row}"
+        ws.cell(row=excel_row, column=12, value=partner_price_formula)
+        ws.cell(row=excel_row, column=12).font = Font(size=11, color="1F497D")
+        ws.cell(row=excel_row, column=12).alignment = Alignment(horizontal="center", vertical="center")    
             
         # Currency formatting for price columns - Cost (I=9) in USD, others in AED
         for price_col in [8, 10, 11, 12]:  # AED columns: Unit Price, Total, Partner Discount, Partner Price
@@ -1030,9 +1048,11 @@ def create_styled_excel(
     # Sum Total Price (index 6 in data list)
         # Replace around line 825:
     
-    # Sum Total Price in AED (sum of cost × USD_TO_AED for each row)
-    total_bid_aed = sum(((row[5] / USD_TO_AED * USD_TO_AED) if len(row) >= 6 and row[5] else 0) for row in data)
-    ws[f"J{summary_row}"] = total_bid_aed  # Put total in Total Price AED column (J)
+    data_start_row = start_row
+    data_end_row = start_row + len(data) - 1
+    total_formula = f"=SUM(J{data_start_row}:J{data_end_row})"
+    
+    ws[f"J{summary_row}"] = total_formula
     ws[f"J{summary_row}"].number_format = '"AED"#,##0.00'
     ws[f"J{summary_row}"].font = Font(bold=True, color="1F497D")
     ws[f"J{summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
@@ -1044,26 +1064,15 @@ def create_styled_excel(
     ws[f"C{bp_summary_row}"].font = Font(bold=True, color="1F497D")
     ws[f"C{bp_summary_row}"].alignment = Alignment(horizontal="right")
     
-    # Calculate sum of Partner Price in AED (column L values)
-    # Partner price is calculated as: partner_discount * qty for each row
-    total_bp_special = 0
-    for row in data:
-        if len(row) >= 3:  # Need at least sku, desc, qty
-            qty = row[2] if row[2] else 0
-            bid_unit_svp_aed = row[5] if len(row) > 5 and row[5] else 0
-            cost_usd = bid_unit_svp_aed / USD_TO_AED if bid_unit_svp_aed else 0
-            total_price_aed = cost_usd * USD_TO_AED if cost_usd else 0
-            unit_price_aed = total_price_aed / qty if qty and qty > 0 else 0
-            partner_discount = unit_price_aed * 0.99 if unit_price_aed else 0
-            partner_price_aed = partner_discount * qty if partner_discount and qty else 0
-            total_bp_special += partner_price_aed
+    # Sum Partner Price in AED (column L) using SUM formula
+    bp_total_formula = f"=SUM(L{data_start_row}:L{data_end_row})"
     
-    ws[f"L{bp_summary_row}"] = total_bp_special  # Put total in Partner Price AED column (L)
+    ws[f"L{bp_summary_row}"] = bp_total_formula
     ws[f"L{bp_summary_row}"].number_format = '"AED"#,##0.00'
     ws[f"L{bp_summary_row}"].font = Font(bold=True, color="1F497D")
     ws[f"L{bp_summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
     # --- Dynamic Terms block (main sheet) ---
-    total_price_sum = total_bid_aed
+    total_price_sum = sum(((row[6] if len(row) > 6 and row[6] else 0) for row in data))
     terms = get_terms_section(header_info, total_price_sum)
     
     def estimate_line_count(text, max_chars_per_line=80):
@@ -1161,6 +1170,10 @@ def create_styled_excel(
     
     # Add IBM Terms content - use complete paragraphs with proper text wrapping
     # Split by double newlines to get complete paragraphs
+# Replace the IBM Terms content section around line 1178:
+
+    # Add IBM Terms content - use complete paragraphs with proper text wrapping
+    # Split by double newlines to get complete paragraphs
     paragraphs = [p.strip() for p in ibm_terms_text.split('\n\n') if p.strip()]
     
     for paragraph in paragraphs:
@@ -1169,18 +1182,9 @@ def create_styled_excel(
             ws.merge_cells(f"C{current_row}:H{current_row}")
             cell = ws[f"C{current_row}"]
             
-            # Check if paragraph contains a URL
-            url_pattern = r'https?://[^\s]+'
-            urls = re.findall(url_pattern, paragraph)
-            
-            if urls:
-                for url in urls:
-                    cell.hyperlink = url
-                    cell.value = paragraph
-                    cell.font = Font(size=10, color="0563C1", underline="single")
-            else:
-                cell.value = paragraph
-                cell.font = Font(size=10, color="000000")
+            # Just add the text without hyperlinks - no clickable links
+            cell.value = paragraph
+            cell.font = Font(size=10, color="000000")  # Standard black text
             
             # Enable text wrapping for proper paragraph display
             cell.alignment = Alignment(wrap_text=True, vertical="top", horizontal="left")
@@ -1191,6 +1195,10 @@ def create_styled_excel(
             ws.row_dimensions[current_row].height = row_height
             
             current_row += 1
+            
+            # Add extra spacing between major sections
+            if "Useful/Important web resources" in paragraph:
+                current_row += 1
             
             # Add extra spacing between major sections
             if "Useful/Important web resources" in paragraph:
