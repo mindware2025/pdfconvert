@@ -1340,14 +1340,16 @@ def create_styled_excel_template2(
     
     # --- Template 2 Table Headers (8 columns ONLY) ---
     headers = [
-        "Sl",                      # Column B (2)
+        "SI",                      # Column B (2)
         "SKU",                     # Column C (3)
         "Product Description",     # Column D (4)
         "Quantity",                # Column E (5)
         "Duration",                # Column F (6)
-        "Unit Price in AED",       # Column G (7)
-        "Total Price in AED",      # Column H (8)
-        "Partner Price in AED"     # Column I (9)
+        "Unit Price\nin AED",      # Column G (7)
+        "cost",                    # Column H (8)
+        "Total Price\nin AED",     # Column I (9)
+        "Partner disc",            # Column J (10)
+        "Partner Price\nin AED"    # Column K (11)
     ]
     header_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
     for col, header in enumerate(headers, start=2):
@@ -1398,36 +1400,46 @@ def create_styled_excel_template2(
             margin_discount = 0.92  # Default 8% discount -> 0.92 multiplier
         
         # Add FORMULAS for calculated columns G, H, I
-        # H (Total Price AED) = Extracted Number * 3.6725
-        total_price_formula = f"={extracted_total_usd}*3.6725"
-        ws.cell(row=excel_row, column=8, value=total_price_formula)  # Column H
-        add_debug(f"[TEMPLATE2 FORMULA] Total Price AED: {total_price_formula}")
+        # H (cost) = Extracted USD value
+        cost_formula = f"={extracted_total_usd}"
+        ws.cell(row=excel_row, column=8, value=cost_formula)  # Column H
+        add_debug(f"[TEMPLATE2 FORMULA] Cost (USD): {cost_formula}")
         
         # G (Unit Price AED) = Total Price AED / Quantity
         if qty and qty > 0:
-            unit_price_formula = f"=H{excel_row}/E{excel_row}"
+            unit_price_formula = f"=I{excel_row}/E{excel_row}"
         else:
-            unit_price_formula = f"=H{excel_row}"
+            unit_price_formula = f"=I{excel_row}"
         ws.cell(row=excel_row, column=7, value=unit_price_formula)  # Column G
         add_debug(f"[TEMPLATE2 FORMULA] Unit Price AED: {unit_price_formula}")
         
-        # I (Partner Price AED) = ROUNDUP(Unit Price * MARGIN_DISCOUNT, 2) * Quantity
-        partner_price_formula = f"=ROUNDUP(G{excel_row}*{margin_discount},2)*E{excel_row}"
-        ws.cell(row=excel_row, column=9, value=partner_price_formula)  # Column I
-        add_debug(f"[TEMPLATE2 FORMULA] Partner Price: {partner_price_formula} (discount: {channel_discount_str})")
+        # I (Total Price in AED) = Cost in USD * 3.6725
+        total_price_aed_formula = f"=H{excel_row}*3.6725"
+        ws.cell(row=excel_row, column=9, value=total_price_aed_formula)  # Column I
+        add_debug(f"[TEMPLATE2 FORMULA] Total Price in AED: {total_price_aed_formula}")
+        
+        # J (Partner disc) = ROUNDUP(Unit Price * 0.99, 2)
+        partner_disc_formula = f"=ROUNDUP(G{excel_row}*0.99,2)"
+        ws.cell(row=excel_row, column=10, value=partner_disc_formula)  # Column J
+        add_debug(f"[TEMPLATE2 FORMULA] Partner disc: {partner_disc_formula}")
+        
+        # K (Partner Price in AED) = Partner disc * Quantity
+        partner_price_formula = f"=J{excel_row}*E{excel_row}"
+        ws.cell(row=excel_row, column=11, value=partner_price_formula)  # Column K
+        add_debug(f"[TEMPLATE2 FORMULA] Partner Price in AED: {partner_price_formula}")
         
         # Special formatting for description (column D) - left align and wrap
         ws.cell(row=excel_row, column=4).alignment = Alignment(wrap_text=True, horizontal="left", vertical="center")
         
         # Apply consistent formatting to all formula columns
-        for col in [7, 8, 9]:  # G, H, I (price columns)
+        for col in [7, 8, 9, 10, 11]:  # G, H, I, J, K (price columns)
             cell = ws.cell(row=excel_row, column=col)
             cell.font = Font(size=11, color="1F497D")
             cell.alignment = Alignment(horizontal="center", vertical="center")
             cell.number_format = '"AED"#,##0.00'
         
-        # Apply yellow fill to all data columns (B through I only)
-        for col in range(2, 10):
+        # Apply yellow fill to all data columns (B through K)
+        for col in range(2, 12):
             ws.cell(row=excel_row, column=col).fill = row_fill
     
     # --- Template 2 Summary Rows ---
@@ -1441,12 +1453,12 @@ def create_styled_excel_template2(
     
     data_start_row = start_row
     data_end_row = start_row + len(data) - 1
-    total_formula = f"=SUM(H{data_start_row}:H{data_end_row})"
+    total_formula = f"=SUM(I{data_start_row}:I{data_end_row})"
     
-    ws[f"H{summary_row}"] = total_formula
-    ws[f"H{summary_row}"].number_format = '"AED"#,##0.00'
-    ws[f"H{summary_row}"].font = Font(bold=True, color="1F497D")
-    ws[f"H{summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+    ws[f"I{summary_row}"] = total_formula
+    ws[f"I{summary_row}"].number_format = '"AED"#,##0.00'
+    ws[f"I{summary_row}"].font = Font(bold=True, color="1F497D")
+    ws[f"I{summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
     
     # Total BP Special Discounted Price
     bp_summary_row = summary_row + 1
@@ -1455,25 +1467,13 @@ def create_styled_excel_template2(
     ws[f"C{bp_summary_row}"].font = Font(bold=True, color="1F497D")
     ws[f"C{bp_summary_row}"].alignment = Alignment(horizontal="right")
     
-    bp_total_formula = f"=SUM(I{data_start_row}:I{data_end_row})"
-    ws[f"I{bp_summary_row}"] = bp_total_formula
-    ws[f"I{bp_summary_row}"].number_format = '"AED"#,##0.00'
-    ws[f"I{bp_summary_row}"].font = Font(bold=True, color="1F497D")
-    ws[f"I{bp_summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+    bp_total_formula = f"=SUM(K{data_start_row}:K{data_end_row})"
+    ws[f"K{bp_summary_row}"] = bp_total_formula
+    ws[f"K{bp_summary_row}"].number_format = '"AED"#,##0.00'
+    ws[f"K{bp_summary_row}"].font = Font(bold=True, color="1F497D")
+    ws[f"K{bp_summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
     
-    # Customer Price Validation
-    validation_row = bp_summary_row + 2
-    ws.merge_cells(f"C{validation_row}:F{validation_row}")
-    ws[f"C{validation_row}"] = "Customer Price should not exceed:"
-    ws[f"C{validation_row}"].font = Font(bold=True, color="1F497D")
-    ws[f"C{validation_row}"].alignment = Alignment(horizontal="right")
     
-    validation_formula = f"=I{bp_summary_row}*3.3657"
-    ws[f"I{validation_row}"] = validation_formula
-    ws[f"I{validation_row}"].number_format = '"AED"#,##0.00'
-    ws[f"I{validation_row}"].font = Font(bold=True, color="FF0000")
-    ws[f"I{validation_row}"].fill = PatternFill(start_color="FFEEEE", end_color="FFEEEE", fill_type="solid")
-
     
     # --- Terms Section ---
     total_price_sum = sum(((row[7] if len(row) > 7 and row[7] else 0) for row in data))  # Use bid_total_aed
@@ -1599,13 +1599,7 @@ def create_styled_excel_template2(
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.sheet_properties.pageSetUpPr.fitToPage = True
     
-    # Add IBM Terms as second sheet
-    terms_sheet = wb.create_sheet(title="IBM Terms")
-    terms_sheet.cell(row=1, column=1, value=ibm_terms_text)
-    terms_sheet["A1"].alignment = Alignment(wrap_text=True, vertical="top")
-    terms_sheet.column_dimensions["A"].width = 120
-    
-    add_debug(f"[TEMPLATE2 COMPLETE] Saved Template 2 Excel with {len(data)} data rows - 8 COLUMNS ONLY")
+    add_debug(f"[TEMPLATE2 COMPLETE] Saved Template 2 Excel with {len(data)} data rows - 10 COLUMNS ONLY")
     wb.save(output)
 
 

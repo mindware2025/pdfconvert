@@ -5,6 +5,7 @@ from datetime import datetime
 import logging
 from pathlib import Path
 from io import BytesIO
+from terms_template import get_terms_section
 
 # Configure detailed logging for template 2
 log_file_path = 'template2_extraction_debug.log'
@@ -87,12 +88,24 @@ def save_debug_to_file():
 USD_TO_AED = 3.6725
 
 def parse_number(value: str):
-    """Parse numbers with various formats"""
+    """Parse numbers with various formats (including European: 107.856,00)"""
     try:
         if value is None:
             return None
-        s = str(value).strip().replace(" ", "").replace(",", ".")
-        return float(s)
+        s = str(value).strip().replace(" ", "")
+        
+        # Handle European format: 107.856,00 or 1.000,50
+        # Period is thousands separator, comma is decimal
+        if ',' in s and '.' in s:
+            # Has both - period is thousands separator, comma is decimal
+            s = s.replace(".", "").replace(",", ".")
+        elif ',' in s:
+            # Only comma - it's the decimal separator
+            s = s.replace(",", ".")
+        # else: only period or neither - keep as is
+        
+        result = float(s)
+        return result
     except Exception:
         return None
 
@@ -149,7 +162,9 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
         "IBM Opportunity Number": "",
         "Reseller Name": "",
         "City": "",
-        "Country": ""
+        "Country": "",
+        "Bid Expiration Date": "",
+        "Maximum End User Price (MEP)": ""
     }
     
     # Parse header fields
@@ -160,8 +175,10 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
             header_info["City"] = lines[i + 1] if i + 1 < len(lines) else ""
         elif "Country:" in line:
             header_info["Country"] = lines[i + 1] if i + 1 < len(lines) else ""
-        elif "Bid Number:" in line:
+        elif "Bid Number:" in line or "Quote Number:" in line:
             header_info["Bid Number"] = lines[i + 1] if i + 1 < len(lines) else ""
+        elif "Bid Expiration Date:" in line or "Quote Expiration Date:" in line:
+            header_info["Bid Expiration Date"] = lines[i + 1] if i + 1 < len(lines) else ""
         elif "IBM Agreement Number:" in line or "PA Agreement Number:" in line:
             header_info["PA Agreement Number"] = lines[i + 1] if i + 1 < len(lines) else ""
         elif "IBM Site Number:" in line or "PA Site Number:" in line:
@@ -172,6 +189,37 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
             header_info["Government Entity (GOE)"] = lines[i + 1] if i + 1 < len(lines) else ""
         elif "Reseller Name:" in line:
             header_info["Reseller Name"] = lines[i + 1] if i + 1 < len(lines) else ""
+        elif "Maximum End User Price" in line or "MEP" in line:
+            # Skip if this is just a yes/no question (like "MEP (Maximum End User Price): Yes")
+            if ":" in line:
+                after_colon = line.split(":", 1)[1].strip().lower()
+                if after_colon in ["yes", "no"]:
+                    # This is just a yes/no field, skip it - the actual value will be on another line
+                    add_debug(f"[MEP] Skipping MEP question line (yes/no): {line}")
+                    continue
+            
+            # Look for MEP value in same line or next line
+            mep_value = None
+            if ":" in line:
+                mep_part = line.split(":", 1)[1].strip()
+                if mep_part and mep_part.lower() not in ["yes", "no"]:
+                    mep_clean = re.sub(r'\s*(USD|AED|EUR).*$', '', mep_part).strip()
+                    mep_value = parse_number(mep_clean)
+                    if mep_value:
+                        add_debug(f"[MEP] Found MEP value on same line: {mep_value}")
+            
+            # If not found in same line, check next line
+            if not mep_value and i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+                if "USD" in next_line or "," in next_line:
+                    mep_clean = re.sub(r'\s*(USD|AED|EUR).*$', '', next_line).strip()
+                    mep_value = parse_number(mep_clean)
+                    if mep_value:
+                        add_debug(f"[MEP] Found MEP value on next line: {mep_value}")
+            
+            if mep_value:
+                header_info["Maximum End User Price (MEP)"] = f"{mep_value:,.2f}"
+                add_debug(f"[MEP] MEP set to: {mep_value:,.2f}")
         elif "IBM Opportunity Number:" in line:
             # Extract the opportunity number from the same or next line
             opp_match = re.search(r'[A-Z0-9]{10,}', line)
@@ -188,6 +236,27 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
     for key, value in header_info.items():
         add_debug(f"{key:30s}: {value}")
     add_debug("="*80 + "\n")
+    
+    # Fallback: If MEP still not found, search for "Maximum End User Price" pattern with value on next line
+    if not header_info.get("Maximum End User Price (MEP)"):
+        add_debug("[MEP FALLBACK] MEP not found in main loop, searching entire header...")
+        for i, line in enumerate(lines):
+            if ("Maximum End User Price" in line or "MEP" in line) and i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+                add_debug(f"[MEP FALLBACK] Found MEP-like line at index {i}: '{line}'")
+                add_debug(f"[MEP FALLBACK] Next line {i+1}: '{next_line}'")
+                # Check if next line contains USD amount or is a number
+                if "USD" in next_line or "," in next_line or any(c.isdigit() for c in next_line):
+                    mep_clean = re.sub(r'\s*(USD|AED|EUR).*$', '', next_line).strip()
+                    add_debug(f"[MEP FALLBACK] Cleaned value: '{mep_clean}'")
+                    mep_value = parse_number(mep_clean)
+                    add_debug(f"[MEP FALLBACK] Parsed number: {mep_value}")
+                    if mep_value:
+                        header_info["Maximum End User Price (MEP)"] = f"{mep_value:,.2f}"
+                        add_debug(f"[MEP FALLBACK SUCCESS] MEP set to: {mep_value:,.2f}")
+                        break
+                else:
+                    add_debug(f"[MEP FALLBACK] Next line doesn't look like a price, skipping")
     
     # Extract line items (Subscription Parts)
     extracted_data = []
@@ -735,6 +804,25 @@ def create_template2_styled_excel(
     import os
     
     logger.info(f"[TEMPLATE2 EXCEL] Creating Excel with {len(data)} rows")
+    add_debug(f"[TEMPLATE2 EXCEL] Creating Excel with {len(data)} rows")
+    
+    # Calculate total price for terms
+    total_price_sum = sum(row[7] if len(row) > 7 else 0 for row in data)
+    add_debug(f"[TEMPLATE2 EXCEL] Total price sum: AED {total_price_sum:,.2f}")
+    add_debug(f"[TEMPLATE2 EXCEL] Header info before terms: MEP='{header_info.get('Maximum End User Price (MEP)', 'EMPTY')}'")
+    
+    # Get terms section from template
+    try:
+        terms = get_terms_section(header_info, total_price_sum)
+        add_debug(f"[TEMPLATE2 EXCEL] Terms section generated with {len(terms)} cells")
+        # Show first term cell content
+        if terms and len(terms) > 1:
+            add_debug(f"[TEMPLATE2 EXCEL] First term cell: {terms[1][0]} = {str(terms[1][1])[:150]}")
+    except Exception as e:
+        add_debug(f"[TEMPLATE2 EXCEL] ERROR generating terms: {e}")
+        import traceback
+        add_debug(traceback.format_exc())
+        terms = []
     
     wb = Workbook()
     ws = wb.active
@@ -907,18 +995,35 @@ def create_template2_styled_excel(
     for col_letter, width in column_widths.items():
         ws.column_dimensions[col_letter].width = width
     
-    # Terms and Conditions
+    # Terms and Conditions from template
     terms_start_row = total_row + 3
-    ws[f"B{terms_start_row}"] = "Terms and Conditions:"
-    ws[f"B{terms_start_row}"].font = Font(bold=True, size=12, color="1F497D")
+    add_debug(f"[TEMPLATE2 EXCEL] Adding terms at row {terms_start_row}")
     
-    # Add compliance text
-    if compliance_text:
-        terms_row = terms_start_row + 1
-        ws[f"B{terms_row}"] = compliance_text
-        ws[f"B{terms_row}"].font = Font(size=9)
-        ws[f"B{terms_row}"].alignment = Alignment(wrap_text=True, vertical='top')
-        ws.merge_cells(f"B{terms_row}:I{terms_row + 5}")  # Give space for wrapped text
+    if terms:
+        # Apply all terms cells from get_terms_section()
+        try:
+            for cell_ref, value, *style_args in terms:
+                style_info = style_args[0] if style_args else {}
+                add_debug(f"[TEMPLATE2 TERMS] Writing to {cell_ref}: {str(value)[:50]}...")
+                
+                ws[cell_ref] = value
+                
+                # Apply styling if provided
+                if style_info:
+                    if style_info.get("bold"):
+                        ws[cell_ref].font = Font(bold=True, size=style_info.get("size", 11), color=style_info.get("color", "000000"))
+                    if style_info.get("merge_rows"):
+                        # Handle merge rows directive (not directly applicable to cell-by-cell approach)
+                        ws[cell_ref].alignment = Alignment(wrap_text=True, vertical='top')
+                else:
+                    ws[cell_ref].font = Font(size=11)
+                    ws[cell_ref].alignment = Alignment(wrap_text=True, vertical='top')
+            
+            add_debug(f"[TEMPLATE2 TERMS] Successfully added {len(terms)} term cells")
+        except Exception as e:
+            add_debug(f"[TEMPLATE2 TERMS] ERROR adding terms: {e}")
+    else:
+        add_debug("[TEMPLATE2 TERMS] No terms data available")
     
     # Page setup
     ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
@@ -938,3 +1043,5 @@ def create_template2_styled_excel(
     # Save workbook
     wb.save(output)
     logger.info("Template 2 Excel file generated successfully")
+    add_debug("[TEMPLATE2 EXCEL] Workbook saved successfully")
+    add_debug(f"[TEMPLATE2 EXCEL] Final workbook has sheet: {ws.title}")
