@@ -61,17 +61,17 @@ currency_map = {
     "OM000": "OMR", "UJ000": "USD", "KA000": "SAR"
 }
 keyword_map = {
-    ("windows server", "window server"): "MSPER-CNS",
-    ("ms-azr", "azure subscription"): "MSAZ-CNS",
-    ("google workspace",): "GL-WSP-CNS",
-    ("m365", "microsoft 365", "office 365", "exchange online","Microsoft Defender for Endpoint P1"): "MS-CNS",
-    ("acronis",): "AS-CNS",
-    ("windows 11 pro",): "MSPER-CNS",
-    ("power bi",): "MS-CNS",
-    ("planner", "project plan"): "MS-CNS",
-    ("power automate premium",): "MS-CNS",
-    ("visio",): "MS-CNS",
-    ("dynamics 365",): "MS-CNS"
+    ("windows server", "window server","MSPER-CNS"): "MSPER-CNS",
+    ("ms-azr", "azure subscription","MSAZ-CNS"): "MSAZ-CNS",
+    ("google workspace","GL-WSP-CNS"): "GL-WSP-CNS",
+    ("m365", "microsoft 365", "office 365", "exchange online","Microsoft Defender for Endpoint P1","MS-CNS"): "MS-CNS",
+    ("acronis","AS-CNS"): "AS-CNS",
+    ("windows 11 pro","MSPER-CNS"): "MSPER-CNS",
+    ("power bi","MS-CNS"): "MS-CNS",
+    ("planner", "project plan","MS-CNS"): "MS-CNS",
+    ("power automate premium","MS-CNS"): "MS-CNS",
+    ("visio","MS-CNS"): "MS-CNS",
+    ("dynamics 365","MS-CNS"): "MS-CNS"
 }
 
 def debug_log(message):
