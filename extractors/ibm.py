@@ -1604,7 +1604,7 @@ def create_styled_excel_template2(
 
     # Page setup for Template 2 (8 columns: B-I)
     last_row = ws.max_row
-    ws.print_area = f"A1:I{last_row}"
+    ws.print_area = f"A1:L{last_row}"
     ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
     ws.page_setup.fitToWidth = 1
     ws.page_setup.fitToHeight = 0
