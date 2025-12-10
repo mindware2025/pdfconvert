@@ -1586,7 +1586,7 @@ elif tool == "💻 IBM Quotation":
                             )
                             
                             st.success("✅ Excel file generated successfully!")
-                            st.balloons()
+                           
                             
                         except Exception as e:
                             st.error(f"❌ Error generating Excel: {str(e)}")
