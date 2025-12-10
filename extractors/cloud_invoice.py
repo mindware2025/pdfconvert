@@ -62,7 +62,7 @@ currency_map = {
 }
 keyword_map = {
     ("windows server", "window server","MSPER-CNS"): "MSPER-CNS",
-    ("ms-azr", "azure subscription","MSAZ-CNS"): "MSAZ-CNS",
+    ( "azure subscription","MSAZ-CNS"): "MSAZ-CNS",
     ("google workspace","GL-WSP-CNS"): "GL-WSP-CNS",
     ("m365", "microsoft 365", "office 365", "exchange online","Microsoft Defender for Endpoint P1","MS-CNS"): "MS-CNS",
     ("acronis","AS-CNS"): "AS-CNS",
