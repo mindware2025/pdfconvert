@@ -262,7 +262,7 @@ def show_login():
         if st.button("🎄 **Login** 🎄", key="login_btn", use_container_width=True, type="primary"):
             if username == CORRECT_USERNAME and password == CORRECT_PASSWORD:
                 st.session_state.login_state = "success"
-                st.balloons()
+              
                 st.snow()
             else:
                 st.session_state.login_state = "fail"
@@ -302,7 +302,7 @@ if "show_team_selection" not in st.session_state:
 
 # 🎉 Welcome Page (only show if team selection not started)
 if not st.session_state.show_team_selection:
-    st.balloons()  # Immediate celebration!
+   # st.balloons()  # Immediate celebration!
 
     # Cool welcome message with animation-like styling
     st.markdown("""
@@ -649,7 +649,7 @@ if not st.session_state.show_team_selection:
                      type="primary",
                      help="Click to proceed to team selection!"):
             st.session_state.show_team_selection = True
-            st.balloons()
+            #st.balloons()
             st.snow()
             st.rerun()
 
