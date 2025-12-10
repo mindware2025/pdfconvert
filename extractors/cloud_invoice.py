@@ -448,14 +448,18 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         else:
             # Step 5: Final fallback - Use default subscription ID
             out_row["Subscription Id"] = sub_id_clean
-        if not out_row.get("Billing Cycle Start Date"):
+        manual_set_start = out_row.get("Billing Cycle Start Date", "")
+        manual_set_end = out_row.get("Billing Cycle End Date", "")
+        
+        # Only use input dates if manual didn't set them AND they're not empty
+        if not manual_set_start or manual_set_start == "":
             input_start = fmt_date(row.get("BillingCycleStartDate", ""))
-            if input_start and input_start.strip():  # Only set if input is not empty
+            if input_start and input_start.strip() and input_start != "":
                 out_row["Billing Cycle Start Date"] = input_start
         
-        if not out_row.get("Billing Cycle End Date"):
+        if not manual_set_end or manual_set_end == "":
             input_end = fmt_date(row.get("BillingCycleEndDate", ""))
-            if input_end and input_end.strip():  # Only set if input is not empty
+            if input_end and input_end.strip() and input_end != "":
                 out_row["Billing Cycle End Date"] = input_end
         item_code = row.get("ITEMCode", "")
         if pd.notna(item_code) and str(item_code).strip():
