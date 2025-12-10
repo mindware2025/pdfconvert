@@ -19,7 +19,7 @@ from extractors.google_dnts import extract_invoice_info, extract_table_from_text
 from extractors.insurance import process_insurance_excel
 from extractors.insurance2  import process_grouped_customer_files
 from extractors.ibm import correct_descriptions, create_styled_excel, create_styled_excel_template2, extract_ibm_data_from_pdf, extract_last_page_text, get_extraction_debug
-from ibm_template2 import extract_ibm_template2_from_pdf
+from extractors.ibm_template2 import extract_ibm_template2_from_pdf
 from template_detector import detect_ibm_template
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
