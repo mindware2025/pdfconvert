@@ -113,7 +113,7 @@ def normalize_guid(guid_str: str) -> str:
 
 def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
     today = datetime.today()
-    today_str = f"{today.month:02d}/{today.day:02d}/{today.year}"
+    today_str = today.strftime("%d/%m/%Y")
     out_rows = []
     for _, row in df.iterrows():
         cost = row.get("Cost", "")
