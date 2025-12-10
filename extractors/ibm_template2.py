@@ -273,6 +273,18 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
     add_debug(f"Subscription Part Pattern: {subscription_part_re.pattern}")
     add_debug(f"Date Pattern: {date_pattern.pattern}")
     
+    # PRE-SCAN: Detect if this is a multi-row case (e.g., rows 001-006)
+    add_debug("\n[PRE-SCAN] Checking for multi-row table case...")
+    table_row_pattern = re.compile(r'^00[1-9]$|^0[1-9][0-9]$')
+    table_row_count = 0
+    for line in lines:
+        if table_row_pattern.match(line.strip()):
+            table_row_count += 1
+    
+    is_multi_row_case = table_row_count >= 2
+    add_debug(f"[PRE-SCAN] Table row markers found: {table_row_count}")
+    add_debug(f"[PRE-SCAN] Multi-row case detected: {is_multi_row_case}")
+    
     # Look for "Software as a Service" sections
     i = 0
     line_item_count = 0
@@ -285,7 +297,8 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
         is_subscription_part = 'Subscription Part#:' in line and 'Corresponding' not in line
         is_overage_part = 'Overage Part#:' in line
         
-        if is_subscription_part or is_overage_part:
+        # STRATEGY 1: Skip if multi-row case detected
+        if (is_subscription_part or is_overage_part) and not is_multi_row_case:
             try:
                 line_item_count += 1
                 add_debug(f"\n{'='*60}")
@@ -316,52 +329,58 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                 
                 # Extract service description (capture full block of information)
                 desc_lines = []
-                add_debug(f"\n[DESCRIPTION] Searching lines {max(0, i-20)} to {min(i+15, len(lines))} for full service block:")
+                add_debug(f"\n[DESCRIPTION] Searching lines {max(0, i-15)} to {min(i+10, len(lines))} for full service block:")
                 
-                # First, find the main IBM service line (going backwards) - look for the CLOSEST IBM line
+                # First, find the main IBM service line (going backwards) - look for product/service description
                 service_line_idx = None
-                for j in range(i - 1, max(0, i - 25), -1):  # Search backwards from current position
+                for j in range(i - 1, max(0, i - 15), -1):  # Search BACKWARDS from trigger line
                     line_text = lines[j].strip()
-                    # Match any line starting with IBM (much broader pattern)
-                    if line_text.startswith('IBM') and len(line_text) > 10:
-                        service_line_idx = j
-                        add_debug(f"  Found service line at line {j}: {line_text}")
-                        break  # Take the FIRST (closest) IBM line found going backwards
+                    # Look for IBM service lines that describe the actual product (not distributor/company info)
+                    # Should contain keywords like "Maximo", "Application", "Suite", "License", etc.
+                    if line_text.startswith('IBM') and len(line_text) > 20:
+                        # Exclude generic company/distributor lines
+                        if not any(x in line_text for x in ['Building', 'Industrial Park', 'Campus', 'Dublin', 'Ireland']):
+                            service_line_idx = j
+                            add_debug(f"  Found service line at line {j}: {line_text}")
+                            break
                 
                 if service_line_idx is not None:
                     # Collect the full service block from service line through additional billing details
                     # Extend search to include lines after the part line for billing info
-                    end_range = min(i + 20, len(lines))  # Look 20 lines after part line
+                    end_range = min(i + 15, len(lines))  # Look 15 lines after part line
                     add_debug(f"  Collecting service block from line {service_line_idx} to {end_range}:")
                     
-                    # Strategy: collect ALL non-empty lines until we hit a section marker or repeated header
-                    collected_text = []
                     for j in range(service_line_idx, end_range):
                         line_text = lines[j].strip()
-                        if line_text:
-                            # Stop if we hit "Item" or "Line" table headers (indicates table section)
-                            if re.match(r'^(Item|Line|Qty|Quantity|SI)\s*$', line_text, re.I):
-                                add_debug(f"    Stopping at line {j}: Table header detected: {line_text}")
+                        if line_text:  # Non-empty lines
+                            # Include relevant lines that describe the service
+                            if any(keyword in line_text for keyword in [
+                                'IBM', 'Projected Service Start Date', 'Service Level Agreement',
+                                'Current Transaction', 'Billing:', 'Subscription Length:',
+                                'Renewal Type:', 'Renewal:', 'Resource Unit Overage',
+                                'Corresponding Subscription Part#', 'Subscription Part#:', 'Overage Part#:'
+                            ]):
+                                desc_lines.append(line_text)
+                                add_debug(f"    Line {j}: {line_text}")
+                            # Stop if we hit another service or a new major section
+                            elif line_text.startswith('IBM') and j > i + 5:
+                                add_debug(f"    Stopping at line {j}: Next service section detected")
                                 break
-                            # Stop if we hit another IBM product line far from our part
-                            if line_text.startswith('IBM') and j > i + 5 and j != service_line_idx:
-                                add_debug(f"    Stopping at line {j}: Next IBM product detected")
-                                break
-                            # Collect this line
-                            collected_text.append(line_text)
-                            add_debug(f"    Line {j}: {line_text}")
-                    
-                    desc = ' '.join(collected_text) if collected_text else ""
-                    add_debug(f"✓ Full service block extracted: {desc[:100]}...")
+                
+                # Join all lines with newlines to form complete description
+                desc = '\n'.join(desc_lines) if desc_lines else ""
+                
+                if desc:
+                    add_debug(f"✓ Full service block extracted ({len(desc_lines)} lines)")
+                    add_debug(f"Complete description:")
+                    add_debug(f"    {desc}")
                 else:
-                    # Fallback: Look for ANY IBM line in wider range
-                    desc = ""
-                    add_debug(f"  Service line not found in primary range, searching {max(0, i-30)} to {i}:")
-                    for j in range(max(0, i - 30), i):
+                    # Fallback: Just get the IBM service name
+                    for j in range(max(0, i - 10), i):
                         line_text = lines[j].strip()
-                        if line_text.startswith('IBM') and len(line_text) > 10:
+                        if line_text.startswith('IBM') and len(line_text) > 15:
                             desc = line_text
-                            add_debug(f"✓ Fallback IBM service line found at {j}: {desc}")
+                            add_debug(f"✓ Fallback single-line description: {desc}")
                             break
                     
                     if not desc:
@@ -448,13 +467,13 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                 # Strategy 2: Find the line item number for this SKU
                 if not found_qty:
                     line_item_number = None
-                    for j in range(max(0, i - 20), min(i + 20, len(lines))):
+                    for j in range(i, min(i + 50, len(lines))):  # Extend search range to i+50
                         line_text = lines[j].strip()
                         # Look for "Line Item" or standalone numbers near our SKU
                         if re.match(r'^00[1-9]$', line_text):  # 001, 002, 003, etc.
                             # Check if this line item is close to our current SKU
                             distance_to_sku = abs(j - i)
-                            if distance_to_sku < 15:  # Within reasonable distance
+                            if distance_to_sku < 50:  # Within reasonable distance
                                 line_item_number = line_text
                                 add_debug(f"  Found line item number {line_item_number} at line {j} (distance: {distance_to_sku})")
                                 break
@@ -501,40 +520,6 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                                             add_debug(f"✓ Comma-formatted quantity found: {qty}")
                                             found_qty = True
                                             break
-                                    
-                                    # Check for European period-formatted quantities (e.g., "1.550" = 1550)
-                                    elif re.match(r'^\d{1,3}(\.\d{3})*$', qty_text):
-                                        # European format with periods as thousands separators
-                                        potential_qty = int(qty_text.replace('.', ''))
-                                        if potential_qty >= 1 and potential_qty <= 10000:
-                                            qty = potential_qty
-                                            add_debug(f"✓ Period-formatted quantity found (European): {qty}")
-                                            found_qty = True
-                                            break
-                                    
-                                    # Check for decimal quantities like "1.550" or "1,550" mixed format
-                                    elif re.match(r'^\d+[.,]\d+$', qty_text):
-                                        # This could be decimal (1.55) or European thousands (1.550)
-                                        # If it has 3 digits after separator, treat as thousands separator
-                                        if '.' in qty_text:
-                                            parts = qty_text.split('.')
-                                            if len(parts[1]) == 3:  # Likely thousands separator
-                                                potential_qty = int(qty_text.replace('.', ''))
-                                            else:  # Likely decimal
-                                                potential_qty = int(float(qty_text))
-                                        else:  # comma format
-                                            parts = qty_text.split(',')
-                                            if len(parts[1]) == 3:  # Likely thousands separator
-                                                potential_qty = int(qty_text.replace(',', ''))
-                                            else:  # Likely decimal
-                                                potential_qty = int(float(qty_text.replace(',', '.')))
-                                        
-                                        if potential_qty >= 1 and potential_qty <= 10000:
-                                            qty = potential_qty
-                                            add_debug(f"✓ Mixed format quantity found: {qty_text} -> {qty}")
-                                            found_qty = True
-                                            break
-                                
                                 if found_qty:
                                     break
                     
@@ -549,36 +534,6 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                                 if 1 <= potential_qty <= 10000 and line_text not in ['001', '002', '003']:
                                     qty = potential_qty
                                     add_debug(f"✓ Nearby quantity found at line {j}: {qty}")
-                                    found_qty = True
-                                    break
-                            
-                            # Check for European period-formatted quantities
-                            elif re.match(r'^\d{1,3}(\.\d{3})*$', line_text):
-                                potential_qty = int(line_text.replace('.', ''))
-                                if 1 <= potential_qty <= 10000:
-                                    qty = potential_qty
-                                    add_debug(f"✓ Nearby European format quantity found at line {j}: {qty}")
-                                    found_qty = True
-                                    break
-                            
-                            # Check for mixed format quantities
-                            elif re.match(r'^\d+[.,]\d+$', line_text):
-                                if '.' in line_text:
-                                    parts = line_text.split('.')
-                                    if len(parts[1]) == 3:  # Thousands separator
-                                        potential_qty = int(line_text.replace('.', ''))
-                                    else:  # Decimal
-                                        potential_qty = int(float(line_text))
-                                else:  # Comma
-                                    parts = line_text.split(',')
-                                    if len(parts[1]) == 3:  # Thousands separator
-                                        potential_qty = int(line_text.replace(',', ''))
-                                    else:  # Decimal
-                                        potential_qty = int(float(line_text.replace(',', '.')))
-                                
-                                if 1 <= potential_qty <= 10000:
-                                    qty = potential_qty
-                                    add_debug(f"✓ Nearby mixed format quantity found at line {j}: {qty}")
                                     found_qty = True
                                     break
                 
@@ -734,11 +689,6 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                     bid_unit_price = bid_total_price / qty
                     add_debug(f"✓ CALCULATED Unit Price: ${bid_unit_price} = ${bid_total_price} / {qty}")
                 
-                # Strategy 3: If we have Unit Price but no Total, calculate Total = Unit × Qty
-                if bid_unit_price and not bid_total_price and qty > 0:
-                    bid_total_price = bid_unit_price * qty
-                    add_debug(f"✓ CALCULATED Total Price: ${bid_total_price} = ${bid_unit_price} × {qty}")
-                
                 # No fallback - if table prices not found, leave blank
                 if not bid_total_price:
                     add_debug("✗ No line-item pricing found - leaving prices blank")
@@ -812,6 +762,246 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                 import traceback
                 add_debug(f"Traceback:\n{traceback.format_exc()}")
                 add_debug(f"{'='*60}\n")
+        
+        # STRATEGY 2: Extract from table rows (001, 002, 003, etc.) if multi-row case
+        if is_multi_row_case:
+            line = lines[i]
+            line_stripped = line.strip()
+            
+            # Check if this line is a table row marker
+            if table_row_pattern.match(line_stripped):
+                try:
+                    add_debug(f"\n[STRATEGY 2] Processing table row: {line_stripped}")
+                    
+                    # Extract quantity from next line
+                    qty = 1
+                    if i + 1 < len(lines):
+                        qty_line = lines[i + 1].strip()
+                        add_debug(f"  Qty line: '{qty_line}'")
+                        
+                        # Try to parse quantity
+                        # Handle European period format: 1.550 = 1550
+                        if re.match(r'^\d{1,3}(\.\d{3})*$', qty_line):
+                            qty = int(qty_line.replace('.', ''))
+                            add_debug(f"  ✓ European period format quantity: {qty}")
+                        # Handle comma format: 1,550 = 1550
+                        elif re.match(r'^\d{1,3}(,\d{3})*$', qty_line):
+                            qty = int(qty_line.replace(',', ''))
+                            add_debug(f"  ✓ Comma format quantity: {qty}")
+                        # Handle plain integer
+                        elif re.match(r'^\d+$', qty_line):
+                            qty = int(qty_line)
+                            add_debug(f"  ✓ Plain integer quantity: {qty}")
+                        # Handle mixed format with decimal
+                        elif re.match(r'^\d+[.,]\d+$', qty_line):
+                            if '.' in qty_line:
+                                parts = qty_line.split('.')
+                                # If 3 digits after period, it's thousands separator
+                                if len(parts[1]) == 3:
+                                    qty = int(qty_line.replace('.', ''))
+                                else:
+                                    qty = float(qty_line.replace(',', '.'))
+                            else:
+                                qty = float(qty_line.replace(',', '.'))
+                            add_debug(f"  ✓ Mixed format quantity: {qty}")
+                    
+                    # Extract duration (e.g., "1-12" or "13-24")
+                    duration = "1-12"
+                    if i + 2 < len(lines):
+                        duration_line = lines[i + 2].strip()
+                        add_debug(f"  Duration line: '{duration_line}'")
+                        duration_match = re.search(r'(\d+)-(\d+)', duration_line)
+                        if duration_match:
+                            duration = f"{duration_match.group(1)}-{duration_match.group(2)}"
+                            add_debug(f"  ✓ Duration extracted: {duration}")
+                    
+                    # Extract SKU (search entire document backwards from current position)
+                    sku_table = None
+                    for j in range(i - 1, -1, -1):
+                        search_text = lines[j]
+                        sku_match = subscription_part_re.search(search_text)
+                        if sku_match:
+                            potential_sku = sku_match.group()
+                            # Validate SKU (should contain both letters and digits)
+                            if any(c.isalpha() for c in potential_sku) and any(c.isdigit() for c in potential_sku):
+                                if 5 <= len(potential_sku) <= 20:
+                                    sku_table = potential_sku
+                                    add_debug(f"  ✓ SKU found at line {j}: {sku_table}")
+                                    break
+                    
+                    if not sku_table:
+                        add_debug(f"  ✗ No SKU found for table row {line_stripped}")
+                        i += 1
+                        continue
+                    
+                    # Extract description using SAME LOGIC as Strategy 1 (but only once per SKU with caching)
+                    if not hasattr(extract_ibm_template2_from_pdf, '_desc_cache'):
+                        extract_ibm_template2_from_pdf._desc_cache = {}
+                    
+                    desc_cache = extract_ibm_template2_from_pdf._desc_cache
+                    
+                    if sku_table not in desc_cache:
+                        # Extract description using Strategy 1 logic
+                        desc_lines = []
+                        add_debug(f"  [DESC] Extracting description for {sku_table}...")
+                        
+                        # Find where the SKU was mentioned (subscription part line)
+                        sku_line_idx = None
+                        for j in range(i - 1, max(0, i - 50), -1):
+                            if 'Subscription Part#:' in lines[j] or 'Overage Part#:' in lines[j]:
+                                sku_line_idx = j
+                                add_debug(f"    Found subscription part line at line {j}")
+                                break
+                        
+                        if sku_line_idx is None:
+                            sku_line_idx = i  # Fallback to current position
+                        
+                        # Find the main IBM service line (searching BEFORE the subscription part line)
+                        service_line_idx = None
+                        for j in range(sku_line_idx - 1, max(0, sku_line_idx - 30), -1):  # Search backwards
+                            line_text = lines[j].strip()
+                            if line_text.startswith('IBM') and len(line_text) > 20:
+                                # Exclude generic company/distributor lines and opportunity numbers
+                                if not any(x in line_text for x in ['Building', 'Industrial Park', 'Campus', 'Dublin', 'Ireland', 'Opportunity Number']):
+                                    service_line_idx = j
+                                    add_debug(f"    Found service line at line {j}: {line_text}")
+                                    break
+                        
+                        if service_line_idx is not None:
+                            # Collect the full service block from service line THROUGH billing/renewal details
+                            # Go 15-20 lines after the subscription part line to capture all details
+                            end_range = min(sku_line_idx + 20, len(lines))
+                            add_debug(f"    Collecting service block from line {service_line_idx} to {end_range}:")
+                            
+                            for j in range(service_line_idx, end_range):
+                                line_text = lines[j].strip()
+                                if line_text:  # Non-empty lines
+                                    # Include relevant lines that describe the service
+                                    if any(keyword in line_text for keyword in [
+                                        'IBM', 'Projected Service Start Date', 'Service Level Agreement',
+                                        'Current Transaction', 'Billing:', 'Subscription Length:',
+                                        'Renewal Type:', 'Renewal:', 'Resource Unit Overage',
+                                        'Corresponding Subscription Part#', 'Subscription Part#:', 'Overage Part#:',
+                                        'Channel Discount:', 'Customer Unit Price:', 'Quote Rate:', 'Committed Term:'
+                                    ]):
+                                        desc_lines.append(line_text)
+                                        add_debug(f"      Line {j}: {line_text}")
+                                    # Stop if we hit the table headers (Item, Quantity, etc.)
+                                    elif re.match(r'^(Item|Line|Qty|Quantity|SI|Customer|Entitled|Months|Discount|Quote)\s*$', line_text, re.I):
+                                        add_debug(f"      Stopping at line {j}: Table header detected")
+                                        break
+                        
+                        # Join all lines with newlines to form complete description
+                        full_desc = '\n'.join(desc_lines) if desc_lines else ""
+                        
+                        if full_desc:
+                            add_debug(f"    ✓ Description extracted ({len(desc_lines)} lines)")
+                        else:
+                            add_debug(f"    ✗ No description found")
+                        
+                        desc_cache[sku_table] = full_desc
+                    
+                    desc_table = desc_cache[sku_table]
+                    add_debug(f"  ✓ Using cached description for {sku_table}")
+                    
+                    # Extract pricing using SAME LOGIC as Strategy 1
+                    unit_price_aed = 0
+                    total_price_aed = 0
+                    
+                    add_debug(f"  [PRICING] Searching lines {i+1} to {min(i+15, len(lines))} for prices (same as Strategy 1):")
+                    
+                    # Collect all price values from lines after the row marker
+                    all_prices = []
+                    for j in range(i + 1, min(i + 15, len(lines))):
+                        price_line = lines[j].strip()
+                        # Look for European formatted numbers (including 0,00 and 864.960,00)
+                        found_prices = re.findall(r'\b\d{1,3}(?:[.,]\d{3})*[.,]\d{2}(?:\s*USD)?\b', price_line)
+                        if found_prices:
+                            # Clean USD suffix and add to collection
+                            clean_prices = [p.replace(' USD', '').strip() for p in found_prices]
+                            all_prices.extend(clean_prices)
+                            add_debug(f"    Line {j}: {price_line} -> {clean_prices}")
+                    
+                    if len(all_prices) >= 1:
+                        add_debug(f"    All collected prices: {all_prices}")
+                        try:
+                            # Filter out prices that start with 0 (these are discounts or small values)
+                            price_candidates = [p for p in all_prices if not p.startswith('0,')]
+                            
+                            if price_candidates:
+                                add_debug(f"    Price candidates (non-zero): {price_candidates}")
+                                
+                                # Strategy: Use 4th position (index 3) for "Bid Total Commit Value" (same as Strategy 1)
+                                if len(price_candidates) >= 4:
+                                    total_str = price_candidates[3]
+                                    add_debug(f"    Selected position 4 (index 3): {total_str}")
+                                elif len(price_candidates) >= 2:
+                                    total_str = price_candidates[1]
+                                    add_debug(f"    Selected position 2: {total_str}")
+                                else:
+                                    total_str = price_candidates[0]
+                                    add_debug(f"    Selected only available: {total_str}")
+                                
+                                # Parse European format
+                                if ',' in total_str and total_str.count(',') == 1:
+                                    clean_str = total_str.replace('.', '').replace(',', '.')
+                                else:
+                                    clean_str = total_str.replace(',', '')
+                                
+                                total_price_usd = float(clean_str)
+                                unit_price_usd = total_price_usd / qty if qty > 0 else total_price_usd
+                                
+                                add_debug(f"    ✓ Extracted: Total USD {total_price_usd:,.2f}, Unit USD {unit_price_usd:,.2f}")
+                                
+                                # Convert USD to AED
+                                unit_price_aed = unit_price_usd * USD_TO_AED
+                                total_price_aed = total_price_usd * USD_TO_AED
+                                
+                                add_debug(f"  ✓ Prices found: USD {unit_price_usd:,.2f} → AED {unit_price_aed:,.2f}")
+                                add_debug(f"  ✓ Total: USD {total_price_usd:,.2f} → AED {total_price_aed:,.2f}")
+                            else:
+                                add_debug(f"    ✗ All prices are zero or no valid candidates")
+                        except Exception as e:
+                            add_debug(f"    ✗ Error parsing prices: {e}")
+                    else:
+                        add_debug(f"  ✗ No prices found")
+                    
+                    # Extract dates
+                    start_date = ""
+                    end_date = ""
+                    
+                    for j in range(max(0, i - 30), min(i + 20, len(lines))):
+                        date_matches = date_pattern.findall(lines[j])
+                        if date_matches:
+                            if not start_date:
+                                start_date = date_matches[0]
+                            if len(date_matches) > 1:
+                                end_date = date_matches[1]
+                            if start_date and end_date:
+                                add_debug(f"  ✓ Dates found: {start_date} to {end_date}")
+                                break
+                    
+                    # Add extracted row to results - use same format as Strategy 1
+                    # Format: [sku, desc, qty, duration, start_date, end_date, unit_price_aed, total_price_aed, partner_price_aed]
+                    partner_price_aed = round(total_price_aed * (1 - 0.08), 2)  # 8% discount
+                    row_data = [
+                        sku_table,
+                        desc_table,
+                        int(qty) if isinstance(qty, float) and qty.is_integer() else qty,
+                        duration,
+                        start_date,
+                        end_date,
+                        round(unit_price_aed, 2),
+                        round(total_price_aed, 2),
+                        partner_price_aed
+                    ]
+                    extracted_data.append(row_data)
+                    add_debug(f"  ✓ Row added: {sku_table} x {qty}")
+                    
+                except Exception as e:
+                    add_debug(f"  ✗ Error processing table row: {e}")
+                    import traceback
+                    add_debug(f"Traceback:\n{traceback.format_exc()}")
         
         i += 1
     
@@ -981,19 +1171,17 @@ def create_template2_styled_excel(
     for row_idx, row_data in enumerate(data, 1):
         excel_row = table_start_row + row_idx
         
-        # Extract data: [sku, desc, qty, duration, bid_unit_aed, bid_total_aed] (no start/end dates)
+        # Extract data: [sku, desc, qty, duration, start_date, end_date, unit_price_aed, total_price_aed, partner_price_aed]
         sku = row_data[0]
         description = row_data[1]
         quantity = row_data[2]
         duration = row_data[3] if row_data[3] else ""
-        unit_price = row_data[4]  # bid_unit_aed
-        total_price = row_data[5]  # bid_total_aed
+        unit_price = row_data[6]  # bid_unit_aed
+        total_price = row_data[7]  # bid_total_aed
+        partner_price = row_data[8]  # partner_price_aed
         
         # Calculate USD cost (reverse conversion from AED)
         cost_usd = round(unit_price / USD_TO_AED, 2) if unit_price else ""
-        
-        # Calculate partner price (assuming same as total for now)
-        partner_price = total_price
         
         values = [
             row_idx,  # SI (serial number)
@@ -1097,6 +1285,14 @@ def create_template2_styled_excel(
     ws.page_setup.fitToWidth = 1
     ws.page_setup.fitToHeight = False
     ws.page_margins = PageMargins(left=0.5, right=0.5, top=0.5, bottom=0.5)
+    
+    # Create IBM Terms sheet
+    terms_ws = wb.create_sheet("IBM Terms")
+    if ibm_terms_text:
+        terms_ws["A1"] = ibm_terms_text
+        terms_ws["A1"].font = Font(size=10)
+        terms_ws["A1"].alignment = Alignment(wrap_text=True, vertical='top')
+        terms_ws.column_dimensions['A'].width = 100
     
     # Save workbook
     wb.save(output)
