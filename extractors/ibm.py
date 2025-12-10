@@ -1453,7 +1453,11 @@ def create_styled_excel_template2(
             cell = ws.cell(row=excel_row, column=col)
             cell.font = Font(size=11, color="1F497D")
             cell.alignment = Alignment(horizontal="center", vertical="center")
-            cell.number_format = '"AED"#,##0.00'
+            # Column H (cost) shows USD, all others show AED
+            if col == 8:  # Column H is cost column
+                cell.number_format = '"USD"#,##0.00'
+            else:
+                cell.number_format = '"AED"#,##0.00'
         
         # Apply yellow fill to all data columns (B through K)
         for col in range(2, 12):
