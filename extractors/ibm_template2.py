@@ -504,6 +504,40 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                                             add_debug(f"✓ Comma-formatted quantity found: {qty}")
                                             found_qty = True
                                             break
+                                    
+                                    # Check for European period-formatted quantities (e.g., "1.550" = 1550)
+                                    elif re.match(r'^\d{1,3}(\.\d{3})*$', qty_text):
+                                        # European format with periods as thousands separators
+                                        potential_qty = int(qty_text.replace('.', ''))
+                                        if potential_qty >= 1 and potential_qty <= 10000:
+                                            qty = potential_qty
+                                            add_debug(f"✓ Period-formatted quantity found (European): {qty}")
+                                            found_qty = True
+                                            break
+                                    
+                                    # Check for decimal quantities like "1.550" or "1,550" mixed format
+                                    elif re.match(r'^\d+[.,]\d+$', qty_text):
+                                        # This could be decimal (1.55) or European thousands (1.550)
+                                        # If it has 3 digits after separator, treat as thousands separator
+                                        if '.' in qty_text:
+                                            parts = qty_text.split('.')
+                                            if len(parts[1]) == 3:  # Likely thousands separator
+                                                potential_qty = int(qty_text.replace('.', ''))
+                                            else:  # Likely decimal
+                                                potential_qty = int(float(qty_text))
+                                        else:  # comma format
+                                            parts = qty_text.split(',')
+                                            if len(parts[1]) == 3:  # Likely thousands separator
+                                                potential_qty = int(qty_text.replace(',', ''))
+                                            else:  # Likely decimal
+                                                potential_qty = int(float(qty_text.replace(',', '.')))
+                                        
+                                        if potential_qty >= 1 and potential_qty <= 10000:
+                                            qty = potential_qty
+                                            add_debug(f"✓ Mixed format quantity found: {qty_text} -> {qty}")
+                                            found_qty = True
+                                            break
+                                
                                 if found_qty:
                                     break
                     
@@ -518,6 +552,36 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                                 if 1 <= potential_qty <= 10000 and line_text not in ['001', '002', '003']:
                                     qty = potential_qty
                                     add_debug(f"✓ Nearby quantity found at line {j}: {qty}")
+                                    found_qty = True
+                                    break
+                            
+                            # Check for European period-formatted quantities
+                            elif re.match(r'^\d{1,3}(\.\d{3})*$', line_text):
+                                potential_qty = int(line_text.replace('.', ''))
+                                if 1 <= potential_qty <= 10000:
+                                    qty = potential_qty
+                                    add_debug(f"✓ Nearby European format quantity found at line {j}: {qty}")
+                                    found_qty = True
+                                    break
+                            
+                            # Check for mixed format quantities
+                            elif re.match(r'^\d+[.,]\d+$', line_text):
+                                if '.' in line_text:
+                                    parts = line_text.split('.')
+                                    if len(parts[1]) == 3:  # Thousands separator
+                                        potential_qty = int(line_text.replace('.', ''))
+                                    else:  # Decimal
+                                        potential_qty = int(float(line_text))
+                                else:  # Comma
+                                    parts = line_text.split(',')
+                                    if len(parts[1]) == 3:  # Thousands separator
+                                        potential_qty = int(line_text.replace(',', ''))
+                                    else:  # Decimal
+                                        potential_qty = int(float(line_text.replace(',', '.')))
+                                
+                                if 1 <= potential_qty <= 10000:
+                                    qty = potential_qty
+                                    add_debug(f"✓ Nearby mixed format quantity found at line {j}: {qty}")
                                     found_qty = True
                                     break
                 
@@ -672,6 +736,11 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                 if bid_total_price and not bid_unit_price and qty > 0:
                     bid_unit_price = bid_total_price / qty
                     add_debug(f"✓ CALCULATED Unit Price: ${bid_unit_price} = ${bid_total_price} / {qty}")
+                
+                # Strategy 3: If we have Unit Price but no Total, calculate Total = Unit × Qty
+                if bid_unit_price and not bid_total_price and qty > 0:
+                    bid_total_price = bid_unit_price * qty
+                    add_debug(f"✓ CALCULATED Total Price: ${bid_total_price} = ${bid_unit_price} × {qty}")
                 
                 # No fallback - if table prices not found, leave blank
                 if not bid_total_price:
