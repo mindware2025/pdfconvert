@@ -1,9 +1,29 @@
 import io
 import re
+import logging
 from openpyxl import Workbook
 import pandas as pd
 from datetime import datetime
 from dateutil import parser as _parser
+
+# Configure logging to file
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('cloud_parsing_debug.log', mode='w'),  # Write to file
+        logging.StreamHandler()  # Also keep console output
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# === GUID Pattern Definitions ===
+# GUID with whitespace and hyphen tolerance
+GUID_WS = r'[0-9a-f]{8}[\s-]*[0-9a-f]{4}[\s-]*[0-9a-f]{4}[\s-]*[0-9a-f]{4}[\s-]*[0-9a-f]{12}'
+
+# Updated manual token pattern for actual data format
+# Looks for "Manual" followed by optional text, then space and GUID
+manual_token_re = re.compile(rf'(?i)manual\w*\s+({GUID_WS})', re.IGNORECASE)
 
 # === Header Definition ===
 CLOUD_INVOICE_HEADER = [
@@ -41,18 +61,24 @@ currency_map = {
     "OM000": "OMR", "UJ000": "USD", "KA000": "SAR"
 }
 keyword_map = {
-    ("windows server", "window server"): "MSPER-CNS",
-    ("ms-azr", "azure subscription"): "MSAZ-CNS",
-    ("google workspace",): "GL-WSP-CNS",
-    ("m365", "microsoft 365", "office 365", "exchange online","Microsoft Defender for Endpoint P1"): "MS-CNS",
-    ("acronis",): "AS-CNS",
-    ("windows 11 pro",): "MSPER-CNS",
-    ("power bi",): "MS-CNS",
-    ("planner", "project plan"): "MS-CNS",
-    ("power automate premium",): "MS-CNS",
-    ("visio",): "MS-CNS",
-    ("dynamics 365",): "MS-CNS"
+    ("windows server", "window server","MSPER-CNS"): "MSPER-CNS",
+    ( "azure subscription","MSAZ-CNS"): "MSAZ-CNS",
+    ("google workspace","GL-WSP-CNS"): "GL-WSP-CNS",
+    ("m365", "microsoft 365", "office 365", "exchange online","Microsoft Defender for Endpoint P1","MS-CNS"): "MS-CNS",
+    ("acronis","AS-CNS"): "AS-CNS",
+    ("windows 11 pro","MSPER-CNS"): "MSPER-CNS",
+    ("power bi","MS-CNS"): "MS-CNS",
+    ("planner", "project plan","MS-CNS"): "MS-CNS",
+    ("power automate premium","MS-CNS"): "MS-CNS",
+    ("visio","MS-CNS"): "MS-CNS",
+    ("MSRI-CNS"): "MSRI-CNS",
+    ("dynamics 365","MS-CNS"): "MS-CNS"
 }
+
+def debug_log(message):
+    """Log debug messages to both file and console"""
+    print(f"DEBUG: {message}")
+    logger.debug(message)
 
 def fmt_date(value):
     try:
@@ -63,6 +89,27 @@ def fmt_date(value):
 
 def extract_digits(s: str) -> str:
     return "".join(ch for ch in str(s) if ch.isdigit())
+
+def normalize_guid(guid_str: str) -> str:
+    """
+    Normalizes a GUID by removing spaces and ensuring proper format.
+    Returns normalized GUID or original string if invalid.
+    """
+    if not guid_str:
+        return ""
+    
+    # Remove all whitespace and convert to lowercase
+    clean_guid = re.sub(r'\s+', '', guid_str.lower())
+    
+    # Check if it's a valid GUID format (32 hex chars with optional hyphens)
+    guid_pattern = r'^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$'
+    if re.match(guid_pattern, clean_guid):
+        # Format as standard GUID with hyphens
+        if '-' not in clean_guid:
+            clean_guid = f"{clean_guid[:8]}-{clean_guid[8:12]}-{clean_guid[12:16]}-{clean_guid[16:20]}-{clean_guid[20:]}"
+        return clean_guid
+    
+    return guid_str  # Return original if not valid GUID format
 
 def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
     today = datetime.today()
@@ -96,31 +143,330 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         item_code = str(row.get("ITEMCode", "")).strip().lower()
         item_desc_raw = str(row.get("ITEMDescription", ""))
         item_desc_lower = item_desc_raw.lower()
+        item_name_raw = str(row.get("ITEMName", "")).strip()
         invoice_desc = str(row.get("InvoiceDescription", "")).strip()
         sub_id_raw = row.get("SubscriptionId", "")
         sub_id = str(sub_id_raw).strip() if pd.notna(sub_id_raw) else ""
         
-        
         invoice_desc_clean = re.sub(r"^[#\s]+", "", invoice_desc)
-        
-        
         sub_id_clean = sub_id[:36] if sub_id else "Sub"
         
-       
-        if item_code == "az-cns":
+        # === Manual Logic Implementation ===
+        # Step 1: Check if "manual" exists in item name
+        debug_log(f"Processing item_name_raw: '{item_name_raw}'")
+        debug_log(f"Processing item_desc_raw: '{item_desc_raw}'")
+        debug_log(f"Checking for 'manual' in item name (lowercase): {'manual' in item_name_raw.lower()}")
+        
+        if "manual" in item_name_raw.lower():
+            debug_log("Manual detected in item name")
+            # Step 2: Try to find GUID pattern in item description (directly, not after "manual")
+            # Create simple GUID pattern since item description starts with GUID directly
+            guid_pattern = re.compile(rf'({GUID_WS})', re.IGNORECASE)
+            m = guid_pattern.search(item_desc_raw)
+            debug_log(f"GUID regex search result in item description: {m}")
+            
+            if m:
+                debug_log(f"GUID match found: {m.group(0)}")
+                debug_log(f"GUID captured group: {m.group(1)}")
+                
+                # Step 3: If GUID found, normalize and use it
+                found_guid = m.group(1)
+                normalized_guid = normalize_guid(found_guid)
+                debug_log(f"Original GUID: '{found_guid}' -> Normalized: '{normalized_guid}'")
+                out_row["Subscription Id"] = normalized_guid
+                
+                # Parse additional info using semicolon, colon, hash, and tab delimiters
+                parts = item_desc_raw.split(';')
+                if len(parts) == 1:  # No semicolons, try colons
+                    parts = item_desc_raw.split(':')
+                if len(parts) == 1:  # No colons either, try hash symbols
+                    parts = item_desc_raw.split('#')
+                if len(parts) == 1:  # No hash symbols either, try tabs
+                    parts = item_desc_raw.split('\t')
+                debug_log(f"Split item description by delimiters: {parts}")
+                
+                # Look for item code in parts or use keyword mapping
+                item_code_found = False
+                if len(parts) >= 2:
+                    for i, part in enumerate(parts):
+                        part_clean = part.strip()
+                        # Check if this part looks like an item code
+                        if re.match(r'^[A-Z]{2,4}[-\s]*[A-Z]*$', part_clean) and len(part_clean) >= 2:
+                            out_row["ITEM Code"] = part_clean
+                            debug_log(f"Found item code in description part {i}: '{part_clean}'")
+                            item_code_found = True
+                            break
+                
+                # If no item code found in parts, use keyword mapping
+                if not item_code_found:
+                    for keywords, code in keyword_map.items():
+                        for keyword in keywords:  # Iterate through each keyword in the tuple
+                            if keyword in item_desc_lower:
+                                out_row["ITEM Code"] = code
+                                debug_log(f"Found item code using keyword mapping: '{keyword}' -> '{code}'")
+                                item_code_found = True
+                                break
+                        if item_code_found:
+                            break
+                
+                # Look for dates in the entire item description
+                date_pattern = r'\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b'
+                dates_found = re.findall(date_pattern, item_desc_raw)
+                debug_log(f"Dates found in item description: {dates_found}")
+                
+                if len(dates_found) >= 2:
+                    start_date = fmt_date(dates_found[0])
+                    end_date = fmt_date(dates_found[1])
+                    out_row["Billing Cycle Start Date"] = start_date
+                    out_row["Billing Cycle End Date"] = end_date
+                    debug_log(f"Set billing dates - Start: '{start_date}', End: '{end_date}'")
+                elif len(dates_found) == 1:
+                    start_date = fmt_date(dates_found[0])
+                    out_row["Billing Cycle Start Date"] = start_date
+                    debug_log(f"Set billing start date: '{start_date}'")
+                
+                # Parse LPO from the item description
+                # Multiple LPO patterns to handle different formats
+                lpo_patterns = [
+                    r'(?:^|-)?\s*LPO\s*:\s*([A-Z0-9]+)',     # "LPO: XXXXX" or "- LPO: XXXXX"
+                    r'(?:^|-)?\s*LPO\s*-?\s*([A-Z0-9]+)',    # "LPO- XXXXX" or "- LPO- XXXXX"
+                    r'LPO\s*-\s*(PO\d+)',                    # "LPO- PO00155411"
+                    r'PO\s*#\s*(\d+)',                       # Pattern like "PO # 158068"
+                    r'\b(PO-\d+)\b',                         # Pattern like "PO-01076"
+                    r'\b([A-Z]\d{8})\b',                     # Pattern like P00040411
+                    r'\b(PO\d+)\b',                          # Pattern like PO00159398
+                    r'\b(APO\d+)\b',                         # Pattern like APO2503065
+                    r'\b(DPO\d+)\b',                         # Pattern like DPO2500101
+                    r'\b(T\d{4}PO\d+)\b',                    # Pattern like T2025PO20240
+                ]
+                
+                lpo_found = False
+                for pattern in lpo_patterns:
+                    lpo_match = re.search(pattern, item_desc_raw, re.IGNORECASE)
+                    if lpo_match:
+                        lpo_value = lpo_match.group(1).strip()
+                        out_row["LPO Number"] = lpo_value[:30]
+                        debug_log(f"Found and set LPO Number: '{lpo_value}' using pattern: '{pattern}'")
+                        lpo_found = True
+                        break
+                
+                if not lpo_found:
+                    debug_log(f"No LPO pattern found in item description")
+                
+                # Parse End User from the item description - multiple patterns to handle different formats
+                end_user_found = False
+                
+                # Pattern 1: "EU:Name" or "EU: Name" in semicolon/colon parts
+                if len(parts) >= 3:
+                    remaining_parts = parts[2:]
+                    for part in remaining_parts:
+                        part_clean = part.strip()
+                        if 'eu:' in part_clean.lower() or 'eu -' in part_clean.lower():
+                            # Extract after EU: or EU-
+                            eu_match = re.search(r'eu\s*[:\-]\s*([^;:]+)', part_clean, re.IGNORECASE)
+                            if eu_match:
+                                end_user_raw = eu_match.group(1).strip()
+                                # Clean up - remove extra spaces, semicolons, and encoding issues
+                                end_user_clean = re.sub(r'\s*[;:]\s*\w+$', '', end_user_raw)
+                                end_user_clean = re.sub(r'_x000D_', '', end_user_clean).strip()
+                                if end_user_clean:
+                                    out_row["End User"] = end_user_clean
+                                    debug_log(f"Set End User from description parts: '{end_user_clean}'")
+                                    end_user_found = True
+                                    break
+                
+                # Pattern 2: "EU -Name" or "EU- Name" in the full description (for cases without semicolons/colons)
+                if not end_user_found:
+                    eu_patterns = [
+                        r'EU\s*-\s*([^:\-\n]+?)(?:\s*$|\s*:|$)',      # "EU- Name" or "EU -Name" 
+                        r'EU\s*:\s*([^:\-\n]+?)(?:\s*$|\s*:|$)',      # "EU: Name"
+                        r':\s*EU\s*-\s*([^:\-\n]+?)(?:\s*$|\s*:|$)',  # ": EU - alkhalij"
+                        r':\s*([A-Za-z][^:\n]*?)\s*$',                # ": Fidu Properties" (colon followed by name at end)
+                    ]
+                    
+                    for pattern in eu_patterns:
+                        eu_match = re.search(pattern, item_desc_raw, re.IGNORECASE)
+                        if eu_match:
+                            end_user_clean = eu_match.group(1).strip()
+                            # Remove trailing dashes, encoding issues and extra content
+                            end_user_clean = re.sub(r'\s*-+\s*$', '', end_user_clean)
+                            end_user_clean = re.sub(r'_x000D_', '', end_user_clean).strip()
+                            if end_user_clean:
+                                out_row["End User"] = end_user_clean
+                                debug_log(f"Set End User from full description: '{end_user_clean}' using pattern: '{pattern}'")
+                                end_user_found = True
+                                break
+                
+                if not end_user_found:
+                    debug_log(f"No End User pattern found in item description")
+                
+                # Additional item code extraction if not found from parts
+                if not item_code_found and len(parts) < 2:
+                    debug_log(f"No delimiters found, looking for item code patterns in full description")
+                    # Look for item code patterns like "MS-PLATINUM-CNS", "MSRI-CNS", etc.
+                    item_code_patterns = [
+                        r'\b(MS-[A-Z]+-CNS)\b',  # MS-PLATINUM-CNS, MS-BASIC-CNS, etc.
+                        r'\b(MSRI-CNS)\b',       # MSRI-CNS
+                        r'\b(AS-CNS)\b',         # AS-CNS
+                        r'\b([A-Z]{2,4}-CNS)\b', # Any XX-CNS pattern
+                    ]
+                    
+                    for pattern in item_code_patterns:
+                        item_match = re.search(pattern, item_desc_raw, re.IGNORECASE)
+                        if item_match:
+                            item_code = item_match.group(1).upper()
+                            out_row["ITEM Code"] = item_code
+                            debug_log(f"Set ITEM Code from full description: '{item_code}' using pattern: '{pattern}'")
+                            break
+                
+                debug_log(f"Final manual processing result - Sub ID: '{out_row.get('Subscription Id')}', Item Code: '{out_row.get('ITEM Code')}', LPO: '{out_row.get('LPO Number')}', End User: '{out_row.get('End User')}'")
+            else:
+                debug_log(f"No GUID found after manual, using default sub_id_clean: '{sub_id_clean}'")
+                # Step 4: No GUID found after manual, use default but still try to extract LPO and End User
+                out_row["Subscription Id"] = sub_id_clean
+                
+                # Still parse LPO and End User even without GUID
+                # Parse additional info using semicolon, colon, hash, and tab delimiters
+                parts = item_desc_raw.split(';')
+                if len(parts) == 1:  # No semicolons, try colons
+                    parts = item_desc_raw.split(':')
+                if len(parts) == 1:  # No colons either, try hash symbols
+                    parts = item_desc_raw.split('#')
+                if len(parts) == 1:  # No hash symbols either, try tabs
+                    parts = item_desc_raw.split('\t')
+                debug_log(f"Split item description by delimiters (no GUID): {parts}")
+                
+                # Look for item code in parts or use keyword mapping
+                item_code_found = False
+                if len(parts) >= 2:
+                    for i, part in enumerate(parts):
+                        part_clean = part.strip()
+                        # Check if this part looks like an item code
+                        if re.match(r'^[A-Z]{2,4}[-\s]*[A-Z]*$', part_clean) and len(part_clean) >= 2:
+                            out_row["ITEM Code"] = part_clean
+                            debug_log(f"Found item code in description part {i} (no GUID): '{part_clean}'")
+                            item_code_found = True
+                            break
+                
+                # If no item code found in parts, use keyword mapping
+                if not item_code_found:
+                    for keywords, code in keyword_map.items():
+                        for keyword in keywords:  # Iterate through each keyword in the tuple
+                            if keyword in item_desc_lower:
+                                out_row["ITEM Code"] = code
+                                debug_log(f"Found item code using keyword mapping (no GUID): '{keyword}' -> '{code}'")
+                                item_code_found = True
+                                break
+                        if item_code_found:
+                            break
+                
+                # Parse LPO from the item description
+                lpo_patterns = [
+                    r'(?:^|-)?\s*LPO\s*:\s*([A-Z0-9]+)',     # "LPO: XXXXX" or "- LPO: XXXXX"
+                    r'(?:^|-)?\s*LPO\s*-?\s*([A-Z0-9]+)',    # "LPO- XXXXX" or "- LPO- XXXXX"
+                    r'LPO\s*-\s*(PO\d+)',                    # "LPO- PO00155411"
+                    r'PO\s*#\s*(\d+)',                       # Pattern like "PO # 158068"
+                    r'\b(PO-\d+)\b',                         # Pattern like "PO-01076"
+                    r'\b([A-Z]\d{8})\b',                     # Pattern like P00040411
+                    r'\b(PO\d+)\b',                          # Pattern like PO00159398
+                    r'\b(APO\d+)\b',                         # Pattern like APO2503065
+                    r'\b(DPO\d+)\b',                         # Pattern like DPO2500101
+                    r'\b(T\d{4}PO\d+)\b',                    # Pattern like T2025PO20240
+                ]
+                
+                lpo_found = False
+                for pattern in lpo_patterns:
+                    lpo_match = re.search(pattern, item_desc_raw, re.IGNORECASE)
+                    if lpo_match:
+                        lpo_value = lpo_match.group(1).strip()
+                        out_row["LPO Number"] = lpo_value[:30]
+                        debug_log(f"Found and set LPO Number (no GUID): '{lpo_value}' using pattern: '{pattern}'")
+                        lpo_found = True
+                        break
+                
+                if not lpo_found:
+                    debug_log(f"No LPO pattern found in item description (no GUID)")
+                
+                # Parse End User from the item description
+                end_user_found = False
+                
+                # Pattern 1: "EU:Name" or "EU: Name" in semicolon/colon parts
+                if len(parts) >= 3:
+                    remaining_parts = parts[2:]
+                    for part in remaining_parts:
+                        part_clean = part.strip()
+                        if 'eu:' in part_clean.lower() or 'eu -' in part_clean.lower():
+                            # Extract after EU: or EU-
+                            eu_match = re.search(r'eu\s*[:\-]\s*([^;:]+)', part_clean, re.IGNORECASE)
+                            if eu_match:
+                                end_user_raw = eu_match.group(1).strip()
+                                # Clean up - remove extra spaces, semicolons, and encoding issues
+                                end_user_clean = re.sub(r'\s*[;:]\s*\w+$', '', end_user_raw)
+                                end_user_clean = re.sub(r'_x000D_', '', end_user_clean).strip()
+                                if end_user_clean:
+                                    out_row["End User"] = end_user_clean
+                                    debug_log(f"Set End User from description parts (no GUID): '{end_user_clean}'")
+                                    end_user_found = True
+                                    break
+                
+                # Pattern 2: "EU -Name" or "EU- Name" in the full description
+                if not end_user_found:
+                    eu_patterns = [
+                        r'EU\s*-\s*([^:\-\n]+?)(?:\s*$|\s*:|$)',      # "EU- Name" or "EU -Name" 
+                        r'EU\s*:\s*([^:\-\n]+?)(?:\s*$|\s*:|$)',      # "EU: Name"
+                        r':\s*EU\s*-\s*([^:\-\n]+?)(?:\s*$|\s*:|$)',  # ": EU - alkhalij"
+                        r':\s*([A-Za-z][^:\n]*?)\s*$',                # ": Fidu Properties" (colon followed by name at end)
+                    ]
+                    
+                    for pattern in eu_patterns:
+                        eu_match = re.search(pattern, item_desc_raw, re.IGNORECASE)
+                        if eu_match:
+                            end_user_clean = eu_match.group(1).strip()
+                            # Remove trailing dashes, encoding issues and extra content
+                            end_user_clean = re.sub(r'\s*-+\s*$', '', end_user_clean)
+                            end_user_clean = re.sub(r'_x000D_', '', end_user_clean).strip()
+                            if end_user_clean:
+                                out_row["End User"] = end_user_clean
+                                debug_log(f"Set End User from full description (no GUID): '{end_user_clean}' using pattern: '{pattern}'")
+                                end_user_found = True
+                                break
+                
+                if not end_user_found:
+                    debug_log(f"No End User pattern found in item description (no GUID)")
+                
+                debug_log(f"Final manual processing result (no GUID) - Sub ID: '{out_row.get('Subscription Id')}', Item Code: '{out_row.get('ITEM Code')}', LPO: '{out_row.get('LPO Number')}', End User: '{out_row.get('End User')}'")
+        
+        
+        # === Existing Logic ===
+        elif item_code == "az-cns":
             digits = extract_digits(invoice_desc_clean)
             out_row["Subscription Id"] = digits[-36:] if digits else sub_id_clean
-        
         elif item_code == "msri-cns":
             out_row["Subscription Id"] = invoice_desc_clean[:36] if invoice_desc_clean else sub_id_clean
         elif "reserved vm instance" in item_desc_lower:
             out_row["Subscription Id"] = item_desc_raw[:38] if item_desc_raw else sub_id_clean
-        
         else:
+            # Step 5: Final fallback - Use default subscription ID
             out_row["Subscription Id"] = sub_id_clean
-        out_row["Billing Cycle Start Date"] = fmt_date(row.get("BillingCycleStartDate", ""))
-        out_row["Billing Cycle End Date"] = fmt_date(row.get("BillingCycleEndDate", ""))
-       
+        
+        # ✅ ONLY set input dates if manual processing didn't already extract them
+        # Don't overwrite dates that manual processing successfully extracted
+        if "Billing Cycle Start Date" not in out_row or out_row["Billing Cycle Start Date"] == "":
+            input_start = fmt_date(row.get("BillingCycleStartDate", ""))
+            # Only use if input actually has a valid date (not empty/nan)
+            if input_start and str(input_start).strip() not in ["", "nan", "None"]:
+                out_row["Billing Cycle Start Date"] = input_start
+            elif "Billing Cycle Start Date" not in out_row:
+                out_row["Billing Cycle Start Date"] = ""
+        
+        if "Billing Cycle End Date" not in out_row or out_row["Billing Cycle End Date"] == "":
+            input_end = fmt_date(row.get("BillingCycleEndDate", ""))
+            # Only use if input actually has a valid date (not empty/nan)
+            if input_end and str(input_end).strip() not in ["", "nan", "None"]:
+                out_row["Billing Cycle End Date"] = input_end
+            elif "Billing Cycle End Date" not in out_row:
+                out_row["Billing Cycle End Date"] = ""
+        
         item_code = row.get("ITEMCode", "")
         if pd.notna(item_code) and str(item_code).strip():
             out_row["ITEM Code"] = item_code
@@ -230,7 +576,9 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         }.get(doc_loc, "")
         out_row["ITEM Tax Value"] = tax_value
         lpo = row.get("LPONumber", "")
-        out_row["LPO Number"] = "" if pd.isna(lpo) or str(lpo).strip().lower() in ["nan", "none"] else str(lpo)[:30]
+        # Only set LPO from original data if manual parsing didn't already set it
+        if not out_row.get("LPO Number"):
+            out_row["LPO Number"] = "" if pd.isna(lpo) or str(lpo).strip().lower() in ["nan", "none"] else str(lpo)[:30]
         #end_user = str(row.get("EndUser", ""))
         #end_user_country = str(row.get("EndUserCountryCode", ""))
         
@@ -245,23 +593,15 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         # Define what values are considered invalid
         invalid_values = ["", "nan", "none"]
         
-        # Check for invalid End User or Country Code
-        if end_user.lower() in invalid_values or end_user_country.lower() in invalid_values:
-            out_row["End User"] = ""  # Show empty string if missing
-            out_row["_highlight_end_user"] = True  # Flag for red highlight
-        else:
-            out_row["End User"] = f"{end_user} ; {end_user_country}"
-            out_row["_highlight_end_user"] = Falseend_user = str(row.get("EndUser", "")).strip()
-        end_user_country = str(row.get("EndUserCountryCode", "")).strip()
-        
-        if (not end_user or end_user.lower() in ["nan", "none"]) or (not end_user_country or end_user_country.lower() in ["nan", "none"]):
-
-            out_row["End User"] = end_user  # or just empty if you prefer ""
-            out_row["_highlight_end_user"] = True
-        else:
-    # Both present, no highlight
-            out_row["End User"] = f"{end_user} ; {end_user_country}"
-            out_row["_highlight_end_user"] = False
+        # Only set End User from original data if manual parsing didn't already set it
+        if not out_row.get("End User"):
+            # Check for invalid End User or Country Code
+            if end_user.lower() in invalid_values or end_user_country.lower() in invalid_values:
+                out_row["End User"] = ""  # Show empty string if missing
+                out_row["_highlight_end_user"] = True  # Flag for red highlight
+            else:
+                out_row["End User"] = f"{end_user} ; {end_user_country}"
+                out_row["_highlight_end_user"] = False
         
 
         try: out_row["Cost"] = round(float(cost_val), 2)
