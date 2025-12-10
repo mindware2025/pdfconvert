@@ -88,7 +88,7 @@ def save_debug_to_file():
 USD_TO_AED = 3.6725
 
 def parse_number(value: str):
-    """Parse numbers with various formats (including European: 107.856,00)"""
+    """Parse numbers with various formats (including European: 107.856,00 or 1.550)"""
     try:
         if value is None:
             return None
@@ -102,12 +102,25 @@ def parse_number(value: str):
         elif ',' in s:
             # Only comma - it's the decimal separator
             s = s.replace(",", ".")
-        # else: only period or neither - keep as is
+        elif '.' in s:
+            # Only period - check if it's thousands separator (3 digits after period)
+            parts = s.split('.')
+            if len(parts) == 2 and len(parts[1]) == 3 and parts[1].isdigit():
+                # European thousands separator: 1.550 = 1550
+                s = parts[0] + parts[1]
+            # else: keep as decimal point
         
         result = float(s)
         return result
     except Exception:
         return None
+
+def parse_quantity(value: str):
+    """Parse quantity with European number format, return integer only"""
+    num = parse_number(value)
+    if num is not None and num == int(num) and num >= 1:
+        return int(num)
+    return None
 
 def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
     """
@@ -454,22 +467,13 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                     # Search a wider range for large quantities like 672
                     for j in range(max(0, i - 50), min(i + 100, len(lines))):
                         line_text = lines[j].strip()
-                        # Look for 3-4 digit numbers that could be quantities
-                        if re.match(r'^\d{2,4}$', line_text):
-                            potential_qty = int(line_text)
-                            if 50 <= potential_qty <= 1000:  # Reasonable range for bulk quantities
-                                qty = potential_qty
-                                add_debug(f"✓ Large quantity found for D100AZX at line {j}: {qty}")
-                                found_qty = True
-                                break
-                        # Also check comma-formatted numbers
-                        elif re.match(r'^\d{1,3}(,\d{3})*$', line_text):
-                            potential_qty = int(line_text.replace(',', ''))
-                            if 50 <= potential_qty <= 10000:
-                                qty = potential_qty
-                                add_debug(f"✓ Comma-formatted large quantity found: {qty}")
-                                found_qty = True
-                                break
+                        # Look for numeric values that could be quantities
+                        potential_qty = parse_quantity(line_text)
+                        if potential_qty and 50 <= potential_qty <= 1000:  # Reasonable range for bulk quantities
+                            qty = potential_qty
+                            add_debug(f"✓ Large quantity found for D100AZX at line {j}: {qty}")
+                            found_qty = True
+                            break
                 
                 # Strategy 2: Find the line item number for this SKU
                 if not found_qty:
@@ -502,29 +506,18 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                                     add_debug(f"    Line {k}: '{qty_text}'")
                                     
                                     # Look for quantity (numeric value, not decimal prices)
-                                    if re.match(r'^\d+$', qty_text):
-                                        potential_qty = int(qty_text)
-                                        # Skip line item numbers and focus on reasonable quantities
-                                        if potential_qty >= 1 and potential_qty <= 10000:
-                                            # Avoid line item numbers like 001, 002, 003
-                                            if not (potential_qty <= 3 and len(qty_text) == 1):
-                                                qty = potential_qty
-                                                add_debug(f"✓ Quantity found for line item {line_item_number}: {qty}")
-                                                found_qty = True
-                                                break
-                                            elif potential_qty <= 10 and k <= j + 3:
-                                                # Small quantities are valid if they appear early
-                                                qty = potential_qty
-                                                add_debug(f"✓ Small quantity found for line item {line_item_number}: {qty}")
-                                                found_qty = True
-                                                break
-                                    
-                                    # Also check for quantities with commas (e.g., "1,000")
-                                    elif re.match(r'^\d{1,3}(,\d{3})*$', qty_text):
-                                        potential_qty = int(qty_text.replace(',', ''))
-                                        if potential_qty >= 1 and potential_qty <= 10000:
+                                    potential_qty = parse_quantity(qty_text)
+                                    if potential_qty and potential_qty >= 1 and potential_qty <= 10000:
+                                        # Avoid line item numbers like 001, 002, 003
+                                        if not (potential_qty <= 3 and len(qty_text) == 1):
                                             qty = potential_qty
-                                            add_debug(f"✓ Comma-formatted quantity found: {qty}")
+                                            add_debug(f"✓ Quantity found for line item {line_item_number}: {qty}")
+                                            found_qty = True
+                                            break
+                                        elif potential_qty <= 10 and k <= j + 3:
+                                            # Small quantities are valid if they appear early
+                                            qty = potential_qty
+                                            add_debug(f"✓ Small quantity found for line item {line_item_number}: {qty}")
                                             found_qty = True
                                             break
                                 if found_qty:
@@ -535,14 +528,13 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                         add_debug(f"  No line item/table data found, searching for nearby quantities:")
                         for j in range(max(0, i - 10), min(i + 30, len(lines))):
                             line_text = lines[j].strip()
-                            if re.match(r'^\d+$', line_text):
-                                potential_qty = int(line_text)
-                                # Avoid obvious line item numbers
-                                if 1 <= potential_qty <= 10000 and line_text not in ['001', '002', '003']:
-                                    qty = potential_qty
-                                    add_debug(f"✓ Nearby quantity found at line {j}: {qty}")
-                                    found_qty = True
-                                    break
+                            potential_qty = parse_quantity(line_text)
+                            # Avoid obvious line item numbers
+                            if potential_qty and 1 <= potential_qty <= 10000 and str(potential_qty) not in ['001', '002', '003']:
+                                qty = potential_qty
+                                add_debug(f"✓ Nearby quantity found at line {j}: {qty}")
+                                found_qty = True
+                                break
                 
                 if not found_qty:
                     add_debug(f"  No quantity found, using fallback: {qty}")
@@ -780,37 +772,30 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                 try:
                     add_debug(f"\n[STRATEGY 2] Processing table row: {line_stripped}")
                     
-                    # Extract quantity from next line
+                    # Check if "Quantity" column exists by searching backwards for column headers
+                    has_quantity_column = False
+                    for j in range(i - 1, max(0, i - 100), -1):  # Extended from 30 to 50 lines
+                        header_line = lines[j].lower()
+                        if 'quantity' in header_line:
+                            has_quantity_column = True
+                            add_debug(f"  ℹ️ Quantity column detected in header (line {j})")
+                            break
+                    
+                    # Extract quantity from next line (only if quantity column exists)
                     qty = 1
-                    if i + 1 < len(lines):
+                    if has_quantity_column and i + 1 < len(lines):
                         qty_line = lines[i + 1].strip()
                         add_debug(f"  Qty line: '{qty_line}'")
                         
-                        # Try to parse quantity
-                        # Handle European period format: 1.550 = 1550
-                        if re.match(r'^\d{1,3}(\.\d{3})*$', qty_line):
-                            qty = int(qty_line.replace('.', ''))
-                            add_debug(f"  ✓ European period format quantity: {qty}")
-                        # Handle comma format: 1,550 = 1550
-                        elif re.match(r'^\d{1,3}(,\d{3})*$', qty_line):
-                            qty = int(qty_line.replace(',', ''))
-                            add_debug(f"  ✓ Comma format quantity: {qty}")
-                        # Handle plain integer
-                        elif re.match(r'^\d+$', qty_line):
-                            qty = int(qty_line)
-                            add_debug(f"  ✓ Plain integer quantity: {qty}")
-                        # Handle mixed format with decimal
-                        elif re.match(r'^\d+[.,]\d+$', qty_line):
-                            if '.' in qty_line:
-                                parts = qty_line.split('.')
-                                # If 3 digits after period, it's thousands separator
-                                if len(parts[1]) == 3:
-                                    qty = int(qty_line.replace('.', ''))
-                                else:
-                                    qty = float(qty_line.replace(',', '.'))
-                            else:
-                                qty = float(qty_line.replace(',', '.'))
-                            add_debug(f"  ✓ Mixed format quantity: {qty}")
+                        # Use parse_quantity to handle all formats, but only accept integers
+                        parsed_qty = parse_quantity(qty_line)
+                        if parsed_qty is not None:
+                            qty = parsed_qty
+                            add_debug(f"  ✓ Quantity parsed: {qty}")
+                        else:
+                            add_debug(f"  ⚠️ Invalid quantity format '{qty_line}' - using default qty=1")
+                    elif not has_quantity_column:
+                        add_debug(f"  ⚠️ No Quantity column found - using default qty=1")
                     
                     # Extract duration (e.g., "1-12" or "13-24")
                     duration = "1-12"
@@ -854,7 +839,7 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                         
                         # Find where the SKU was mentioned (subscription part line)
                         sku_line_idx = None
-                        for j in range(i - 1, max(0, i - 50), -1):
+                        for j in range(i - 1, max(0, i - 100), -1):
                             if 'Subscription Part#:' in lines[j] or 'Overage Part#:' in lines[j]:
                                 sku_line_idx = j
                                 add_debug(f"    Found subscription part line at line {j}")
@@ -912,6 +897,15 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                     add_debug(f"  ✓ Using cached description for {sku_table}")
                     
                     # Extract pricing using SAME LOGIC as Strategy 1
+                    # First, check if "Bid Total Commit Value" column exists in the header
+                    has_bid_total_commit = False
+                    for j in range(i - 1, max(0, i - 100), -1):  # Extended from 30 to 50 lines
+                        header_line = lines[j].lower()
+                        if 'bid total commit value' in header_line or 'total commit value' in header_line:
+                            has_bid_total_commit = True
+                            add_debug(f"  ℹ️ 'Bid Total Commit Value' column detected in header (line {j})")
+                            break
+                    
                     unit_price_aed = 0
                     total_price_aed = 0
                     
@@ -938,16 +932,31 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                             if price_candidates:
                                 add_debug(f"    Price candidates (non-zero): {price_candidates}")
                                 
-                                # Strategy: Use 4th position (index 3) for "Bid Total Commit Value" (same as Strategy 1)
-                                if len(price_candidates) >= 4:
-                                    total_str = price_candidates[3]
-                                    add_debug(f"    Selected position 4 (index 3): {total_str}")
-                                elif len(price_candidates) >= 2:
-                                    total_str = price_candidates[1]
-                                    add_debug(f"    Selected position 2: {total_str}")
+                                # If "Bid Total Commit Value" column exists, use it (4th position)
+                                # Otherwise use "Bid Unit Price" (which is typically 3rd position)
+                                if has_bid_total_commit:
+                                    # Use 4th position (index 3) for "Bid Total Commit Value"
+                                    if len(price_candidates) >= 4:
+                                        total_str = price_candidates[3]
+                                        add_debug(f"    Selected position 4 (index 3): {total_str} [Bid Total Commit Value]")
+                                    elif len(price_candidates) >= 2:
+                                        total_str = price_candidates[1]
+                                        add_debug(f"    Selected position 2: {total_str}")
+                                    else:
+                                        total_str = price_candidates[0]
+                                        add_debug(f"    Selected only available: {total_str}")
                                 else:
-                                    total_str = price_candidates[0]
-                                    add_debug(f"    Selected only available: {total_str}")
+                                    # No "Bid Total Commit Value" column - use "Bid Unit Price" instead (3rd position)
+                                    # Set total_price_aed = 0 and use unit_price as the displayed unit price
+                                    if len(price_candidates) >= 3:
+                                        total_str = price_candidates[2]
+                                        add_debug(f"    Selected position 3 (index 2): {total_str} [Bid Unit Price - no Total Commit Value column]")
+                                    elif len(price_candidates) >= 2:
+                                        total_str = price_candidates[1]
+                                        add_debug(f"    Selected position 2: {total_str}")
+                                    else:
+                                        total_str = price_candidates[0]
+                                        add_debug(f"    Selected only available: {total_str}")
                                 
                                 # Parse European format
                                 if ',' in total_str and total_str.count(',') == 1:
@@ -955,8 +964,15 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                                 else:
                                     clean_str = total_str.replace(',', '')
                                 
-                                total_price_usd = float(clean_str)
-                                unit_price_usd = total_price_usd / qty if qty > 0 else total_price_usd
+                                if has_bid_total_commit:
+                                    # Normal case: total_str is the total price
+                                    total_price_usd = float(clean_str)
+                                    unit_price_usd = total_price_usd / qty if qty > 0 else total_price_usd
+                                else:
+                                    # Special case: total_str is the unit price, set total to 0
+                                    unit_price_usd = float(clean_str)
+                                    total_price_usd = 0  # No "Bid Total Commit Value" column
+                                    add_debug(f"    ⚠️ No 'Bid Total Commit Value' column - using Bid Unit Price as Unit Price, setting Total=0")
                                 
                                 add_debug(f"    ✓ Extracted: Total USD {total_price_usd:,.2f}, Unit USD {unit_price_usd:,.2f}")
                                 

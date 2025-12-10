@@ -1394,6 +1394,7 @@ def create_styled_excel_template2(
         desc = row[1] if len(row) > 1 else ""
         qty = row[2] if len(row) > 2 else 0
         duration = row[3] if len(row) > 3 else ""
+        bid_unit_aed = row[6] if len(row) > 6 else 0  # Extracted unit price
         bid_total_aed_extracted = row[7] if len(row) > 7 else 0  # Already converted AED amount
         
         # Convert back to USD to use in the H formula
@@ -1422,13 +1423,22 @@ def create_styled_excel_template2(
         ws.cell(row=excel_row, column=8, value=cost_formula)  # Column H
         add_debug(f"[TEMPLATE2 FORMULA] Cost (USD): {cost_formula}")
         
-        # G (Unit Price AED) = Total Price AED / Quantity
-        if qty and qty > 0:
+        # G (Unit Price AED) - special handling for cases with no "Bid Total Commit Value"
+        # If total_price is 0, use the extracted unit_price directly (from Bid Unit Price column)
+        # Otherwise, calculate from total/qty
+        if bid_total_aed_extracted == 0 and bid_unit_aed > 0:
+            # No "Bid Total Commit Value" column - use extracted unit price directly
+            unit_price_formula = f"={bid_unit_aed}"
+            add_debug(f"[TEMPLATE2 FORMULA] Unit Price AED: {unit_price_formula} (from extracted Bid Unit Price)")
+        elif qty and qty > 0:
+            # Normal case - calculate unit price from total
             unit_price_formula = f"=I{excel_row}/E{excel_row}"
+            add_debug(f"[TEMPLATE2 FORMULA] Unit Price AED: {unit_price_formula}")
         else:
             unit_price_formula = f"=I{excel_row}"
+            add_debug(f"[TEMPLATE2 FORMULA] Unit Price AED: {unit_price_formula}")
+        
         ws.cell(row=excel_row, column=7, value=unit_price_formula)  # Column G
-        add_debug(f"[TEMPLATE2 FORMULA] Unit Price AED: {unit_price_formula}")
         
         # I (Total Price in AED) = Cost in USD * 3.6725
         total_price_aed_formula = f"=H{excel_row}*3.6725"
