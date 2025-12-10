@@ -222,13 +222,20 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                 add_debug(f"[MEP] MEP set to: {mep_value:,.2f}")
         elif "IBM Opportunity Number:" in line:
             # Extract the opportunity number from the same or next line
-            opp_match = re.search(r'[A-Z0-9]{10,}', line)
+            # Look for pattern after the colon - alphanumeric with mixed case
+            parts = line.split("IBM Opportunity Number:")
+            if len(parts) > 1:
+                opp_text = parts[1].strip()
+                opp_match = re.search(r'[A-Za-z0-9]{10,}', opp_text)
+            else:
+                opp_match = None
+            
+            if not opp_match and i + 1 < len(lines):
+                opp_match = re.search(r'[A-Za-z0-9]{10,}', lines[i + 1])
+            
             if opp_match:
                 header_info["IBM Opportunity Number"] = opp_match.group()
-            elif i + 1 < len(lines):
-                opp_match = re.search(r'[A-Z0-9]{10,}', lines[i + 1])
-                if opp_match:
-                    header_info["IBM Opportunity Number"] = opp_match.group()
+                add_debug(f"[HEADER] IBM Opportunity Number: {opp_match.group()}")
     
     add_debug("\n" + "="*80)
     add_debug("HEADER INFORMATION EXTRACTED")

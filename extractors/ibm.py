@@ -1314,7 +1314,24 @@ def create_styled_excel_template2(
     # IBM Opp no. (EXACT COPY FROM TEMPLATE 1)
     ws["C14"] = "IBM Opportunity Number: "  # Move up by 1 row
     ws["C14"].font = Font(bold=True, underline="single", color="000000")
-    ws["D14"] = header_info.get('IBM Opportunity Number', '')
+    
+    # Get IBM Opportunity Number from header, or extract from first data row description
+    ibm_opp_number = header_info.get('IBM Opportunity Number', '')
+    if not ibm_opp_number and data:
+        # Try to extract from first data row description (Template 2 format)
+        first_desc = data[0][1] if len(data[0]) > 1 else ''
+        # Look for the pattern in the description
+        opp_match = re.search(r'IBM Opportunity Number:\s*([A-Za-z0-9]{10,})', first_desc)
+        if opp_match:
+            ibm_opp_number = opp_match.group(1)
+        else:
+            # Fallback: just search for any alphanumeric string 10+ chars
+            opp_match = re.search(r'[A-Za-z0-9]{10,}', first_desc)
+            if opp_match:
+                ibm_opp_number = opp_match.group()
+    
+    print(f"🔥 [EXCEL] IBM Opportunity Number value: '{ibm_opp_number}'")
+    ws["D14"] = ibm_opp_number
     ws["D14"].font = Font(bold=True, italic=True, underline="single", color="000000")
     
     # Right block (EXACT COPY FROM TEMPLATE 1)
