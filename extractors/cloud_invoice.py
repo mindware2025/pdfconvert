@@ -448,8 +448,10 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         else:
             # Step 5: Final fallback - Use default subscription ID
             out_row["Subscription Id"] = sub_id_clean
-        out_row["Billing Cycle Start Date"] = fmt_date(row.get("BillingCycleStartDate", ""))
-        out_row["Billing Cycle End Date"] = fmt_date(row.get("BillingCycleEndDate", ""))
+        if "Billing Cycle Start Date" not in out_row or not out_row.get("Billing Cycle Start Date"):
+            out_row["Billing Cycle Start Date"] = fmt_date(row.get("BillingCycleStartDate", ""))
+        if "Billing Cycle End Date" not in out_row or not out_row.get("Billing Cycle End Date"):
+            out_row["Billing Cycle End Date"] = fmt_date(row.get("BillingCycleEndDate", ""))
        
         item_code = row.get("ITEMCode", "")
         if pd.notna(item_code) and str(item_code).strip():
