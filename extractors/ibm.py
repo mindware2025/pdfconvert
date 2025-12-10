@@ -372,7 +372,7 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
             header_fields_found += 1
         if "Reseller Name:" in line:
             header_info["Reseller Name"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
-        if "Bid Number:" in line:
+        if "Bid Number:" in line or "Quote Number:" in line:
             header_info["Bid Number"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
         if "PA Agreement Number:" in line:
             header_info["PA Agreement Number"] = ""
@@ -394,7 +394,7 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
         if "Country:" in line:
             header_info["Country"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
             header_fields_found += 1
-        if "Bid Expiration Date:" in line:
+        if "Bid Expiration Date:" in line or "Quote Expiration Date:" in line:
             header_info["Bid Expiration Date"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
             header_fields_found += 1
         if "Maximum End User Price" in line or "MEP" in line:
@@ -842,9 +842,10 @@ def create_styled_excel(
     ibm_terms_text: str
 ):
     """
+    Template 1 ONLY Excel generation
     data rows: [SKU, Product Description, Quantity, Start Date, End Date, Unit Price AED, Total Price AED]
     """
-    add_debug(f"[EXCEL START] Creating Excel with {len(data)} rows")
+    add_debug(f"[TEMPLATE1 EXCEL] Creating Template 1 Excel with {len(data)} rows")
     
     wb = Workbook()
     ws = wb.active
@@ -925,20 +926,20 @@ def create_styled_excel(
         ws[f"H{row}"].font = Font(bold=True, color="1F497D")
         ws[f"H{row}"].alignment = Alignment(horizontal="left", vertical="center")
     
-    # --- Table header (8 columns + serial) ---
+    # --- Template 1 Table Headers ONLY ---
     headers = [
-    "Sl",                      # Column A - Serial number
-    "SKU",                     # Column B - Product code  
-    "Product Description",     # Column C - Description
-    "Quantity",                # Column D - Number of units
-    "Start Date",              # Column E - Coverage start
-    "End Date",                # Column F - Coverage end
-    "Unit Price in AED",       # Column G - Price per unit
-    "Cost (USD)",              # Column H - Base cost in USD
-    "Total Price in AED",      # Column I - Final amount
-    "Partner Discount",        # Column J - Discount percentage
-    "Partner Price in AED"     # Column K - Discounted price
-]
+        "Sl",                      # Column A - Serial number
+        "SKU",                     # Column B - Product code  
+        "Product Description",     # Column C - Description
+        "Quantity",                # Column D - Number of units
+        "Start Date",              # Column E - Coverage start
+        "End Date",                # Column F - Coverage end
+        "Unit Price in AED",       # Column G - Price per unit
+        "Cost (USD)",              # Column H - Base cost in USD
+        "Total Price in AED",      # Column I - Final amount
+        "Partner Discount",        # Column J - Discount percentage
+        "Partner Price in AED"     # Column K - Discounted price
+    ]
     header_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
     for col, header in enumerate(headers, start=2):
         ws.merge_cells(start_row=16, start_column=col, end_row=17, end_column=col)  # Move up by 1 row
@@ -967,8 +968,9 @@ def create_styled_excel(
         cell_sl.font = Font(size=11, color="1F497D")
         cell_sl.alignment = Alignment(horizontal="center", vertical="center")
         
+        # Template 1 ONLY - data processing
         # Data values in columns C-I (3-9)
-                # Extract and calculate data for 11-column structure
+        # Extract and calculate data for 11-column structure
         sku = row[0] if len(row) > 0 else ""
         desc = row[1] if len(row) > 1 else ""
         qty = row[2] if len(row) > 2 else 0
@@ -999,7 +1001,7 @@ def create_styled_excel(
         
         # Also add to debug log
         add_debug(f"[COST DEBUG] Row {idx}: qty={qty}, cost_usd={cost_usd}, total_price_aed={total_price_aed}, unit_price_aed={unit_price_aed}")
-            # Write first 7 columns with actual values (C through I)
+        # Write first 7 columns with actual values (C through I)
         excel_data = [sku, desc, qty, start_date, end_date, unit_price_aed, cost_usd]
         
         for j, value in enumerate(excel_data):
@@ -1009,7 +1011,6 @@ def create_styled_excel(
             cell.alignment = Alignment(horizontal="center", vertical="center")
         
         # Add FORMULAS for calculated columns (J, K, L)
-        
         # Column J: Total Price in AED = Cost (I) * USD_TO_AED
         total_formula = f"=I{excel_row}*{USD_TO_AED}"
         ws.cell(row=excel_row, column=10, value=total_formula)
@@ -1037,7 +1038,7 @@ def create_styled_excel(
         for col in range(2, 2 + len(headers)):
             ws.cell(row=excel_row, column=col).fill = row_fill
         
-        # Description wrap & left align (column D = 4)
+        # Description wrap & left align (column D = 4) - applies to both templates
         ws.cell(row=excel_row, column=4).alignment = Alignment(wrap_text=True, horizontal="left", vertical="center")
         
         # Currency formats
@@ -1066,7 +1067,6 @@ def create_styled_excel(
     ws[f"J{summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
     
     # Second summary row - TOTAL BP Special Discounted Price
-        # Second summary row - TOTAL BP Special Discounted Price
     bp_summary_row = summary_row + 1
     ws.merge_cells(f"C{bp_summary_row}:G{bp_summary_row}")
     ws[f"C{bp_summary_row}"] = "TOTAL BP Special Discounted Price excluding VAT:"
@@ -1081,20 +1081,7 @@ def create_styled_excel(
     ws[f"L{bp_summary_row}"].font = Font(bold=True, color="1F497D")
     ws[f"L{bp_summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
 
-    # Add customer price validation row
-    validation_row = bp_summary_row + 2
-    ws.merge_cells(f"C{validation_row}:G{validation_row}")
-    ws[f"C{validation_row}"] = "Customer Price should not exceed:"
-    ws[f"C{validation_row}"].font = Font(bold=True, color="1F497D")
-    ws[f"C{validation_row}"].alignment = Alignment(horizontal="right")
     
-    # Formula: Total BP Special Price * 3.3657
-    validation_formula = f"=L{bp_summary_row}*3.3657"
-    ws[f"L{validation_row}"] = validation_formula
-    ws[f"L{validation_row}"].number_format = '"AED"#,##0.00'
-    ws[f"L{validation_row}"].font = Font(bold=True, color="FF0000")  # Red color for emphasis
-    ws[f"L{validation_row}"].fill = PatternFill(start_color="FFEEEE", end_color="FFEEEE", fill_type="solid")
-
     # --- Dynamic Terms block (main sheet) ---
     total_price_sum = sum(((row[6] if len(row) > 6 and row[6] else 0) for row in data))
     terms = get_terms_section(header_info, total_price_sum)
@@ -1252,8 +1239,375 @@ def create_styled_excel(
     # Remove fixed scale - let fitToWidth handle scaling automatically
     ws.sheet_properties.pageSetUpPr.fitToPage = True  # Enable fit-to-page
     
-    add_debug(f"[EXCEL COMPLETE] Saved Excel with {len(data)} data rows")
+    add_debug(f"[TEMPLATE1 COMPLETE] Saved Template 1 Excel with {len(data)} data rows")
     wb.save(output)
+
+# ----------------------------------------------------------------------
+# Template 2 Specific Excel Creation - 8 Column Layout
+# ----------------------------------------------------------------------
+def create_styled_excel_template2(
+    data: list,
+    header_info: dict,
+    logo_path: str,
+    output: BytesIO,
+    compliance_text: str,
+    ibm_terms_text: str
+):
+    """
+    Template 2 Excel generation - Clean 8-column layout ONLY
+    data rows: [sku, desc, qty, duration, start_date, end_date, bid_unit_aed, bid_total_aed, partner_price_aed]
+    """
+    add_debug(f"[TEMPLATE2 EXCEL] Creating Template 2 Excel with {len(data)} rows - 8 COLUMNS ONLY")
+    print(f"🔥 TEMPLATE 2 FUNCTION CALLED! Creating {len(data)} rows with 8 columns only!")
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Quotation"
+    ws.sheet_view.showGridLines = False
+    
+    # --- Header / Branding --- (EXACT COPY FROM TEMPLATE 1)
+    ws.merge_cells("B1:C2")  # Move logo to row 1-2
+    if logo_path and os.path.exists(logo_path):
+        img = Image(logo_path)
+        img.width = 1.87 * 96  # Restored original size: 1.87 inches * 96 dpi
+        img.height = 0.56 * 96  # Restored original size: 0.56
+        ws.add_image(img, "B1")  # Logo starts at B1
+        # Set explicit row heights for logo rows to prevent excessive height
+        ws.row_dimensions[1].height = 25  # Row 1
+        ws.row_dimensions[2].height = 25  # Row 2
+    ws.merge_cells("D3:G3")  # Move title to row 3
+    ws["D3"] = "Quotation"
+    ws["D3"].font = Font(size=20, color="1F497D")
+    ws["D3"].alignment = Alignment(horizontal="center", vertical="center")
+    
+    # Template 2 Column widths - 8 columns only (B-I)
+    ws.column_dimensions[get_column_letter(2)].width = 8   # B (Sl)
+    ws.column_dimensions[get_column_letter(3)].width = 15  # C (SKU)
+    ws.column_dimensions[get_column_letter(4)].width = 50  # D (Description)
+    ws.column_dimensions[get_column_letter(5)].width = 10  # E (Quantity)
+    ws.column_dimensions[get_column_letter(6)].width = 14  # F (Duration)
+    ws.column_dimensions[get_column_letter(7)].width = 18  # G (Unit Price AED)
+    ws.column_dimensions[get_column_letter(8)].width = 18  # H (Total Price AED)
+    ws.column_dimensions[get_column_letter(9)].width = 18  # I (Partner Price AED)
+    
+    # Left block (EXACT COPY FROM TEMPLATE 1)
+    left_labels = ["Date:", "From:", "Email:", "Contact:", "", "Company:", "Attn:", "Email:"]
+    left_values = [
+        datetime.today().strftime('%d/%m/%Y'),
+        "Sneha Lokhandwala",
+        "s.lokhandwala@mindware.net",
+        "+971 55 456 6650",
+        "",
+        header_info.get('Reseller Name', 'empty'),
+        "empty",
+        "empty"
+    ]
+    row_positions = [5, 6, 7, 8, 9, 10, 11, 12]  # Move up by 1 row
+    for row, label, value in zip(row_positions, left_labels, left_values):
+        if label:
+            ws[f"C{row}"] = label
+            ws[f"C{row}"].font = Font(bold=True, color="1F497D")
+        if value:
+            ws[f"D{row}"] = value
+            ws[f"D{row}"].font = Font(color="1F497D")
+    
+    # IBM Opp no. (EXACT COPY FROM TEMPLATE 1)
+    ws["C14"] = "IBM Opportunity Number: "  # Move up by 1 row
+    ws["C14"].font = Font(bold=True, underline="single", color="000000")
+    ws["D14"] = header_info.get('IBM Opportunity Number', '')
+    ws["D14"].font = Font(bold=True, italic=True, underline="single", color="000000")
+    
+    # Right block (EXACT COPY FROM TEMPLATE 1)
+    right_labels = [
+        "End User:", "Bid Number:", "Agreement Number:", "PA Site Number:", "",
+        "Select Territory:", "Government Entity (GOE):", "Payment Terms:"
+    ]
+    right_values = [
+        header_info.get('Customer Name', ''),
+        header_info.get('Bid Number', ''),
+        header_info.get('PA Agreement Number', ''),
+        header_info.get('PA Site Number', ''),
+        "",
+        header_info.get('Select Territory', ''),
+        header_info.get('Government Entity (GOE)', ''),
+        "As aligned with Mindware"
+    ]
+    for row, label, value in zip(row_positions, right_labels, right_values):
+        ws.merge_cells(f"F{row}:I{row}")  # Use columns F through I for Template 2
+        ws[f"F{row}"] = f"{label} {value}"
+        ws[f"F{row}"].font = Font(bold=True, color="1F497D")
+        ws[f"F{row}"].alignment = Alignment(horizontal="left", vertical="center")
+    
+    # --- Template 2 Table Headers (8 columns ONLY) ---
+    headers = [
+        "Sl",                      # Column B (2)
+        "SKU",                     # Column C (3)
+        "Product Description",     # Column D (4)
+        "Quantity",                # Column E (5)
+        "Duration",                # Column F (6)
+        "Unit Price in AED",       # Column G (7)
+        "Total Price in AED",      # Column H (8)
+        "Partner Price in AED"     # Column I (9)
+    ]
+    header_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
+    for col, header in enumerate(headers, start=2):
+        ws.merge_cells(start_row=16, start_column=col, end_row=17, end_column=col)  # Move up by 1 row
+        cell = ws.cell(row=16, column=col, value=header)  # Move up by 1 row
+        cell.font = Font(bold=True, size=13, color="1F497D")
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.fill = header_fill
+    
+    # --- Template 2 Data Rows ---
+    row_fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
+    start_row = 18
+    
+    for idx, row in enumerate(data, start=1):
+        excel_row = start_row + idx - 1
+        add_debug(f"[TEMPLATE2 ROW] Processing row {idx}: SKU={row[0]}")
+        
+        # Serial number (column B)
+        cell_sl = ws.cell(row=excel_row, column=2, value=idx)
+        cell_sl.font = Font(size=11, color="1F497D")
+        cell_sl.alignment = Alignment(horizontal="center", vertical="center")
+        
+        # Template 2 data structure: [sku, desc, qty, duration, start_date, end_date, bid_unit_aed, bid_total_aed, partner_price_aed]
+        sku = row[0] if len(row) > 0 else ""
+        desc = row[1] if len(row) > 1 else ""
+        qty = row[2] if len(row) > 2 else 0
+        duration = row[3] if len(row) > 3 else ""
+        bid_total_aed_extracted = row[7] if len(row) > 7 else 0  # Already converted AED amount
+        
+        # Convert back to USD to use in the H formula
+        extracted_total_usd = round(bid_total_aed_extracted / 3.6725, 2) if bid_total_aed_extracted else 0
+        
+        # Fill basic data in columns C, D, E, F (no formulas)
+        basic_data = [sku, desc, qty, duration]
+        
+        for j, value in enumerate(basic_data):
+            excel_col = j + 3  # C=3, D=4, E=5, F=6
+            cell = ws.cell(row=excel_row, column=excel_col, value=value)
+            cell.font = Font(size=11, color="1F497D")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+        
+        # Extract margin discount from header_info
+        channel_discount_str = header_info.get('Channel Discount', '8%')
+        try:
+            margin_discount_pct = float(channel_discount_str.replace('%', ''))
+            margin_discount = 1 - (margin_discount_pct / 100)  # Convert to multiplier (e.g., 8% -> 0.92)
+        except:
+            margin_discount = 0.92  # Default 8% discount -> 0.92 multiplier
+        
+        # Add FORMULAS for calculated columns G, H, I
+        # H (Total Price AED) = Extracted Number * 3.6725
+        total_price_formula = f"={extracted_total_usd}*3.6725"
+        ws.cell(row=excel_row, column=8, value=total_price_formula)  # Column H
+        add_debug(f"[TEMPLATE2 FORMULA] Total Price AED: {total_price_formula}")
+        
+        # G (Unit Price AED) = Total Price AED / Quantity
+        if qty and qty > 0:
+            unit_price_formula = f"=H{excel_row}/E{excel_row}"
+        else:
+            unit_price_formula = f"=H{excel_row}"
+        ws.cell(row=excel_row, column=7, value=unit_price_formula)  # Column G
+        add_debug(f"[TEMPLATE2 FORMULA] Unit Price AED: {unit_price_formula}")
+        
+        # I (Partner Price AED) = ROUNDUP(Unit Price * MARGIN_DISCOUNT, 2) * Quantity
+        partner_price_formula = f"=ROUNDUP(G{excel_row}*{margin_discount},2)*E{excel_row}"
+        ws.cell(row=excel_row, column=9, value=partner_price_formula)  # Column I
+        add_debug(f"[TEMPLATE2 FORMULA] Partner Price: {partner_price_formula} (discount: {channel_discount_str})")
+        
+        # Special formatting for description (column D) - left align and wrap
+        ws.cell(row=excel_row, column=4).alignment = Alignment(wrap_text=True, horizontal="left", vertical="center")
+        
+        # Apply consistent formatting to all formula columns
+        for col in [7, 8, 9]:  # G, H, I (price columns)
+            cell = ws.cell(row=excel_row, column=col)
+            cell.font = Font(size=11, color="1F497D")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.number_format = '"AED"#,##0.00'
+        
+        # Apply yellow fill to all data columns (B through I only)
+        for col in range(2, 10):
+            ws.cell(row=excel_row, column=col).fill = row_fill
+    
+    # --- Template 2 Summary Rows ---
+    summary_row = start_row + len(data) + 2
+    
+    # Total Bid Discounted Price
+    ws.merge_cells(f"C{summary_row}:F{summary_row}")
+    ws[f"C{summary_row}"] = "TOTAL Bid Discounted Price"
+    ws[f"C{summary_row}"].font = Font(bold=True, color="1F497D")
+    ws[f"C{summary_row}"].alignment = Alignment(horizontal="right")
+    
+    data_start_row = start_row
+    data_end_row = start_row + len(data) - 1
+    total_formula = f"=SUM(H{data_start_row}:H{data_end_row})"
+    
+    ws[f"H{summary_row}"] = total_formula
+    ws[f"H{summary_row}"].number_format = '"AED"#,##0.00'
+    ws[f"H{summary_row}"].font = Font(bold=True, color="1F497D")
+    ws[f"H{summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+    
+    # Total BP Special Discounted Price
+    bp_summary_row = summary_row + 1
+    ws.merge_cells(f"C{bp_summary_row}:F{bp_summary_row}")
+    ws[f"C{bp_summary_row}"] = "TOTAL BP Special Discounted Price excluding VAT:"
+    ws[f"C{bp_summary_row}"].font = Font(bold=True, color="1F497D")
+    ws[f"C{bp_summary_row}"].alignment = Alignment(horizontal="right")
+    
+    bp_total_formula = f"=SUM(I{data_start_row}:I{data_end_row})"
+    ws[f"I{bp_summary_row}"] = bp_total_formula
+    ws[f"I{bp_summary_row}"].number_format = '"AED"#,##0.00'
+    ws[f"I{bp_summary_row}"].font = Font(bold=True, color="1F497D")
+    ws[f"I{bp_summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+    
+    # Customer Price Validation
+    validation_row = bp_summary_row + 2
+    ws.merge_cells(f"C{validation_row}:F{validation_row}")
+    ws[f"C{validation_row}"] = "Customer Price should not exceed:"
+    ws[f"C{validation_row}"].font = Font(bold=True, color="1F497D")
+    ws[f"C{validation_row}"].alignment = Alignment(horizontal="right")
+    
+    validation_formula = f"=I{bp_summary_row}*3.3657"
+    ws[f"I{validation_row}"] = validation_formula
+    ws[f"I{validation_row}"].number_format = '"AED"#,##0.00'
+    ws[f"I{validation_row}"].font = Font(bold=True, color="FF0000")
+    ws[f"I{validation_row}"].fill = PatternFill(start_color="FFEEEE", end_color="FFEEEE", fill_type="solid")
+
+    
+    # --- Terms Section ---
+    total_price_sum = sum(((row[7] if len(row) > 7 and row[7] else 0) for row in data))  # Use bid_total_aed
+    terms = get_terms_section(header_info, total_price_sum)
+    
+    def estimate_line_count(text, max_chars_per_line=80):
+        lines = text.split('\n')
+        total_lines = 0
+        for line in lines:
+            if not line:
+                total_lines += 1
+            else:
+                wrapped = len(line) // max_chars_per_line + (1 if (len(line) % max_chars_per_line) else 0)
+                total_lines += max(1, wrapped)
+        return total_lines
+    
+    table_end_row = start_row + len(data) + 7
+    terms_start_row = max(29, table_end_row + 2)
+    adjusted_terms = []
+    row_offset = terms_start_row - 29
+    
+    for cell_addr, text, *style in terms:
+        try:
+            if len(cell_addr) >= 2 and cell_addr[1:].isdigit():
+                col_letter = cell_addr[0]
+                original_row = int(cell_addr[1:])
+                new_row = original_row + row_offset
+                new_cell_addr = f"{col_letter}{new_row}"
+                adjusted_terms.append((new_cell_addr, text, *style))
+            else:
+                adjusted_terms.append((cell_addr, text, *style))
+        except Exception as e:
+            adjusted_terms.append((cell_addr, text, *style))
+    
+    # Render terms blocks (adjust span for Template 2 width)
+    for cell_addr, text, *style in adjusted_terms:
+        try:
+            if len(cell_addr) >= 2 and cell_addr[1:].isdigit():
+                row_num = int(cell_addr[1:])
+                col_letter = cell_addr[0]
+                merge_rows = style[0].get("merge_rows") if style else None
+                end_row = row_num + (merge_rows - 1 if merge_rows else 0)
+                
+                is_bold_title = style and "bold" in style[0] and style[0].get("bold") == True
+                
+                if is_bold_title:
+                    ws.merge_cells(f"{col_letter}{row_num}:E{end_row}")
+                else:
+                    ws.merge_cells(f"{col_letter}{row_num}:G{end_row}")  # Adjust for Template 2 width
+                
+                ws[cell_addr] = text
+                ws[cell_addr].alignment = Alignment(wrap_text=True, vertical="top")
+                
+                line_count = estimate_line_count(text, max_chars_per_line=80)
+                total_height = max(18, line_count * 16)
+                if merge_rows:
+                    per_row = total_height / merge_rows
+                    for r in range(row_num, end_row + 1):
+                        ws.row_dimensions[r].height = per_row
+                else:
+                    ws.row_dimensions[row_num].height = total_height
+                if style and "bold" in style[0]:
+                    ws[cell_addr].font = Font(**style[0])
+        except Exception as e:
+            pass
+    
+    # Divider line
+    border_row = 4
+    bottom_border = Border(bottom=Side(style="thin", color="000000"))
+    for col in range(1, 10):  # Template 2 goes to column I only
+        ws.cell(row=border_row, column=col).border = bottom_border    # Calculate IBM Terms start position
+    try:
+        last_terms_row = max([int(addr[1:]) + (style[0].get("merge_rows", 1) - 1) 
+                             for addr, text, *style in adjusted_terms 
+                             if style and len(addr) >= 2 and addr[1:].isdigit()], 
+                             default=terms_start_row + 10)
+    except Exception:
+        last_terms_row = terms_start_row + 10
+        
+    current_row = last_terms_row + 3
+    
+    # IBM Terms header
+    ibm_header_cell = ws[f"C{current_row}"]
+    ibm_header_cell.value = "IBM Terms and Conditions"
+    ibm_header_cell.font = Font(bold=True, size=12, color="1F497D")
+    current_row += 2
+    
+    # IBM Terms content
+    paragraphs = [p.strip() for p in ibm_terms_text.split('\n\n') if p.strip()]
+    
+    for paragraph in paragraphs:
+        if paragraph:
+            ws.merge_cells(f"C{current_row}:G{current_row}")  # Adjust for Template 2 width
+            cell = ws[f"C{current_row}"]
+            cell.value = paragraph
+            cell.font = Font(size=10, color="000000")
+            cell.alignment = Alignment(wrap_text=True, vertical="top", horizontal="left")
+            
+            estimated_lines = max(2, len(paragraph) // 100 + 1)
+            row_height = max(25, estimated_lines * 15)
+            ws.row_dimensions[current_row].height = row_height
+            
+            current_row += 1
+            
+            if "Useful/Important web resources" in paragraph:
+                current_row += 1
+
+    # Page setup for Template 2 (8 columns: B-I)
+    last_row = ws.max_row
+    ws.print_area = f"A1:I{last_row}"
+    ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    
+    # Margins
+    ws.page_margins.left = 0.2
+    ws.page_margins.right = 0.2
+    ws.page_margins.top = 0.25
+    ws.page_margins.bottom = 0.25
+    ws.page_margins.header = 0.15
+    ws.page_margins.footer = 0.15
+    
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    
+    # Add IBM Terms as second sheet
+    terms_sheet = wb.create_sheet(title="IBM Terms")
+    terms_sheet.cell(row=1, column=1, value=ibm_terms_text)
+    terms_sheet["A1"].alignment = Alignment(wrap_text=True, vertical="top")
+    terms_sheet.column_dimensions["A"].width = 120
+    
+    add_debug(f"[TEMPLATE2 COMPLETE] Saved Template 2 Excel with {len(data)} data rows - 8 COLUMNS ONLY")
+    wb.save(output)
+
 
 # Function to get debug info for Streamlit display
 def get_extraction_debug():
