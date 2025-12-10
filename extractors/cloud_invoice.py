@@ -448,19 +448,25 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         else:
             # Step 5: Final fallback - Use default subscription ID
             out_row["Subscription Id"] = sub_id_clean
-        manual_set_start = out_row.get("Billing Cycle Start Date", "")
-        manual_set_end = out_row.get("Billing Cycle End Date", "")
         
-        # Only use input dates if manual didn't set them AND they're not empty
-        if not manual_set_start or manual_set_start == "":
+        # ✅ ONLY set input dates if manual processing didn't already extract them
+        # Don't overwrite dates that manual processing successfully extracted
+        if "Billing Cycle Start Date" not in out_row or out_row["Billing Cycle Start Date"] == "":
             input_start = fmt_date(row.get("BillingCycleStartDate", ""))
-            if input_start and input_start.strip() and input_start != "":
+            # Only use if input actually has a valid date (not empty/nan)
+            if input_start and str(input_start).strip() not in ["", "nan", "None"]:
                 out_row["Billing Cycle Start Date"] = input_start
+            elif "Billing Cycle Start Date" not in out_row:
+                out_row["Billing Cycle Start Date"] = ""
         
-        if not manual_set_end or manual_set_end == "":
+        if "Billing Cycle End Date" not in out_row or out_row["Billing Cycle End Date"] == "":
             input_end = fmt_date(row.get("BillingCycleEndDate", ""))
-            if input_end and input_end.strip() and input_end != "":
+            # Only use if input actually has a valid date (not empty/nan)
+            if input_end and str(input_end).strip() not in ["", "nan", "None"]:
                 out_row["Billing Cycle End Date"] = input_end
+            elif "Billing Cycle End Date" not in out_row:
+                out_row["Billing Cycle End Date"] = ""
+        
         item_code = row.get("ITEMCode", "")
         if pd.notna(item_code) and str(item_code).strip():
             out_row["ITEM Code"] = item_code
