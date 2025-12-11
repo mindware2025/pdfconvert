@@ -43,7 +43,7 @@ def get_terms_section(header_info, total_price_sum):
         # Compliance statement
         ("C32", f"""Please include the following phrase as per IBM Compliance within your PO:
 This is to confirm that {company_name} has accepted a firm and final order from {end_user} 
-and the Final end-customer price for IBM SW licenses is not higher than {formatted_price} """
+and the Final end-customer price for IBM SW licenses is not higher than {formatted_price}"""
         ),
         ("C33", f"""This documents confirms {company_name} commitment to place a firm order on IBM through Mindware FZ-LLC consistent with the End Customer Purchase Order (PO) or any other legally binding document {company_name} received from the end customer.
 """

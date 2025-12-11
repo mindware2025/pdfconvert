@@ -1008,12 +1008,14 @@ def create_styled_excel(
         ws.cell(row=excel_row, column=10).alignment = Alignment(horizontal="center", vertical="center")
         
         # Column K: Partner Discount = Unit Price (H) * 0.99 (1% discount)
-        discount_formula = f"=H{excel_row}*0.99"
+       
+        discount_formula = f"=ROUNDUP(H{excel_row}*0.99,2)"
         ws.cell(row=excel_row, column=11, value=discount_formula)
         ws.cell(row=excel_row, column=11).font = Font(size=11, color="1F497D")
         ws.cell(row=excel_row, column=11).alignment = Alignment(horizontal="center", vertical="center")
         
         # Column L: Partner Price in AED = Partner Discount (K) * Quantity (E)
+        
         partner_price_formula = f"=K{excel_row}*E{excel_row}"
         ws.cell(row=excel_row, column=12, value=partner_price_formula)
         ws.cell(row=excel_row, column=12).font = Font(size=11, color="1F497D")
