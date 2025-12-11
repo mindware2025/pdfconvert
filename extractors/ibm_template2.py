@@ -373,12 +373,25 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                     for j in range(service_line_idx, end_range):
                         line_text = lines[j].strip()
                         if line_text:  # Non-empty lines
+                            # Exclude unwanted lines
+                            exclude_patterns = [
+                                'Current Transaction',
+                                'IBM Opportunity Number:',
+                                'Customer Unit Price:',
+                                'Channel Discount:'
+                            ]
+                            
+                            # Skip if line contains any exclude pattern
+                            if any(excl in line_text for excl in exclude_patterns):
+                                add_debug(f"    Line {j}: {line_text} (EXCLUDED)")
+                                continue
+                            
                             # Include relevant lines that describe the service
                             if any(keyword in line_text for keyword in [
                                 'IBM', 'Projected Service Start Date', 'Service Level Agreement',
-                                'Current Transaction', 'Billing:', 'Subscription Length:',
+                                'Billing:', 'Subscription Length:',
                                 'Renewal Type:', 'Renewal:', 'Resource Unit Overage',
-                                'Corresponding Subscription Part#', 'Subscription Part#:', 'Overage Part#:'
+                                'Corresponding Subscription Part#', 'Overage Part#:'  # Removed 'Subscription Part#:'
                             ]):
                                 desc_lines.append(line_text)
                                 add_debug(f"    Line {j}: {line_text}")
