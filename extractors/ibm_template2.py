@@ -373,17 +373,26 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                     for j in range(service_line_idx, end_range):
                         line_text = lines[j].strip()
                         if line_text:  # Non-empty lines
-                            # Exclude unwanted lines
+                            add_debug(f"    Processing line {j}: '{line_text}'")
+                            
+                            # Exclude unwanted lines - check for exact matches and partial matches
                             exclude_patterns = [
                                 'Current Transaction',
-                                'IBM Opportunity Number:',
-                                'Customer Unit Price:',
-                                'Channel Discount:'
+                                'IBM Opportunity Number',
+                                'Customer Unit Price',
+                                'Channel Discount',
+                                'Subscription Part#'
                             ]
                             
-                            # Skip if line contains any exclude pattern
-                            if any(excl in line_text for excl in exclude_patterns):
-                                add_debug(f"    Line {j}: {line_text} (EXCLUDED)")
+                            # Skip if line contains any exclude pattern (case-insensitive partial match)
+                            should_exclude = False
+                            for excl in exclude_patterns:
+                                if excl.lower() in line_text.lower():
+                                    should_exclude = True
+                                    add_debug(f"    Line {j}: EXCLUDED - contains '{excl}'")
+                                    break
+                            
+                            if should_exclude:
                                 continue
                             
                             # Include relevant lines that describe the service
@@ -394,7 +403,7 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                                 'Corresponding Subscription Part#', 'Overage Part#:'  # Removed 'Subscription Part#:'
                             ]):
                                 desc_lines.append(line_text)
-                                add_debug(f"    Line {j}: {line_text}")
+                                add_debug(f"    Line {j}: INCLUDED - {line_text}")
                             # Stop if we hit another service or a new major section
                             elif line_text.startswith('IBM') and j > i + 5:
                                 add_debug(f"    Stopping at line {j}: Next service section detected")
@@ -881,16 +890,37 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                             for j in range(service_line_idx, end_range):
                                 line_text = lines[j].strip()
                                 if line_text:  # Non-empty lines
+                                    add_debug(f"    Processing line {j}: '{line_text}'")
+                                    
+                                    # Exclude unwanted lines - check for exact matches and partial matches
+                                    exclude_patterns = [
+                                        'Current Transaction',
+                                        'IBM Opportunity Number',
+                                        'Customer Unit Price',
+                                        'Channel Discount',
+                                        'Subscription Part#'
+                                    ]
+                                    
+                                    # Skip if line contains any exclude pattern (case-insensitive partial match)
+                                    should_exclude = False
+                                    for excl in exclude_patterns:
+                                        if excl.lower() in line_text.lower():
+                                            should_exclude = True
+                                            add_debug(f"    Line {j}: EXCLUDED - contains '{excl}'")
+                                            break
+                                    
+                                    if should_exclude:
+                                        continue
+                                    
                                     # Include relevant lines that describe the service
                                     if any(keyword in line_text for keyword in [
                                         'IBM', 'Projected Service Start Date', 'Service Level Agreement',
-                                        'Current Transaction', 'Billing:', 'Subscription Length:',
+                                        'Billing:', 'Subscription Length:',
                                         'Renewal Type:', 'Renewal:', 'Resource Unit Overage',
-                                        'Corresponding Subscription Part#', 'Subscription Part#:', 'Overage Part#:',
-                                        'Channel Discount:', 'Customer Unit Price:', 'Quote Rate:', 'Committed Term:'
+                                        'Corresponding Subscription Part#', 'Overage Part#:', 'Quote Rate:', 'Committed Term:'
                                     ]):
                                         desc_lines.append(line_text)
-                                        add_debug(f"      Line {j}: {line_text}")
+                                        add_debug(f"    Line {j}: INCLUDED - {line_text}")
                                     # Stop if we hit the table headers (Item, Quantity, etc.)
                                     elif re.match(r'^(Item|Line|Qty|Quantity|SI|Customer|Entitled|Months|Discount|Quote)\s*$', line_text, re.I):
                                         add_debug(f"      Stopping at line {j}: Table header detected")
