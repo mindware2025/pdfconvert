@@ -13,9 +13,6 @@ from openpyxl.drawing.image import Image
 from openpyxl.utils import get_column_letter
 from terms_template import get_terms_section
 
-# ----------------------------------------------------------------------
-# Debug info collector for live environment
-# ----------------------------------------------------------------------
 debug_info = []
 
 def add_debug(message):
