@@ -900,10 +900,13 @@ def create_styled_excel(
         "End User:", "Bid Number:", "Agreement Number:", "PA Site Number:", "",
         "Select Territory:", "Government Entity (GOE):", "Payment Terms:"
     ]
+    agreement_number = header_info.get('PA Agreement Number', '')
+    if not agreement_number:
+        agreement_number = 'N/A'
     right_values = [
         header_info.get('Customer Name', ''),
         header_info.get('Bid Number', ''),
-        header_info.get('PA Agreement Number', ''),
+        agreement_number,
         header_info.get('PA Site Number', ''),
         "",
         header_info.get('Select Territory', ''),
