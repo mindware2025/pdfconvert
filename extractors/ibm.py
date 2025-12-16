@@ -991,48 +991,55 @@ def create_styled_excel(
         
         # Also add to debug log
         add_debug(f"[COST DEBUG] Row {idx}: qty={qty}, cost_usd={cost_usd}, total_price_aed={total_price_aed}, unit_price_aed={unit_price_aed}")
-        # Write first 7 columns with actual values (C through I)
-        excel_data = [sku, desc, qty, start_date, end_date, unit_price_aed, cost_usd]
-        
+        # Write columns C-G (sku, desc, qty, start_date, end_date) with values
+        excel_data = [sku, desc, qty, start_date, end_date]
         for j, value in enumerate(excel_data):
-            excel_col = j + 3  # C=3, D=4, E=5, F=6, G=7, H=8, I=9
+            excel_col = j + 3  # C=3, D=4, E=5, F=6, G=7
             cell = ws.cell(row=excel_row, column=excel_col, value=value)
             cell.font = Font(size=11, color="1F497D")
             cell.alignment = Alignment(horizontal="center", vertical="center")
-        
-        # Add FORMULAS for calculated columns (J, K, L)
+
+        # Column H: Unit Price in AED = J{row} / E{row}
+        unit_price_formula = f"=J{excel_row}/E{excel_row}"
+        ws.cell(row=excel_row, column=8, value=unit_price_formula)
+        ws.cell(row=excel_row, column=8).font = Font(size=11, color="1F497D")
+        ws.cell(row=excel_row, column=8).alignment = Alignment(horizontal="center", vertical="center")
+
+        # Column I: Cost (USD) as value
+        ws.cell(row=excel_row, column=9, value=cost_usd)
+        ws.cell(row=excel_row, column=9).font = Font(size=11, color="1F497D")
+        ws.cell(row=excel_row, column=9).alignment = Alignment(horizontal="center", vertical="center")
+
         # Column J: Total Price in AED = Cost (I) * USD_TO_AED
         total_formula = f"=I{excel_row}*{USD_TO_AED}"
         ws.cell(row=excel_row, column=10, value=total_formula)
         ws.cell(row=excel_row, column=10).font = Font(size=11, color="1F497D")
         ws.cell(row=excel_row, column=10).alignment = Alignment(horizontal="center", vertical="center")
-        
+
         # Column K: Partner Discount = Unit Price (H) * 0.99 (1% discount)
-       
         discount_formula = f"=ROUNDUP(H{excel_row}*0.99,2)"
         ws.cell(row=excel_row, column=11, value=discount_formula)
         ws.cell(row=excel_row, column=11).font = Font(size=11, color="1F497D")
         ws.cell(row=excel_row, column=11).alignment = Alignment(horizontal="center", vertical="center")
-        
+
         # Column L: Partner Price in AED = Partner Discount (K) * Quantity (E)
-        
         partner_price_formula = f"=K{excel_row}*E{excel_row}"
         ws.cell(row=excel_row, column=12, value=partner_price_formula)
         ws.cell(row=excel_row, column=12).font = Font(size=11, color="1F497D")
-        ws.cell(row=excel_row, column=12).alignment = Alignment(horizontal="center", vertical="center")    
-            
-        # Currency formatting for price columns - Cost (I=9) in USD, others in AED
-        for price_col in [8, 10, 11, 12]:  # AED columns: Unit Price, Total, Partner Discount, Partner Price
+        ws.cell(row=excel_row, column=12).alignment = Alignment(horizontal="center", vertical="center")
+
+        # Currency formatting for price columns - Unit Price (H=8), Total (J=10), Partner Discount (K=11), Partner Price (L=12) in AED
+        for price_col in [8, 10, 11, 12]:
             ws.cell(row=excel_row, column=price_col).number_format = '"AED"#,##0.00'
         # USD formatting for Cost column (I=9)
         ws.cell(row=excel_row, column=9).number_format = '"USD"#,##0.00'
         # Row fill
         for col in range(2, 2 + len(headers)):
             ws.cell(row=excel_row, column=col).fill = row_fill
-        
+
         # Description wrap & left align (column D = 4) - applies to both templates
         ws.cell(row=excel_row, column=4).alignment = Alignment(wrap_text=True, horizontal="left", vertical="center")
-        
+
         # Currency formats
         if col_unit:
             ws.cell(row=excel_row, column=col_unit).number_format = '"AED"#,##0.00'
