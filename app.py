@@ -21,6 +21,8 @@ from extractors.insurance import process_insurance_excel
 from extractors.insurance2  import process_grouped_customer_files
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
+import logging
+logging.basicConfig(level=logging.INFO)
 load_dotenv()
 from extractors.google_invoice import extract_table_from_text as extract_invoice_table, extract_invoice_info as extract_invoice_info_invoice, GOOGLE_INVOICE_COLS
 from extractors.dell_invoice import (
