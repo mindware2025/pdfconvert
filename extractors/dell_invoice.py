@@ -390,14 +390,18 @@ def build_pre_alert_rows(
     """Build rows for the PRE ALERT UPLOAD sheet from a single PDF.
     Enhanced heavy debug/logging version.
     """
+    import logging
+    logging.info(f"Processing PDF: {pdf_path}")
     headers = extract_header_fields(pdf_path)
+    logging.info(f"Extracted headers: {headers}")
     items = extract_table_from_text(pdf_path)
+    logging.info(f"Extracted {len(items)} item rows from PDF.")
     rows: List[List[Any]] = []
 
     for idx_item, item in enumerate(items):
-        # Very verbose debug collector for this item
         debug_steps: List[str] = []
         try:
+            logging.info(f"Item {idx_item}: Raw item: {item}")
             debug_steps.append(f"Processing item index={idx_item} raw_item={item!r}")
             item_no = item[0] if len(item) > 0 else ""
             item_no_norm = _normalize_item_code(item_no)
@@ -405,6 +409,7 @@ def build_pre_alert_rows(
             qty = item[2] if len(item) > 2 else ""
             unit_price = item[3] if len(item) > 3 else ""
             debug_steps.append(f"Normalized item code: '{item_no_norm}' desc='{desc}' qty='{qty}' unit_price='{unit_price}'")
+            logging.info(f"Item {idx_item}: Normalized code='{item_no_norm}', desc='{desc}', qty='{qty}', unit_price='{unit_price}'")
 
             mapped_item_code = ""
             mapped_item_desc = ""
@@ -417,9 +422,11 @@ def build_pre_alert_rows(
             status = ""
 
             if master_lookup:
+                logging.info(f"Item {idx_item}: Using master lookup for PO and item code.")
                 po_key = _normalize_po(headers.get("po_number", ""))
                 key = (po_key, item_no_norm)
                 debug_steps.append(f"PO key='{po_key}', lookup key={key!r}")
+                logging.info(f"Item {idx_item}: PO key='{po_key}', lookup key={key!r}")
 
                 def as_float(s: str) -> Optional[float]:
                     try:
@@ -435,24 +442,30 @@ def build_pre_alert_rows(
                     pdf_qty_val = None
 
                 debug_steps.append(f"Parsed numeric: pdf_unit_price_val={pdf_unit_price_val} pdf_qty_val={pdf_qty_val}")
+                logging.info(f"Item {idx_item}: Parsed unit price={pdf_unit_price_val}, qty={pdf_qty_val}")
 
                 # Build candidate lists from supplier_index (exact or flexible)
                 exact_entries = (supplier_index.get(key, []) if supplier_index else [])
                 debug_steps.append(f"Exact matches from supplier_index for key {key}: count={len(exact_entries)}")
+                logging.info(f"Item {idx_item}: Exact supplier matches: {len(exact_entries)}")
                 if exact_entries:
-                    debug_steps.extend([f"  exact[{i}]={e!r}" for i, e in enumerate(exact_entries)])
+                    for i, e in enumerate(exact_entries):
+                        logging.info(f"Item {idx_item}:   exact[{i}]={e}")
 
                 # Always also gather flex entries (candidates where ksupp startswith/pdf startswith ksupp)
                 flex_entries: List[Tuple[str, str, str, str]] = []
                 if supplier_index:
+                    logging.info(f"Item {idx_item}: Checking for flexible supplier matches.")
                     def po_flex_match(master_po: str, pdf_po: str) -> bool:
                         return bool(master_po) and bool(pdf_po) and (master_po.startswith(pdf_po) or pdf_po.startswith(master_po))
                     for (kpo, ksupp), entries in supplier_index.items():
                         if po_flex_match(kpo, po_key) and (ksupp.startswith(item_no_norm) or item_no_norm.startswith(ksupp)):
                             flex_entries.extend(entries)
                     debug_steps.append(f"Flexible matches found: count={len(flex_entries)}")
+                    logging.info(f"Item {idx_item}: Flexible supplier matches: {len(flex_entries)}")
                     if flex_entries:
-                        debug_steps.extend([f"  flex[{i}]={e!r}" for i, e in enumerate(flex_entries)])
+                        for i, e in enumerate(flex_entries):
+                            logging.info(f"Item {idx_item}:   flex[{i}]={e}")
 
                 # Combine exact and flex candidates (dedupe) so we don't miss close variants like 210-BDUK-LCA
                 if exact_entries:
@@ -464,7 +477,9 @@ def build_pre_alert_rows(
                 total_supplier_matches = len(supplier_candidates)
                 matching_mode = "exact" if exact_entries else ("flex" if flex_entries else "none")
                 debug_steps.append(f"Using supplier_candidates count={total_supplier_matches} mode={matching_mode}")
+                logging.info(f"Item {idx_item}: Total supplier candidates: {total_supplier_matches}, mode: {matching_mode}")
                 if total_supplier_matches == 1:
+                    logging.info(f"Item {idx_item}: Single supplier match found.")
                     # Case A
                     mapped_item_code, mapped_item_desc, out_orion_unit_price, out_orion_qty = supplier_candidates[0]
                     out_orion_item_code = mapped_item_code
@@ -474,10 +489,12 @@ def build_pre_alert_rows(
                     matched_by = "supplier-exact" if matching_mode == "exact" else "supplier-flex"
                     chosen_orion_code_minimal = mapped_item_code
                 elif total_supplier_matches > 1:
+                    logging.info(f"Item {idx_item}: Multiple supplier candidates, checking price matches.")
                     # Case B
                     debug_steps.append("Case B: multiple supplier candidates, computing price matches")
                     price_matched = []
                     if pdf_unit_price_val is not None:
+                        logging.info(f"Item {idx_item}: Checking price matches among supplier candidates.")
                         for e in supplier_candidates:
                             # entries are (orion, pi_desc, unit_rate, qty)
                             e_price = as_float(e[2])  # unit_rate
@@ -486,8 +503,10 @@ def build_pre_alert_rows(
                             if e_price is not None and e_price == pdf_unit_price_val:
                                 price_matched.append(e)
                     debug_steps.append(f"price_matched count={len(price_matched)} list={[p for p in price_matched]}")
+                    logging.info(f"Item {idx_item}: Price-matched candidates: {len(price_matched)}")
 
                     if len(price_matched) == 1:
+                        logging.info(f"Item {idx_item}: Exactly one price-matched candidate found.")
                         mapped_item_code, mapped_item_desc, out_orion_unit_price, out_orion_qty = price_matched[0]
                         out_orion_item_code = mapped_item_code
                         mapped_item_code = ""
@@ -498,11 +517,13 @@ def build_pre_alert_rows(
                         matched_by = "supplier-" + matching_mode + "+price"
                         chosen_orion_code_minimal = out_orion_item_code
                     else:
+                        logging.info(f"Item {idx_item}: Multiple or zero price matches, checking qty tie-breaker.")
                         # Deterministic qty tie-breaker: only accept an exact qty match.
                         debug_steps.append("Multiple or zero price matches -> try exact qty tie-breaker")
                         picked = None
                         # 1) look for first exact qty among price_matched
                         if pdf_qty_val is not None and price_matched:
+                            logging.info(f"Item {idx_item}: Checking for exact qty match among price-matched candidates.")
                             for i_e, e in enumerate(price_matched):
                                 try:
                                     e_qty = float(str(e[3]).replace(",", "").strip()) if e[3] not in (None, "") else None
@@ -516,6 +537,7 @@ def build_pre_alert_rows(
 
                         # 2) if not found, look for first exact qty among all supplier_candidates where price is within small tolerance
                         if picked is None and pdf_qty_val is not None and supplier_candidates:
+                            logging.info(f"Item {idx_item}: No exact qty in price-matched, searching all supplier candidates with price tolerance.")
                             TOL = 0.01
                             debug_steps.append(f"  No exact qty in price_matched; searching all supplier_candidates with tolerance={TOL}")
                             for i_e, e in enumerate(supplier_candidates):
@@ -532,6 +554,7 @@ def build_pre_alert_rows(
                                     break
 
                         if picked is not None:
+                            logging.info(f"Item {idx_item}: Picked candidate by exact qty and price tolerance.")
                             mapped_item_code, mapped_item_desc, out_orion_unit_price, out_orion_qty = picked
                             out_orion_item_code = mapped_item_code
                             mapped_item_code = ""
@@ -542,6 +565,7 @@ def build_pre_alert_rows(
                             matched_by = "supplier-" + matching_mode + "+price+qty_first"
                             chosen_orion_code_minimal = out_orion_item_code
                         else:
+                            logging.info(f"Item {idx_item}: No exact qty found, marking as ambiguous (yellow).")
                             # STOP: no exact qty -> mark ambiguous, do NOT use closest-qty fallback
                             status = "B_multi_price_matches"
                             highlight = "yellow"
@@ -549,10 +573,12 @@ def build_pre_alert_rows(
                             mapped_item_desc = ""
                             debug_steps.append("No exact qty found -> Ambiguous price matches -> STOP and mark yellow (no UVW output)")
                 else:
+                    logging.info(f"Item {idx_item}: No supplier match found, trying Orion code + price.")
                     # Case C - no supplier match
                     highlight = "red"
                     status = "C_no_supplier_match"
                     debug_steps.append("Case C: No supplier match -> Highlight M/N red. Try Orion code + price.")
+                    logging.info(f"Item {idx_item}: No supplier match, checking Orion candidates.")
                     # Try by Orion item code + price
                     okey = (po_key, item_no_norm)
                     o_candidates = orion_index.get(okey, []) if orion_index else []
@@ -560,9 +586,12 @@ def build_pre_alert_rows(
                     if o_candidates:
                         for i_e, e in enumerate(o_candidates):
                             debug_steps.append(f"  orion_candidate[{i_e}]={e!r} parsed_price={as_float(e[2])} parsed_qty={as_float(e[3])}")
+                            logging.info(f"Item {idx_item}:   orion_candidate[{i_e}]={e} parsed_price={as_float(e[2])} parsed_qty={as_float(e[3])}")
                     price_matched = [e for e in o_candidates if pdf_unit_price_val is not None and as_float(e[2]) == pdf_unit_price_val]
                     debug_steps.append(f"Orion price_matched count={len(price_matched)}")
+                    logging.info(f"Item {idx_item}: Orion price-matched candidates: {len(price_matched)}")
                     if len(price_matched) == 1:
+                        logging.info(f"Item {idx_item}: Exactly one Orion price-matched candidate found.")
                         e = price_matched[0]
                         out_orion_unit_price = e[2]
                         out_orion_qty = e[3]
@@ -574,12 +603,14 @@ def build_pre_alert_rows(
                         matched_by = "orion+price"
                         chosen_orion_code_minimal = out_orion_item_code
                     else:
+                        logging.info(f"Item {idx_item}: No Orion price match, checking PO+price candidates.")
                         # New fallback: PO + price (ignore item codes)
                         po_candidates = po_price_index.get(po_key, []) if po_price_index else []
                         debug_steps.append(f"PO price candidates for PO {po_key}: count={len(po_candidates)}")
                         po_price_matched = [e for e in po_candidates if pdf_unit_price_val is not None and as_float(e[2]) == pdf_unit_price_val]
                         debug_steps.append(f"PO+price matched count={len(po_price_matched)}")
                         if len(po_price_matched) == 1:
+                            logging.info(f"Item {idx_item}: Exactly one PO+price-matched candidate found.")
                             e = po_price_matched[0]
                             out_orion_unit_price = e[2]
                             out_orion_qty = e[3]
@@ -591,6 +622,7 @@ def build_pre_alert_rows(
                             chosen_orion_code_minimal = out_orion_item_code
                             debug_steps.append("PO+price match success -> output UVW, keep M/N red")
                         else:
+                            logging.info(f"Item {idx_item}: PO+price match failure or ambiguous, keeping red highlight.")
                             status = "C_no_price_or_multi" if len(price_matched) != 1 else status
                             if len(po_price_matched) == 0:
                                 debug_steps.append("PO+price match failure: 0 matches -> Keep red highlight; no output")
@@ -599,6 +631,7 @@ def build_pre_alert_rows(
 
             # Always attach diagnostics entry with the very verbose message
             if diagnostics is not None:
+                logging.info(f"Item {idx_item}: Diagnostics: status={status}, highlight={highlight}, mapped_item_code={mapped_item_code}, out_orion_item_code={out_orion_item_code}, message={' | '.join(debug_steps)}")
                 fill_MN = bool(mapped_item_code or mapped_item_desc)
                 fill_UVW = bool(out_orion_item_code or out_orion_unit_price or out_orion_qty)
                 diagnostics.append({
@@ -637,6 +670,7 @@ def build_pre_alert_rows(
                 pass
 
         except Exception as exc:
+            logging.error(f"Exception processing item {idx_item}: {exc}")
             # Ensure one item's exception does not break whole run; log it in diagnostics/console
             err_msg = f"EXCEPTION processing item idx={idx_item}: {exc}"
             try:
