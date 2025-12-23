@@ -634,147 +634,28 @@ def extractor_workflow(
         if invoice_num and invoice_date:
             file_date = format_month_year(invoice_date)
             file_name = file_name_template.format(invoice_num=invoice_num, file_date=file_date)
-        else:
-            file_name = file_name_template.format(invoice_num='unknown', file_date='unknown')
-        rows = extract_table_func(uploaded_file)
-        if rows:
-            df = pd.DataFrame(rows, columns=table_columns)
-            if show_header_df_func and header_columns and item_row_builder and item_columns:
-                today_str = datetime.today().strftime("%d/%m/%Y")
-                remarks = f"GOOGLE INV-{invoice_num}" if invoice_num else "GOOGLE INV-UNKNOWN"
-                header_df = pd.DataFrame([
-                    show_header_df_func(invoice_num, invoice_date, today_str, remarks)
-                ], columns=header_columns)
-                dnts_item_data = [item_row_builder(idx, *row, invoice_num) for idx, row in enumerate(rows, 1)]
-                dnts_item_df = pd.DataFrame(dnts_item_data, columns=item_columns)
-               
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    header_df.to_excel(writer, sheet_name='DNTS_HEADER', index=False)
-                    dnts_item_df.to_excel(writer, sheet_name='DNTS_ITEM', index=False)
-                output.seek(0)
-                
-                st.download_button(
-                    label=f"⬇️ Download DNTS Excel",
-                    data=output.getvalue(),
-                    file_name=file_name,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    
-                    key=f"download_{extractor_name}"
-                )
-            else:
-                
-                towrite = io.BytesIO()
-                df.to_excel(towrite, index=False, engine='openpyxl')
-                towrite.seek(0)
-                st.download_button(
-                    label="Download as Excel",
-                    data=towrite,
-                    file_name=file_name,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                 
-                )
-        else:
-            st.warning("No table data found in the uploaded PDF.")
-    else:
-        st.info(f"Please upload a {extractor_name} PDF file to get started.")
-# ----------- Tool Selector UI -----------
+        validate_customer_code(df, "Cloud Invoice File")
+        final_df = build_cloud_invoice_df(df)
+        final_df = map_invoice_numbers(final_df)
+        sorted_df = final_df.sort_values(by=final_df.columns.tolist()).reset_index(drop=True)
 
-if env == "test":
-    st.warning("⚠️ You are in TEST environment")
+        pos_df = sorted_df[sorted_df["Gross Value"].astype(float) >= 0]
+        neg_df = sorted_df[sorted_df["Gross Value"].astype(float) < 0]
 
-# Change header color and text
-header_color = "#1a73e8" if env == "live" else "orange"
-header_text = "🛠️ Tool Selection" + (" - Test Env" if env == "test" else "")
+        # Get one positive and one negative value (first row's Gross Value)
+        pos_value = pos_df["Gross Value"].iloc[0] if not pos_df.empty else None
+        neg_value = neg_df["Gross Value"].iloc[0] if not neg_df.empty else None
+        srcl_buffer = create_srcl_file(neg_df)
 
-st.markdown(f"""
-    <div style='text-align:center; margin-top:2rem; margin-bottom:1.5rem;'>
-        <h2 style='color:{header_color}; font-family:Google Sans, sans-serif; font-weight:700; letter-spacing:-1px;'>{header_text}</h2>
-        <p style='font-size:1.2rem; color:#444;'>Choose the tool you want to use for your PDF extraction.</p>
-    </div>
-""", unsafe_allow_html=True)
-
-if team == "Finance":
-    TOOL_OPTIONS = [
-        "-- Select a tool --",
-        "🟦 Google DNTS Extractor",
-        "🟩 Google Invoice Extractor",
-        "📄 Claims Automation",
-        "🟨 AWS Invoice Tool",
-        
-    ]
-elif team == "Operations":
-    TOOL_OPTIONS = [
-        "-- Select a tool --",
-        "💻 Dell Invoice Extractor",
-        "🧾 Cloud Invoice Tool",
-        "📦 Barcode PDF Generator grouped",
-        
-    ]
-elif team == "Credit":
-    TOOL_OPTIONS = [
-        "AR to EDD file",
-        "Coface CSV Uploader"
-    ]
-elif team == "Sales":
-    TOOL_OPTIONS = [
-        "💻 IBM Quotation",
-    ]
-else:
-    TOOL_OPTIONS = ["-- Select a tool --"]
-tool = st.selectbox(
-    "Select a tool:",
-    TOOL_OPTIONS,
-    key="tool_selector"
-)
-if tool == "-- Select a tool --":
-    st.info("Please select a tool above to get started.")
-elif tool == "🟦 Google DNTS Extractor":
-    def dnts_item_row(idx, domain, customer_id, amount, invoice_num):
-        formatted_amount = format_amount(amount)
-        item_name = (
-            f"GOOGLE INV-{invoice_num} / DOMAIN NAME : {domain} / CUSTOMER ID : {customer_id} / AMOUNT - USD - {formatted_amount}"
-        ).upper()
-        return [
-            idx, 1, "NS", item_name, "NA", "NA", "NOS", 1, 0, formatted_amount, 14401, "SDIG005", "PUHO", "GEN", "ZZ-COMM"
-        ]
-    extractor_workflow(
-        extractor_name="Google DNTS Extractor",
-        extractor_info="Upload one PDF containing a **'Summary of costs by domain'** table. The app will extract the table and let you download it as Excel.",
-        file_uploader_label="Choose your Google DNTS Invoice PDF",
-        extract_invoice_info_func=extract_invoice_info,
-        extract_table_func=extract_table_from_text,
-        table_columns=DNTS_ITEM_COLS[:3],
-        file_name_template="{invoice_num}-{file_date}.xlsx",
-        show_header_df_func=make_dnts_header_row,
-        header_columns=DNTS_HEADER_COLS,
-        item_row_builder=dnts_item_row,
-        item_columns=DNTS_ITEM_COLS
-    )
-elif tool == "🟩 Google Invoice Extractor":
-    extractor_workflow(
-        extractor_name="Google Invoice Extractor",
-        extractor_info="Upload a Google Invoice PDF. The app will extract the relevant data and let you download it as Excel.",
-        file_uploader_label="Choose your Google Invoice PDF",
-        extract_invoice_info_func=extract_invoice_info_invoice,
-        extract_table_func=extract_invoice_table,
-        table_columns=GOOGLE_INVOICE_COLS,
-        file_name_template="{invoice_num}-{file_date}.xlsx"
-    )
-    
-elif tool == "📄 Claims Automation":
-    st.title("Claims Automation")
-    
-    st.header("📁 Upload Files")
-    source1_file = st.file_uploader("JV Orion from SAP (.xlsx)", type=["xlsx"], accept_multiple_files=False, key="claims_source1")
-    master1_file = st.file_uploader("User information (.xlsx)", type=["xlsx"], accept_multiple_files=False, key="claims_master1")
-    source2_file = st.file_uploader("Employee benefits (.xlsx)", type=["xlsx"], accept_multiple_files=False, key="claims_source2")
-    master2_file = st.file_uploader("Main acc file (.xlsx)", type=["xlsx"], accept_multiple_files=False, key="claims_master2")
-    
-    st.markdown("---")
-    run_clicked = st.button("🚀 Generate Output", key="claims_run", use_container_width=True)
-    if run_clicked:
-        if not source1_file:
+        st.write("### Output Values:")
+        st.write(f"Positive Value: {pos_value}")
+        st.write(f"Negative Value: {neg_value}")
+        st.download_button(
+            label="⬇️ Download SRCL File",
+            data=srcl_buffer.getvalue(),
+            file_name="srcl_file.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
             st.error("Please upload Source File 1.")
             st.stop()
         try:
