@@ -1001,6 +1001,20 @@ elif tool == "🧾 Cloud Invoice Tool":
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
            
         )
+        neg_buffer = io.BytesIO()
+        wb_neg = Workbook()
+        ws_neg = wb_neg.active
+        ws_neg.title = "NEGATIVE INVOICES"
+        for row in dataframe_to_rows(neg_df, index=False, header=True):
+               ws_neg.append(row)
+        wb_neg.save(neg_buffer)
+        neg_buffer.seek(0)
+        st.download_button(
+    label="⬇️ Download Negative Invoices",
+    data=neg_buffer.getvalue(),
+    file_name="negative_invoices.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+)
         # --- Download SRCL File ---
         # --- Validate before generating SRCL file ---
       
@@ -1018,6 +1032,7 @@ elif tool == "🧾 Cloud Invoice Tool":
            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
          
 )
+        
         
 elif tool == "💻 IBM Quotation":
     st.set_page_config(page_title="IBM Quotation Extractor", layout="wide")
