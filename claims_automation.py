@@ -693,7 +693,7 @@ def build_debit_rows_from_source2(
         # ACTY2 Logic
         if main_ac_val == "54901":
             # Search in narration for GCC countries
-            gcc_countries = ["bahrain", "kuwait", "oman", "qatar", "saudi arabia", "uae"]
+            gcc_countries = ["bahrain", "kuwait", "oman", "qatar", "saudi arabia", "uae" ,"KSA" ,"ksa"]
             
             # Build full narration text to search in
             purpose = str(src.get("Purpose/Description", "") or "").lower()
