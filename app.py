@@ -1070,7 +1070,7 @@ elif tool == "🧾 Cloud Invoice Tool":
         
         # Create Excel workbook with formulas
         red_fill = PatternFill(start_color="FF9999", end_color="FF9999", fill_type="solid")
-        df_to_write = sorted_df.copy()
+        df_to_write = pos_df.copy()
         
         # Remove highlight flag column before writing
         if "_highlight_end_user" in df_to_write.columns:
