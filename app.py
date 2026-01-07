@@ -1051,9 +1051,9 @@ elif tool == "🧾 Cloud Invoice Tool":
             sorted_df["LPO Number"].astype(str) +
             sorted_df["End User"].astype(str)
         )
-        sorted_df["Invoice No."] = sorted_df["Combined (D)"].map(version_map)
+        sorted_df["Versioned Invoice No."] = sorted_df["Combined (D)"].map(version_map)
         cols = list(sorted_df.columns)
-        cols.append(cols.pop(cols.index("Invoice No.")))
+        cols.append(cols.pop(cols.index("Versioned Invoice No.")))
         sorted_df = sorted_df[cols]
         sorted_df = sorted_df.drop(columns=["Combined (D)"])
         # === ADD HIGHLIGHT FLAG HERE ===
