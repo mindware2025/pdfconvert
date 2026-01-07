@@ -1141,6 +1141,20 @@ elif tool == "🧾 Cloud Invoice Tool":
                         ),
 
         )
+        neg_buffer = io.BytesIO()
+        wb_neg = Workbook()
+        ws_neg = wb_neg.active
+        ws_neg.title = "NEGATIVE INVOICES"
+        for row in dataframe_to_rows(neg_df, index=False, header=True):
+               ws_neg.append(row)
+        wb_neg.save(neg_buffer)
+        neg_buffer.seek(0)
+        st.download_button(
+    label="⬇️ Download Negative Invoices",
+    data=neg_buffer.getvalue(),
+    file_name="negative_invoices.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+)
         srcl_buffer = create_srcl_file(neg_df)  # only negative invoices
 
 
