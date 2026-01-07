@@ -736,7 +736,7 @@ def create_srcl_file(df):
     s_no = 1
     header_sno_map = {}
     for _, row in df.iterrows():
-        versioned_inv = row.get("Versioned Invoice No.", row.get("Invoice No.", ""))
+        versioned_inv = row.get("Invoice No.", row.get("Invoice No.", ""))
         if versioned_inv not in header_sno_map:
             header_sno_map[versioned_inv] = s_no
             ws_head.append([
@@ -758,7 +758,7 @@ def create_srcl_file(df):
 
     item_counter = 1
     for _, row in df.iterrows():
-        versioned_inv = row.get("Versioned Invoice No.", row.get("Invoice No.", ""))
+        versioned_inv = row.get("Invoice No.", row.get("Invoice No.", ""))
         ref_key = header_sno_map.get(versioned_inv, "")
         doc_loc = str(row.get("Document Location", "")).strip().upper()
 
