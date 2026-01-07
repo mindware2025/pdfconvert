@@ -73,7 +73,8 @@ keyword_map = {
     ("visio","MS-CNS"): "MS-CNS",
     ("Microsoft Entra ID Governance (Education Faculty Pricing)","MS-CNS"): "MS-CNS",
     ("MSRI-CNS"): "MSRI-CNS",
-    ("dynamics 365","MS-CNS"): "MS-CNS"
+    ("dynamics 365","MS-CNS"): "MS-CNS",
+    ("AWS Account"): "AWS-UTILITIES-CNS"
 }
 
 def debug_log(message):
