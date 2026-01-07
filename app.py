@@ -1158,9 +1158,6 @@ elif tool == "🧾 Cloud Invoice Tool":
         srcl_buffer = create_srcl_file(neg_df)  # only negative invoices
 
 
-  
-
-
 
         st.download_button(
            label="⬇️ Download SRCL File",
