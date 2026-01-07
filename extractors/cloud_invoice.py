@@ -99,10 +99,10 @@ def normalize_guid(guid_str: str) -> str:
     """
     if not guid_str:
         return ""
-    
+
     # Remove all whitespace and convert to lowercase
     clean_guid = re.sub(r'\s+', '', guid_str.lower())
-    
+
     # Check if it's a valid GUID format (32 hex chars with optional hyphens)
     guid_pattern = r'^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$'
     if re.match(guid_pattern, clean_guid):
@@ -110,7 +110,7 @@ def normalize_guid(guid_str: str) -> str:
         if '-' not in clean_guid:
             clean_guid = f"{clean_guid[:8]}-{clean_guid[8:12]}-{clean_guid[12:16]}-{clean_guid[16:20]}-{clean_guid[20:]}"
         return clean_guid
-    
+
     return guid_str  # Return original if not valid GUID format
 
 def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -149,16 +149,16 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         invoice_desc = str(row.get("InvoiceDescription", "")).strip()
         sub_id_raw = row.get("SubscriptionId", "")
         sub_id = str(sub_id_raw).strip() if pd.notna(sub_id_raw) else ""
-        
+
         invoice_desc_clean = re.sub(r"^[#\s]+", "", invoice_desc)
         sub_id_clean = sub_id[:36] if sub_id else "Sub"
-        
+
         # === Manual Logic Implementation ===
         # Step 1: Check if "manual" exists in item name
         debug_log(f"Processing item_name_raw: '{item_name_raw}'")
         debug_log(f"Processing item_desc_raw: '{item_desc_raw}'")
         debug_log(f"Checking for 'manual' in item name (lowercase): {'manual' in item_name_raw.lower()}")
-        
+
         if "manual" in item_name_raw.lower():
             debug_log("Manual detected in item name")
             # Step 2: Try to find GUID pattern in item description (directly, not after "manual")
@@ -166,17 +166,17 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
             guid_pattern = re.compile(rf'({GUID_WS})', re.IGNORECASE)
             m = guid_pattern.search(item_desc_raw)
             debug_log(f"GUID regex search result in item description: {m}")
-            
+
             if m:
                 debug_log(f"GUID match found: {m.group(0)}")
                 debug_log(f"GUID captured group: {m.group(1)}")
-                
+
                 # Step 3: If GUID found, normalize and use it
                 found_guid = m.group(1)
                 normalized_guid = normalize_guid(found_guid)
                 debug_log(f"Original GUID: '{found_guid}' -> Normalized: '{normalized_guid}'")
                 out_row["Subscription Id"] = normalized_guid
-                
+
                 # Parse additional info using semicolon, colon, hash, and tab delimiters
                 parts = item_desc_raw.split(';')
                 if len(parts) == 1:  # No semicolons, try colons
@@ -186,7 +186,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                 if len(parts) == 1:  # No hash symbols either, try tabs
                     parts = item_desc_raw.split('\t')
                 debug_log(f"Split item description by delimiters: {parts}")
-                
+
                 # Look for item code in parts or use keyword mapping
                 item_code_found = False
                 if len(parts) >= 2:
@@ -198,7 +198,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                             debug_log(f"Found item code in description part {i}: '{part_clean}'")
                             item_code_found = True
                             break
-                
+
                 # If no item code found in parts, use keyword mapping
                 if not item_code_found:
                     for keywords, code in keyword_map.items():
@@ -210,12 +210,12 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                                 break
                         if item_code_found:
                             break
-                
+
                 # Look for dates in the entire item description
                 date_pattern = r'\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b'
                 dates_found = re.findall(date_pattern, item_desc_raw)
                 debug_log(f"Dates found in item description: {dates_found}")
-                
+
                 if len(dates_found) >= 2:
                     start_date = fmt_date(dates_found[0])
                     end_date = fmt_date(dates_found[1])
@@ -226,7 +226,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                     start_date = fmt_date(dates_found[0])
                     out_row["Billing Cycle Start Date"] = start_date
                     debug_log(f"Set billing start date: '{start_date}'")
-                
+
                 # Parse LPO from the item description
                 # Multiple LPO patterns to handle different formats
                 lpo_patterns = [
@@ -241,7 +241,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                     r'\b(DPO\d+)\b',                         # Pattern like DPO2500101
                     r'\b(T\d{4}PO\d+)\b',                    # Pattern like T2025PO20240
                 ]
-                
+
                 lpo_found = False
                 for pattern in lpo_patterns:
                     lpo_match = re.search(pattern, item_desc_raw, re.IGNORECASE)
@@ -251,13 +251,13 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                         debug_log(f"Found and set LPO Number: '{lpo_value}' using pattern: '{pattern}'")
                         lpo_found = True
                         break
-                
+
                 if not lpo_found:
                     debug_log(f"No LPO pattern found in item description")
-                
+
                 # Parse End User from the item description - multiple patterns to handle different formats
                 end_user_found = False
-                
+
                 # Pattern 1: "EU:Name" or "EU: Name" in semicolon/colon parts
                 if len(parts) >= 3:
                     remaining_parts = parts[2:]
@@ -276,7 +276,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                                     debug_log(f"Set End User from description parts: '{end_user_clean}'")
                                     end_user_found = True
                                     break
-                
+
                 # Pattern 2: "EU -Name" or "EU- Name" in the full description (for cases without semicolons/colons)
                 if not end_user_found:
                     eu_patterns = [
@@ -285,7 +285,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                         r':\s*EU\s*-\s*([^:\-\n]+?)(?:\s*$|\s*:|$)',  # ": EU - alkhalij"
                         r':\s*([A-Za-z][^:\n]*?)\s*$',                # ": Fidu Properties" (colon followed by name at end)
                     ]
-                    
+
                     for pattern in eu_patterns:
                         eu_match = re.search(pattern, item_desc_raw, re.IGNORECASE)
                         if eu_match:
@@ -298,10 +298,10 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                                 debug_log(f"Set End User from full description: '{end_user_clean}' using pattern: '{pattern}'")
                                 end_user_found = True
                                 break
-                
+
                 if not end_user_found:
                     debug_log(f"No End User pattern found in item description")
-                
+
                 # Additional item code extraction if not found from parts
                 if not item_code_found and len(parts) < 2:
                     debug_log(f"No delimiters found, looking for item code patterns in full description")
@@ -312,7 +312,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                         r'\b(AS-CNS)\b',         # AS-CNS
                         r'\b([A-Z]{2,4}-CNS)\b', # Any XX-CNS pattern
                     ]
-                    
+
                     for pattern in item_code_patterns:
                         item_match = re.search(pattern, item_desc_raw, re.IGNORECASE)
                         if item_match:
@@ -320,13 +320,13 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                             out_row["ITEM Code"] = item_code
                             debug_log(f"Set ITEM Code from full description: '{item_code}' using pattern: '{pattern}'")
                             break
-                
+
                 debug_log(f"Final manual processing result - Sub ID: '{out_row.get('Subscription Id')}', Item Code: '{out_row.get('ITEM Code')}', LPO: '{out_row.get('LPO Number')}', End User: '{out_row.get('End User')}'")
             else:
                 debug_log(f"No GUID found after manual, using default sub_id_clean: '{sub_id_clean}'")
                 # Step 4: No GUID found after manual, use default but still try to extract LPO and End User
                 out_row["Subscription Id"] = sub_id_clean
-                
+
                 # Still parse LPO and End User even without GUID
                 # Parse additional info using semicolon, colon, hash, and tab delimiters
                 parts = item_desc_raw.split(';')
@@ -337,7 +337,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                 if len(parts) == 1:  # No hash symbols either, try tabs
                     parts = item_desc_raw.split('\t')
                 debug_log(f"Split item description by delimiters (no GUID): {parts}")
-                
+
                 # Look for item code in parts or use keyword mapping
                 item_code_found = False
                 if len(parts) >= 2:
@@ -349,7 +349,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                             debug_log(f"Found item code in description part {i} (no GUID): '{part_clean}'")
                             item_code_found = True
                             break
-                
+
                 # If no item code found in parts, use keyword mapping
                 if not item_code_found:
                     for keywords, code in keyword_map.items():
@@ -361,7 +361,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                                 break
                         if item_code_found:
                             break
-                
+
                 # Parse LPO from the item description
                 lpo_patterns = [
                     r'(?:^|-)?\s*LPO\s*:\s*([A-Z0-9]+)',     # "LPO: XXXXX" or "- LPO: XXXXX"
@@ -375,7 +375,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                     r'\b(DPO\d+)\b',                         # Pattern like DPO2500101
                     r'\b(T\d{4}PO\d+)\b',                    # Pattern like T2025PO20240
                 ]
-                
+
                 lpo_found = False
                 for pattern in lpo_patterns:
                     lpo_match = re.search(pattern, item_desc_raw, re.IGNORECASE)
@@ -385,13 +385,13 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                         debug_log(f"Found and set LPO Number (no GUID): '{lpo_value}' using pattern: '{pattern}'")
                         lpo_found = True
                         break
-                
+
                 if not lpo_found:
                     debug_log(f"No LPO pattern found in item description (no GUID)")
-                
+
                 # Parse End User from the item description
                 end_user_found = False
-                
+
                 # Pattern 1: "EU:Name" or "EU: Name" in semicolon/colon parts
                 if len(parts) >= 3:
                     remaining_parts = parts[2:]
@@ -410,7 +410,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                                     debug_log(f"Set End User from description parts (no GUID): '{end_user_clean}'")
                                     end_user_found = True
                                     break
-                
+
                 # Pattern 2: "EU -Name" or "EU- Name" in the full description
                 if not end_user_found:
                     eu_patterns = [
@@ -419,7 +419,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                         r':\s*EU\s*-\s*([^:\-\n]+?)(?:\s*$|\s*:|$)',  # ": EU - alkhalij"
                         r':\s*([A-Za-z][^:\n]*?)\s*$',                # ": Fidu Properties" (colon followed by name at end)
                     ]
-                    
+
                     for pattern in eu_patterns:
                         eu_match = re.search(pattern, item_desc_raw, re.IGNORECASE)
                         if eu_match:
@@ -432,13 +432,13 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                                 debug_log(f"Set End User from full description (no GUID): '{end_user_clean}' using pattern: '{pattern}'")
                                 end_user_found = True
                                 break
-                
+
                 if not end_user_found:
                     debug_log(f"No End User pattern found in item description (no GUID)")
-                
+
                 debug_log(f"Final manual processing result (no GUID) - Sub ID: '{out_row.get('Subscription Id')}', Item Code: '{out_row.get('ITEM Code')}', LPO: '{out_row.get('LPO Number')}', End User: '{out_row.get('End User')}'")
-        
-        
+
+
         # === Existing Logic ===
         elif item_code == "az-cns":
             digits = extract_digits(invoice_desc_clean)
@@ -450,7 +450,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         else:
             # Step 5: Final fallback - Use default subscription ID
             out_row["Subscription Id"] = sub_id_clean
-        
+
         # ✅ ONLY set input dates if manual processing didn't already extract them
         # Don't overwrite dates that manual processing successfully extracted
         if "Billing Cycle Start Date" not in out_row or out_row["Billing Cycle Start Date"] == "":
@@ -460,7 +460,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                 out_row["Billing Cycle Start Date"] = input_start
             elif "Billing Cycle Start Date" not in out_row:
                 out_row["Billing Cycle Start Date"] = ""
-        
+
         if "Billing Cycle End Date" not in out_row or out_row["Billing Cycle End Date"] == "":
             input_end = fmt_date(row.get("BillingCycleEndDate", ""))
             # Only use if input actually has a valid date (not empty/nan)
@@ -468,7 +468,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                 out_row["Billing Cycle End Date"] = input_end
             elif "Billing Cycle End Date" not in out_row:
                 out_row["Billing Cycle End Date"] = ""
-        
+
         item_code = row.get("ITEMCode", "")
         if pd.notna(item_code) and str(item_code).strip():
             out_row["ITEM Code"] = item_code
@@ -484,7 +484,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                     break
             if not matched:
                 out_row["ITEM Code"] = ""
-        
+
         # ITEM Name merged description
         # Clean and prepare values
         item_code_upper = out_row.get("ITEM Code", "").strip().upper()
@@ -493,7 +493,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         invoice_desc_clean = re.sub(r"^[#\s]+", "", str(row.get("InvoiceDescription", "")).strip())
         sub_id_raw = row.get("SubscriptionId", "")
         sub_id_full = str(sub_id_raw).strip() if pd.notna(sub_id_raw) else ""
-        
+
         # Choose item_name_detail based on ITEM Code
         if item_code_upper == "MSRI-CNS":
             item_name_detail = invoice_desc_clean
@@ -501,11 +501,11 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
             item_name_detail = sub_id_full  # full SubscriptionId
         else:
             item_name_detail = out_row.get("Subscription Id", "").strip()
-        
+
         # Billing cycle dates
         billing_start = out_row.get("Billing Cycle Start Date", "").strip()
         billing_end = out_row.get("Billing Cycle End Date", "").strip()
-        
+
         # Format billing_end as MM/YYYY if applicable
         billing_info = ""
         if billing_end and billing_end.lower() != "nan":
@@ -514,7 +514,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                 billing_info = billing_end_dt.strftime("%m/%Y")
             except Exception:
                 billing_info = billing_end  # fallback
-        
+
         ## Build parts list and skip empty or NaN values
         ##parts = [
          #   item_desc_raw,
@@ -536,20 +536,20 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                 item_name_raw,
                 item_name_detail,
             ]
-        
-            
+
+
             if item_code_upper == "MSRI-CNS" and billing_info:
                 parts.append(billing_info)
             elif item_code_upper in ["MSAZ-CNS", "AS-CNS", "AWS-UTILITIES-CNS"] and billing_info:
                 parts.append(billing_info)
             elif billing_start and billing_end and billing_start.lower() != "nan" and billing_end.lower() != "nan":
                 parts.append(f"{billing_start}-{billing_end}")
-            
+
                 # Join non-empty parts with hyphen
             out_row["ITEM Name"] = "-".join([p for p in parts if p and p.lower() != "nan"])
 
             # Join non-empty parts with hyphen
-        
+
         #out_row["ITEM Name"] = f"{item_desc_raw}-{row.get('ITEMName','')}-{out_row['Subscription Id']}#{out_row['Billing Cycle Start Date']}-{out_row['Billing Cycle End Date']}"
         out_row["UOM"] = row.get("UOM", "")
         out_row["Grade code-1"] = "NA"
@@ -583,7 +583,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
             out_row["LPO Number"] = "" if pd.isna(lpo) or str(lpo).strip().lower() in ["nan", "none"] else str(lpo)[:30]
         #end_user = str(row.get("EndUser", ""))
         #end_user_country = str(row.get("EndUserCountryCode", ""))
-        
+
         #if end_user.strip().lower() in ["", "nan", "none"] or end_user_country.strip().lower() in ["", "nan", "none"]:
        #      out_row["End User"] = ""
         #else:
@@ -591,10 +591,10 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         # Normalize and clean inputs
         end_user = str(row.get("EndUser", "")).strip()
         end_user_country = str(row.get("EndUserCountryCode", "")).strip()
-        
+
         # Define what values are considered invalid
         invalid_values = ["", "nan", "none"]
-        
+
         # Only set End User from original data if manual parsing didn't already set it
         if not out_row.get("End User"):
             # Check for invalid End User or Country Code
@@ -604,7 +604,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
             else:
                 out_row["End User"] = f"{end_user} ; {end_user_country}"
                 out_row["_highlight_end_user"] = False
-        
+
 
         try: out_row["Cost"] = round(float(cost_val), 2)
         except: out_row["Cost"] = cost
@@ -632,14 +632,14 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                 merged["Quantity"] = 1
                 merged["Rate Per Qty"] = merged["Gross Value"]
                 merged["Cost"] = merged["Gross Value"]
-    
+
                 # <-- FIX: recalculate ITEM Tax Value based on summed Gross Value -->
                 tax_rate_map = {"TC000": 0.05, "OM000": 0.05, "KA000": 0.15, "UJ000": 0}
                 merged["ITEM Tax Value"] = merged.apply(
                     lambda x: round(x["Gross Value"] * tax_rate_map.get(x["Document Location"], 0), 2),
                     axis=1
                 )
-    
+
                 result_df = pd.concat([df_other, merged], ignore_index=True)[CLOUD_INVOICE_HEADER]
     except Exception:
         pass
@@ -688,7 +688,7 @@ def map_invoice_numbers(processed_df: pd.DataFrame) -> pd.DataFrame:
     return processed_df
 
 def create_srcl_file(df):
-   
+
 
     # --- Sheet 1 headers ---
     headers_head = [
@@ -736,7 +736,7 @@ def create_srcl_file(df):
     s_no = 1
     header_sno_map = {}
     for _, row in df.iterrows():
-        versioned_inv = row.get("Invoice No.", row.get("Invoice No.", ""))
+        versioned_inv = row.get("Versioned Invoice No.", row.get("Invoice No.", ""))
         if versioned_inv not in header_sno_map:
             header_sno_map[versioned_inv] = s_no
             ws_head.append([
@@ -758,7 +758,7 @@ def create_srcl_file(df):
 
     item_counter = 1
     for _, row in df.iterrows():
-        versioned_inv = row.get("Invoice No.", row.get("Invoice No.", ""))
+        versioned_inv = row.get("Versioned Invoice No.", row.get("Invoice No.", ""))
         ref_key = header_sno_map.get(versioned_inv, "")
         doc_loc = str(row.get("Document Location", "")).strip().upper()
 
