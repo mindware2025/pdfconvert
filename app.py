@@ -1562,23 +1562,40 @@ elif tool == "AR to EDD file":
     st.title("AR to EDD file")
     st.write("Upload the insurance Excel file (starting from row 16) to filter and extract relevant data.")
 
-    ageing_threshold = st.number_input(
+    ageing_min_threshold = st.number_input(
         label="📅 Minimum Ageing Threshold (days)",
         min_value=0,
         value=200,
         step=10,
         help="Only include records with ageing greater than this number"
     )
+    
+    ageing_max_threshold = st.number_input(
+        label="⏱️ Maximum Ageing Threshold (days)",
+        min_value=0,
+        value=270,  # default as requested
+        step=10,
+        help="Only include records with ageing less than or equal to this number"
+    )
+
 
     uploaded_file = st.file_uploader(
         "Choose Insurance Excel File", type=["xlsx"], key="insurance_upload"
     )
 
     if uploaded_file:
-        output_excel = process_insurance_excel(
+        
+        if ageing_min_threshold > ageing_max_threshold:
+            st.error("Minimum ageing threshold cannot be greater than the maximum threshold.")
+        else:
+
+           output_excel = process_insurance_excel(
             uploaded_file,
             ageing_filter=True,
-            ageing_threshold=ageing_threshold
+            
+            ageing_min_threshold=ageing_min_threshold,
+            ageing_max_threshold=ageing_max_threshold
+
         )
 
         st.download_button(
