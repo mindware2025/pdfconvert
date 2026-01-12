@@ -1566,7 +1566,7 @@ elif tool == "AR to EDD file":
         label="📅 Minimum Ageing Threshold (days)",
         min_value=0,
         value=200,
-        step=10,
+        step=1,
         help="Only include records with ageing greater than this number"
     )
     
@@ -1574,7 +1574,7 @@ elif tool == "AR to EDD file":
         label="⏱️ Maximum Ageing Threshold (days)",
         min_value=0,
         value=270,  # default as requested
-        step=10,
+        step=1,
         help="Only include records with ageing less than or equal to this number"
     )
 
