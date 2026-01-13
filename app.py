@@ -2,6 +2,7 @@
 import csv
 import logging
 import os
+from pathlib import Path
 import zipfile
 import streamlit as st
 import pandas as pd
@@ -288,10 +289,19 @@ def show_login():
         """, unsafe_allow_html=True)
         
         st.markdown('</div>', unsafe_allow_html=True)  # Close login container
+
 def show_fail():
     st.error("Oops! Wrong credentials... Nice try, but no entry! 😜")
+    # Display image from local file
+    img_path = Path("image.png")  # or just Path("image.png") if in the root
+    if img_path.exists():
+        st.image(str(img_path), caption="Access Denied", use_column_width=True)
+    else:
+        st.warning("image.png not found. Please check the path.")
+
     if st.button("Back to Login", key="back_login"):
         st.session_state.login_state = "login"
+
 if st.session_state.login_state == "login":
     show_login()
     st.stop()
