@@ -251,9 +251,9 @@ def show_login():
         # Animated title with Christmas emojis
         st.markdown("""
         <h1 class="login-title">
-            <span class="christmas-icon" style="animation-delay: 0s;">🎄</span>
-            🎄 Mindware Productivity Portal 🎄
-            <span class="christmas-icon" style="animation-delay: 1s;">🎄</span>
+            <span class="christmas-icon" style="animation-delay: 0s;"></span>
+         Mindbot 
+            <span class="christmas-icon" style="animation-delay: 1s;"></span>
         </h1>
         """, unsafe_allow_html=True)
         
