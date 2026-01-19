@@ -112,6 +112,226 @@ def extract_mibb_header_from_pdf(file_like) -> dict:
     return header_info
 
 
+def extract_mibb_table_from_pdf(file_like) -> list:
+    """
+    Extract table data from page 2 of MIBB quotation PDF.
+    Looks for "Subscription Quotation - Parts Information" table.
+    Returns: list of rows, each row is [Part Number, Description, Start Date, End Date, QTY, Price USD]
+    """
+    doc = fitz.open(stream=file_like.read(), filetype="pdf")
+    
+    # Focus on page 2 (index 1)
+    if len(doc) < 2:
+        return []
+    
+    page = doc[1]  # Page 2 (0-indexed)
+    
+    # Try to extract tables using PyMuPDF's table detection
+    try:
+        tables = page.find_tables()
+        if tables:
+            # Use the first table found (should be Parts Information table)
+            table = tables[0]
+            rows = table.extract()
+            
+            if len(rows) < 2:  # Need at least header + 1 data row
+                return []
+            
+            # Find column indices
+            header_row = rows[0]
+            part_num_col = None
+            desc_col = None
+            start_date_col = None
+            end_date_col = None
+            qty_col = None
+            bid_ext_svp_col = None
+            
+            for idx, header in enumerate(header_row):
+                header_upper = str(header).upper() if header else ""
+                if "PART NUMBER" in header_upper or "PART#" in header_upper:
+                    part_num_col = idx
+                elif "DESCRIPTION" in header_upper:
+                    desc_col = idx
+                elif "COVERAGE START" in header_upper or ("START" in header_upper and "DATE" in header_upper):
+                    start_date_col = idx
+                elif "COVERAGE END" in header_upper or ("END" in header_upper and "DATE" in header_upper):
+                    end_date_col = idx
+                elif "QUANTITY" in header_upper or "QTY" in header_upper:
+                    qty_col = idx
+                elif "BID EXT SVP" in header_upper or "BID EXTENDED" in header_upper:
+                    bid_ext_svp_col = idx
+            
+            extracted_data = []
+            
+            # Process data rows (skip header)
+            for row in rows[1:]:
+                if not row or len(row) == 0:
+                    continue
+                
+                part_number = str(row[part_num_col]).strip() if part_num_col is not None and part_num_col < len(row) else ""
+                description = str(row[desc_col]).strip() if desc_col is not None and desc_col < len(row) else ""
+                start_date = str(row[start_date_col]).strip() if start_date_col is not None and start_date_col < len(row) else ""
+                end_date = str(row[end_date_col]).strip() if end_date_col is not None and end_date_col < len(row) else ""
+                qty_str = str(row[qty_col]).strip() if qty_col is not None and qty_col < len(row) else "1"
+                price_str = str(row[bid_ext_svp_col]).strip() if bid_ext_svp_col is not None and bid_ext_svp_col < len(row) else "0"
+                
+                # Validate part number (should start with D and have alphanumeric)
+                if not part_number or not re.match(r'^D[A-Z0-9]{5,7}', part_number):
+                    continue
+                
+                # Parse quantity
+                try:
+                    qty = int(float(qty_str.replace(',', ''))) if qty_str else 1
+                except:
+                    qty = 1
+                
+                # Parse price (Bid Ext SVP)
+                try:
+                    price_usd = parse_euro_number(price_str)
+                    if price_usd is None:
+                        price_usd = 0.0
+                except:
+                    price_usd = 0.0
+                
+                # Clean dates
+                start_date = start_date.replace(' ', '')
+                end_date = end_date.replace(' ', '')
+                
+                extracted_data.append([
+                    part_number,
+                    description,
+                    start_date,
+                    end_date,
+                    qty,
+                    price_usd
+                ])
+            
+            return extracted_data
+    except Exception as e:
+        pass  # Fall back to text-based extraction
+    
+    # Fallback: Text-based extraction
+    page_text = page.get_text("text") or page.get_text()
+    lines = []
+    for l in page_text.splitlines():
+        if l and l.strip():
+            lines.append(l.rstrip())
+    
+    extracted_data = []
+    
+    # Look for "Parts Information" or "Subscription Quotation" table
+    table_start_idx = None
+    for i, line in enumerate(lines):
+        if "Parts Information" in line or ("Subscription" in line and "Quotation" in line):
+            table_start_idx = i
+            break
+    
+    if table_start_idx is None:
+        return []
+    
+    # Look for table headers
+    header_line_idx = None
+    for i in range(table_start_idx, min(table_start_idx + 10, len(lines))):
+        line = lines[i].upper()
+        if "PART NUMBER" in line and ("COVERAGE START" in line or "COVERAGE" in line):
+            header_line_idx = i
+            break
+    
+    if header_line_idx is None:
+        return []
+    
+    # Extract data rows after header
+    part_number_pattern = re.compile(r'\bD[A-Z0-9]{5,7}\b')
+    date_pattern = re.compile(r'\b\d{2}/\d{2}/\d{4}\b')  # Format: DD/MM/YYYY
+    
+    i = header_line_idx + 1
+    while i < len(lines):
+        line = lines[i]
+        
+        # Look for part number
+        part_match = part_number_pattern.search(line)
+        if not part_match:
+            i += 1
+            continue
+        
+        part_number = part_match.group()
+        
+        # Extract dates
+        dates = date_pattern.findall(line)
+        for j in range(i, min(i + 3, len(lines))):
+            dates.extend(date_pattern.findall(lines[j]))
+        
+        start_date = dates[0] if len(dates) > 0 else ""
+        end_date = dates[1] if len(dates) > 1 else ""
+        
+        # Extract description
+        description = ""
+        desc_start = part_match.end()
+        if desc_start < len(line):
+            desc_text = line[desc_start:].strip()
+            desc_parts = desc_text.split()
+            desc_words = []
+            for part in desc_parts:
+                if not date_pattern.match(part) and not re.match(r'^[\d,\.]+$', part.replace(',', '')):
+                    desc_words.append(part)
+            description = ' '.join(desc_words[:10])
+        
+        if len(description) < 5 and i + 1 < len(lines):
+            next_line = lines[i + 1]
+            if not part_number_pattern.search(next_line) and not date_pattern.search(next_line):
+                description = next_line.strip()[:100]
+        
+        # Extract quantity
+        qty = 1
+        qty_match = re.search(r'\b(\d+)\b', line)
+        if qty_match:
+            potential_qty = int(qty_match.group(1))
+            if 1 <= potential_qty <= 10000:
+                qty = potential_qty
+        
+        # Extract Bid Ext SVP (Price USD)
+        price_usd = 0.0
+        price_patterns = [
+            re.compile(r'\b(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})\b'),
+            re.compile(r'\b(\d+[.,]\d{2})\b'),
+        ]
+        
+        for j in range(i, min(i + 3, len(lines))):
+            check_line = lines[j]
+            for pattern in price_patterns:
+                matches = pattern.findall(check_line)
+                if matches:
+                    for match in matches:
+                        try:
+                            price_str = match.replace('.', '').replace(',', '.') if ',' in match else match.replace(',', '.')
+                            price_val = float(price_str)
+                            if price_val > price_usd and price_val < 10000000:
+                                price_usd = price_val
+                        except:
+                            pass
+        
+        if part_number and (start_date or end_date):
+            extracted_data.append([
+                part_number,
+                description,
+                start_date,
+                end_date,
+                qty,
+                price_usd
+            ])
+        
+        i += 1
+        
+        if i < len(lines):
+            next_line = lines[i].upper()
+            if ("PAGE" in next_line and "OF" in next_line) or \
+               ("TOTAL" in next_line and "PRICE" in next_line) or \
+               ("AUTORENEWAL" in next_line):
+                break
+    
+    return extracted_data
+
+
 def get_mibb_terms_section(header_info):
     """
     Generate MIBB-specific terms and conditions section.

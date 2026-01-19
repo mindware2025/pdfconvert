@@ -1680,7 +1680,7 @@ elif tool == "IBM Quotation":
 
 elif tool == "MIBB Quotations":
     st.header("📋 MIBB Quotations")
-    st.info("Upload a MIBB quotation PDF. The tool will extract header information and generate a formatted Excel quotation.")
+    st.info("Upload a MIBB quotation PDF. The tool will extract header information from page 1 and table data from page 2 (Parts Information table).")
     
     logo_path = "image.png"
     
@@ -1689,69 +1689,65 @@ elif tool == "MIBB Quotations":
     uploaded_pdf = st.file_uploader(
         "Upload MIBB Quotation PDF (.pdf)",
         type=["pdf"],
-        help="Upload a MIBB quotation PDF. Header information will be extracted automatically."
+        help="Upload a MIBB quotation PDF. The tool will extract header information and table data automatically."
     )
     
-    st.subheader("📊 Enter Table Data")
-    st.write("Please enter the table data manually:")
-    
-    # Create input form for table data
-    num_rows = st.number_input("Number of rows:", min_value=1, max_value=100, value=1, step=1)
-    
-    table_data = []
-    for i in range(num_rows):
-        st.write(f"**Row {i+1}**")
-        col1, col2, col3, col4, col5, col6 = st.columns(6)
-        
-        with col1:
-            part_number = st.text_input(f"Part Number {i+1}", key=f"part_{i}")
-        with col2:
-            description = st.text_area(f"Description {i+1}", key=f"desc_{i}", height=50)
-        with col3:
-            start_date = st.text_input(f"Start Date {i+1}", key=f"start_{i}")
-        with col4:
-            end_date = st.text_input(f"End Date {i+1}", key=f"end_{i}")
-        with col5:
-            qty = st.number_input(f"QTY {i+1}", min_value=0, value=0, key=f"qty_{i}")
-        with col6:
-            price_usd = st.number_input(f"Price USD {i+1}", min_value=0.0, value=0.0, step=0.01, key=f"price_{i}")
-        
-        table_data.append([part_number, description, start_date, end_date, qty, price_usd])
-    
-    if uploaded_pdf and table_data:
-        from sales.mibb_quotation import extract_mibb_header_from_pdf, create_mibb_excel
+    if uploaded_pdf:
+        from sales.mibb_quotation import extract_mibb_header_from_pdf, extract_mibb_table_from_pdf, create_mibb_excel
         import io
         
         # Extract header from PDF
         pdf_bytes = io.BytesIO(uploaded_pdf.getbuffer())
         header_info = extract_mibb_header_from_pdf(pdf_bytes)
         
+        # Extract table data from page 2
+        pdf_bytes.seek(0)  # Reset stream
+        table_data = extract_mibb_table_from_pdf(pdf_bytes)
+        
         # Display extracted header info
         st.subheader("📄 Extracted Header Information")
         st.json(header_info)
         
-        # Create Excel
-        output = io.BytesIO()
-        create_mibb_excel(
-            data=table_data,
-            header_info=header_info,
-            logo_path=logo_path,
-            output=output
-        )
+        # Display extracted table data
+        if table_data:
+            st.subheader("📊 Extracted Table Data")
+            df = pd.DataFrame(
+                table_data,
+                columns=["Part Number", "Description", "Start Date", "End Date", "QTY", "Price USD"]
+            )
+            st.dataframe(df)
+            
+            # Allow editing if needed
+            st.subheader("✏️ Edit Table Data (Optional)")
+            edited_df = st.data_editor(df, num_rows="dynamic")
+            
+            # Convert edited dataframe back to list
+            table_data = edited_df.values.tolist()
+        else:
+            st.warning("⚠️ No table data found on page 2. Please check if the PDF contains a 'Parts Information' table.")
         
-        st.success("✅ Excel file generated successfully!")
-        
-        st.download_button(
-            label="📥 Download MIBB Quotation Excel",
-            data=output.getvalue(),
-            file_name="MIBB_Quotation.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            on_click=lambda: update_usage("MIBB Quotations", team)
-        )
-    elif uploaded_pdf:
-        st.warning("⚠️ Please enter table data above.")
-    elif table_data:
-        st.warning("⚠️ Please upload a PDF file.")
+        if table_data:
+            # Create Excel
+            pdf_bytes.seek(0)  # Reset stream again
+            output = io.BytesIO()
+            create_mibb_excel(
+                data=table_data,
+                header_info=header_info,
+                logo_path=logo_path,
+                output=output
+            )
+            
+            st.success("✅ Excel file generated successfully!")
+            
+            st.download_button(
+                label="📥 Download MIBB Quotation Excel",
+                data=output.getvalue(),
+                file_name="MIBB_Quotation.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                on_click=lambda: update_usage("MIBB Quotations", team)
+            )
+    else:
+        st.info("👆 Please upload a MIBB quotation PDF to get started.")
 
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
