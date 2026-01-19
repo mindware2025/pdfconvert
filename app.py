@@ -20,6 +20,7 @@ from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_mul
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
 from extractors.insurance import process_insurance_excel
 from extractors.insurance2  import process_grouped_customer_files
+from sales.mibb_quotation import create_mibb_excel, extract_mibb_header_from_pdf, extract_mibb_table_from_pdf
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 from ibm import extract_ibm_data_from_pdf, create_styled_excel, create_styled_excel_template2, correct_descriptions, extract_last_page_text
@@ -1693,8 +1694,8 @@ elif tool == "MIBB Quotations":
     )
     
     if uploaded_pdf:
-        from sales.mibb_quotation import extract_mibb_header_from_pdf, extract_mibb_table_from_pdf, create_mibb_excel
-        import io
+        
+        
         
         # Extract header from PDF
         pdf_bytes = io.BytesIO(uploaded_pdf.getbuffer())
