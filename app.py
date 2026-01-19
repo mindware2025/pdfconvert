@@ -1626,7 +1626,7 @@ elif tool == "AR to EDD file":
                             update_usage("credit Automation ", team)
                         ),
         )
-elif tool == "IBM Excel to Excel+ pdf to excel":
+elif tool == "IBM Quotation":
     st.header("🆕 IBM Excel to Excel + PDF to Excel (Combo)")
     st.info("Upload an IBM quotation PDF and (optionally) an Excel file. The tool will auto-detect the template and use the best logic for each.")
 
