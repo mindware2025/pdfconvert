@@ -187,10 +187,11 @@ def create_styled_excel_v2(
 
     # --- Table Headers ---
     if country == "Qatar":
+        
         headers = [
-            "Sl", "SKU", "Product Description", "Quantity", "Start Date", "End Date",
-            "Unit Price in USD", "Cost (USD)", "Partner Discount", "Partner Price in USD"
-        ]
+                    "SKU", "Product Description", "Quantity", "Start Date", "End Date",
+                    "MEP Unit Price in USD", "Extended MEP Price USD", "Unit Partner Price USD", "Total Partner Price in USD"
+                ]
         # Expand last column for Qatar
         ws.column_dimensions[get_column_letter(11)].width = 25  # Column K (Partner Price in USD)
         ws.column_dimensions[get_column_letter(12)].width = 25  # Column L (for extra space)
