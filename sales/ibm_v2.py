@@ -189,7 +189,7 @@ def create_styled_excel_v2(
     if country == "Qatar":
         
         headers = [
-                    "SKU", "Product Description", "Quantity", "Start Date", "End Date",
+                   "Sl", "SKU", "Product Description", "Quantity", "Start Date", "End Date",
                     "MEP Unit Price in USD", "Extended MEP Price USD", "Unit Partner Price USD", "Total Partner Price in USD"
                 ]
         # Expand last column for Qatar
