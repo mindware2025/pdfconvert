@@ -298,7 +298,7 @@ def show_login():
 def show_fail():
     st.error("Oops! Wrong credentials... Nice try, but no entry! 😜")
     # Display image from local file
-    img_path = Path("image.png")  # or just Path("image.png") if in the root
+    img_path = Path("img.png")  # or just Path("image.png") if in the root
     if img_path.exists():
         st.image(str(img_path), caption="Access Denied", use_column_width=True)
     else:
