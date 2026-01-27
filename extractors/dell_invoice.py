@@ -1,8 +1,22 @@
 import re
 from typing import List, Optional, Dict, Any, Tuple
 
-import pdfplumber
+import fitz  # PyMuPDF
 import pandas as pd
+import logging
+
+import pdfplumber
+
+# Setup logger for PDF extraction debug
+logger = logging.getLogger("pdf_extract_debug")
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    fh = logging.FileHandler("pdf_extract_debug.log", mode="a", encoding="utf-8")
+    fh.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+    logger.propagate = False
 
 from utils.helpers import normalize_line
 from datetime import datetime, timedelta
@@ -174,31 +188,31 @@ def extract_header_fields(pdf_path) -> Dict[str, Any]:
         m = re.search(rf"{label}\s*[:#-]?\s*(.+)$", line)
         return m.group(1).strip() if m else None
 
-    with pdfplumber.open(pdf_path) as pdf:
-        # Concatenate first two pages' text for robust header extraction
-        full_text_parts: List[str] = []
-        raw_text_parts: List[str] = []
-        for page in pdf.pages[:2]:
-            t = page.extract_text()
-            if t:
-                # Keep original case for values; normalize spaces
-                lines = [normalize_line(x) for x in t.splitlines()]
-                full_text_parts.append("\n".join(lines))
-                raw_text_parts.append("\n".join([x.strip() for x in t.splitlines()]))
-        full_text = "\n".join(full_text_parts)
-        raw_full_text = "\n".join(raw_text_parts)
+    doc = fitz.open(pdf_path)
+    full_text_parts: List[str] = []
+    raw_text_parts: List[str] = []
+    for page in doc:
+        t = page.get_text("text")
+        if t:
+            lines = [normalize_line(x) for x in t.splitlines()]
+            full_text_parts.append("\n".join(lines))
+            raw_text_parts.append("\n".join([x.strip() for x in t.splitlines()]))
+        if len(full_text_parts) >= 2:
+            break
+    full_text = "\n".join(full_text_parts)
+    raw_full_text = "\n".join(raw_text_parts)
 
-        def get(pattern: str) -> Optional[str]:
-            m = re.search(pattern, full_text, flags=re.IGNORECASE)
-            return m.group(1).strip() if m else None
+    def get(pattern: str) -> Optional[str]:
+        m = re.search(pattern, full_text, flags=re.IGNORECASE)
+        return m.group(1).strip() if m else None
 
-        out["po_number"] = get(r"your\s*ref\s*/\s*po\s*no\s*:\s*(?:PO)?\s*([A-Za-z0-9\-_/]+)") or out["po_number"]
-        out["invoice_number"] = get(r"invoice\s*no\s*:\s*([A-Za-z0-9\-]+)") or out["invoice_number"]
-        out["invoice_date"] = get(r"invoice\s*date\s*:\s*([0-9]{1,2}[\-/][0-9]{1,2}[\-/][0-9]{2,4}|[0-9]{1,2}\s+[A-Za-z]{3,}\s+[0-9]{4})") or out["invoice_date"]
-        out["customer_no"] = get(r"customer\s*no\s*:\s*([A-Za-z0-9\-]+)") or out["customer_no"]
-        out["dell_order_no"] = get(r"dell\s*order\s*no\s*:\s*([A-Za-z0-9\-]+)") or out["dell_order_no"]
-        out["shipping_method"] = get(r"shipping\s*method\s*:?[\s\n]*([A-Za-z0-9 \-–/]+)") or out["shipping_method"]
-        if not out["shipping_method"]:
+    out["po_number"] = get(r"your\s*ref\s*/\s*po\s*no\s*:\s*(?:PO)?\s*([A-Za-z0-9\-_/]+)") or out["po_number"]
+    out["invoice_number"] = get(r"invoice\s*no\s*:\s*([A-Za-z0-9\-]+)") or out["invoice_number"]
+    out["invoice_date"] = get(r"invoice\s*date\s*:\s*([0-9]{1,2}[\-/][0-9]{1,2}[\-/][0-9]{2,4}|[0-9]{1,2}\s+[A-Za-z]{3,}\s+[0-9]{4})") or out["invoice_date"]
+    out["customer_no"] = get(r"customer\s*no\s*:\s*([A-Za-z0-9\-]+)") or out["customer_no"]
+    out["dell_order_no"] = get(r"dell\s*order\s*no\s*:\s*([A-Za-z0-9\-]+)") or out["dell_order_no"]
+    out["shipping_method"] = get(r"shipping\s*method\s*:?[\s\n]*([A-Za-z0-9 \-–/]+)") or out["shipping_method"]
+    if not out["shipping_method"]:
             # Fallback: capture block from 'Solution Name' down to before 'Funded By'
             raw_lines = raw_full_text.splitlines()
             start_idx = next((i for i, l in enumerate(raw_lines) if re.search(r"solution\s*name\s*:", l, re.IGNORECASE)), None)
@@ -211,56 +225,55 @@ def extract_header_fields(pdf_path) -> Dict[str, Any]:
                 # Join non-empty lines as AWB text
                 joined = " ".join([b.strip() for b in block if b.strip()])
                 out["shipping_method"] = joined
-        out["ed_order"] = (
+    out["ed_order"] = (
             get(r"select\s+account\s+to\s+charge\s*:?[\s\n]*([A-Za-z0-9\-]+)")
             or get(r"\bed\s*order\b\s*:?[\s\n]*([A-Za-z0-9\-]+)")
             or out["ed_order"]
         )
 
         # Consolidation (currency-agnostic): pick last numeric on consolidation line
-        raw_lines = raw_full_text.splitlines()
-        for i, line in enumerate(raw_lines):
+    raw_lines = raw_full_text.splitlines()
+    for i, line in enumerate(raw_lines):
             ln = line.lower()
             if "consolidation" in ln:
-                # Only take numbers AFTER the word if present on the same line
                 try:
                     post = line[ln.index("consolidation") + len("consolidation"):]
                 except Exception:
                     post = ""
                 def nums_in(s: str) -> List[str]:
-                    return re.findall(r"([0-9][0-9,]*\.[0-9]{2}|[0-9][0-9,]*)", s)
+                    return re.findall(r"([0-9]+\.[0-9]{2})", s)
                 nums_post = nums_in(post)
-                candidate = None
-                def is_non_zero(s: str) -> bool:
-                    t = s.replace(",", "").replace(" ", "")
-                    t = t.replace("\u00A0", "")
-                    t = t.replace("0,00", "0.00")
-                    try:
-                        return abs(float(t)) > 0.000001
-                    except Exception:
-                        return False
-                if nums_post:
-                    # prefer the last number after the keyword
-                    nz = [n for n in nums_post if is_non_zero(n)]
-                    candidate = (nz[-1] if nz else nums_post[-1])
-                else:
-                    # Look ahead up to 2 lines for wrapped values; choose last non-zero number
-                    lookahead = []
-                    if i + 1 < len(raw_lines):
-                        lookahead.append(raw_lines[i + 1])
-                    if i + 2 < len(raw_lines):
-                        lookahead.append(raw_lines[i + 2])
-                    all_nums: List[str] = []
-                    for la in lookahead:
-                        all_nums += nums_in(la)
-                    if all_nums:
-                        nz = [n for n in all_nums if is_non_zero(n)]
-                        candidate = (nz[-1] if nz else all_nums[-1])
-                if candidate is not None:
+                logger.info(f"[PDF DEBUG] Consolidation line: {line}")
+                logger.info(f"[PDF DEBUG] Numbers after 'consolidation': {nums_post}")
+                # Log the next 10 lines after 'Consolidation' for full debug
+                debug_lines = []
+                for k in range(1, 11):
+                    if i + k < len(raw_lines):
+                        debug_lines.append(raw_lines[i + k])
+                logger.info(f"[PDF DEBUG] Next 10 lines after 'Consolidation': {debug_lines}")
+                for idx, dbg_line in enumerate(debug_lines):
+                    nums_dbg = nums_in(dbg_line)
+                    logger.info(f"[PDF DEBUG] Line {i+1+idx}: {dbg_line} | Decimals: {nums_dbg}")
+                lookahead = debug_lines[:4]
+                all_nums: List[str] = nums_post[:]
+                for la in lookahead:
+                    all_nums += nums_in(la)
+                logger.info(f"[PDF DEBUG] Lookahead lines (first 4): {lookahead}")
+                logger.info(f"[PDF DEBUG] All decimal numbers in lookahead: {all_nums}")
+                for handler in logger.handlers:
+                    handler.flush()
+                if all_nums:
+                    candidate = max(all_nums, key=lambda x: float(x))
+                    logger.info(f"[PDF DEBUG] Picked largest candidate for consolidation_fee_usd: {candidate}")
                     out["consolidation_fee_usd"] = candidate
+                    logger.info(f"[PDF DEBUG] Consolidation fee extracted for {pdf_path}: {candidate}")
+                else:
+                    logger.info(f"[PDF DEBUG] No consolidation fee candidate found for {pdf_path}")
+                for handler in logger.handlers:
+                    handler.flush()
                 break
 
-        return out
+    return out
 
 
 PRE_ALERT_HEADERS = [
@@ -390,18 +403,13 @@ def build_pre_alert_rows(
     """Build rows for the PRE ALERT UPLOAD sheet from a single PDF.
     Enhanced heavy debug/logging version.
     """
-    import logging
-    logging.info(f"Processing PDF: {pdf_path}")
     headers = extract_header_fields(pdf_path)
-    logging.info(f"Extracted headers: {headers}")
     items = extract_table_from_text(pdf_path)
-    logging.info(f"Extracted {len(items)} item rows from PDF.")
     rows: List[List[Any]] = []
 
     for idx_item, item in enumerate(items):
         debug_steps: List[str] = []
         try:
-            logging.info(f"Item {idx_item}: Raw item: {item}")
             debug_steps.append(f"Processing item index={idx_item} raw_item={item!r}")
             item_no = item[0] if len(item) > 0 else ""
             item_no_norm = _normalize_item_code(item_no)
@@ -409,7 +417,6 @@ def build_pre_alert_rows(
             qty = item[2] if len(item) > 2 else ""
             unit_price = item[3] if len(item) > 3 else ""
             debug_steps.append(f"Normalized item code: '{item_no_norm}' desc='{desc}' qty='{qty}' unit_price='{unit_price}'")
-            logging.info(f"Item {idx_item}: Normalized code='{item_no_norm}', desc='{desc}', qty='{qty}', unit_price='{unit_price}'")
 
             mapped_item_code = ""
             mapped_item_desc = ""
@@ -422,11 +429,9 @@ def build_pre_alert_rows(
             status = ""
 
             if master_lookup:
-                logging.info(f"Item {idx_item}: Using master lookup for PO and item code.")
                 po_key = _normalize_po(headers.get("po_number", ""))
                 key = (po_key, item_no_norm)
                 debug_steps.append(f"PO key='{po_key}', lookup key={key!r}")
-                logging.info(f"Item {idx_item}: PO key='{po_key}', lookup key={key!r}")
 
                 def as_float(s: str) -> Optional[float]:
                     try:
@@ -442,30 +447,26 @@ def build_pre_alert_rows(
                     pdf_qty_val = None
 
                 debug_steps.append(f"Parsed numeric: pdf_unit_price_val={pdf_unit_price_val} pdf_qty_val={pdf_qty_val}")
-                logging.info(f"Item {idx_item}: Parsed unit price={pdf_unit_price_val}, qty={pdf_qty_val}")
 
                 # Build candidate lists from supplier_index (exact or flexible)
                 exact_entries = (supplier_index.get(key, []) if supplier_index else [])
                 debug_steps.append(f"Exact matches from supplier_index for key {key}: count={len(exact_entries)}")
-                logging.info(f"Item {idx_item}: Exact supplier matches: {len(exact_entries)}")
                 if exact_entries:
                     for i, e in enumerate(exact_entries):
-                        logging.info(f"Item {idx_item}:   exact[{i}]={e}")
+                        continue
 
                 # Always also gather flex entries (candidates where ksupp startswith/pdf startswith ksupp)
                 flex_entries: List[Tuple[str, str, str, str]] = []
                 if supplier_index:
-                    logging.info(f"Item {idx_item}: Checking for flexible supplier matches.")
                     def po_flex_match(master_po: str, pdf_po: str) -> bool:
                         return bool(master_po) and bool(pdf_po) and (master_po.startswith(pdf_po) or pdf_po.startswith(master_po))
                     for (kpo, ksupp), entries in supplier_index.items():
                         if po_flex_match(kpo, po_key) and (ksupp.startswith(item_no_norm) or item_no_norm.startswith(ksupp)):
                             flex_entries.extend(entries)
                     debug_steps.append(f"Flexible matches found: count={len(flex_entries)}")
-                    logging.info(f"Item {idx_item}: Flexible supplier matches: {len(flex_entries)}")
                     if flex_entries:
                         for i, e in enumerate(flex_entries):
-                            logging.info(f"Item {idx_item}:   flex[{i}]={e}")
+                            continue
 
                 # Combine exact and flex candidates (dedupe) so we don't miss close variants like 210-BDUK-LCA
                 if exact_entries:
@@ -477,9 +478,7 @@ def build_pre_alert_rows(
                 total_supplier_matches = len(supplier_candidates)
                 matching_mode = "exact" if exact_entries else ("flex" if flex_entries else "none")
                 debug_steps.append(f"Using supplier_candidates count={total_supplier_matches} mode={matching_mode}")
-                logging.info(f"Item {idx_item}: Total supplier candidates: {total_supplier_matches}, mode: {matching_mode}")
                 if total_supplier_matches == 1:
-                    logging.info(f"Item {idx_item}: Single supplier match found.")
                     # Case A
                     mapped_item_code, mapped_item_desc, out_orion_unit_price, out_orion_qty = supplier_candidates[0]
                     out_orion_item_code = mapped_item_code
@@ -489,12 +488,10 @@ def build_pre_alert_rows(
                     matched_by = "supplier-exact" if matching_mode == "exact" else "supplier-flex"
                     chosen_orion_code_minimal = mapped_item_code
                 elif total_supplier_matches > 1:
-                    logging.info(f"Item {idx_item}: Multiple supplier candidates, checking price matches.")
                     # Case B
                     debug_steps.append("Case B: multiple supplier candidates, computing price matches")
                     price_matched = []
                     if pdf_unit_price_val is not None:
-                        logging.info(f"Item {idx_item}: Checking price matches among supplier candidates.")
                         for e in supplier_candidates:
                             # entries are (orion, pi_desc, unit_rate, qty)
                             e_price = as_float(e[2])  # unit_rate
@@ -503,10 +500,8 @@ def build_pre_alert_rows(
                             if e_price is not None and e_price == pdf_unit_price_val:
                                 price_matched.append(e)
                     debug_steps.append(f"price_matched count={len(price_matched)} list={[p for p in price_matched]}")
-                    logging.info(f"Item {idx_item}: Price-matched candidates: {len(price_matched)}")
 
                     if len(price_matched) == 1:
-                        logging.info(f"Item {idx_item}: Exactly one price-matched candidate found.")
                         mapped_item_code, mapped_item_desc, out_orion_unit_price, out_orion_qty = price_matched[0]
                         out_orion_item_code = mapped_item_code
                         mapped_item_code = ""
@@ -517,13 +512,11 @@ def build_pre_alert_rows(
                         matched_by = "supplier-" + matching_mode + "+price"
                         chosen_orion_code_minimal = out_orion_item_code
                     else:
-                        logging.info(f"Item {idx_item}: Multiple or zero price matches, checking qty tie-breaker.")
                         # Deterministic qty tie-breaker: only accept an exact qty match.
                         debug_steps.append("Multiple or zero price matches -> try exact qty tie-breaker")
                         picked = None
                         # 1) look for first exact qty among price_matched
                         if pdf_qty_val is not None and price_matched:
-                            logging.info(f"Item {idx_item}: Checking for exact qty match among price-matched candidates.")
                             for i_e, e in enumerate(price_matched):
                                 try:
                                     e_qty = float(str(e[3]).replace(",", "").strip()) if e[3] not in (None, "") else None
@@ -537,7 +530,6 @@ def build_pre_alert_rows(
 
                         # 2) if not found, look for first exact qty among all supplier_candidates where price is within small tolerance
                         if picked is None and pdf_qty_val is not None and supplier_candidates:
-                            logging.info(f"Item {idx_item}: No exact qty in price-matched, searching all supplier candidates with price tolerance.")
                             TOL = 0.01
                             debug_steps.append(f"  No exact qty in price_matched; searching all supplier_candidates with tolerance={TOL}")
                             for i_e, e in enumerate(supplier_candidates):
@@ -554,7 +546,6 @@ def build_pre_alert_rows(
                                     break
 
                         if picked is not None:
-                            logging.info(f"Item {idx_item}: Picked candidate by exact qty and price tolerance.")
                             mapped_item_code, mapped_item_desc, out_orion_unit_price, out_orion_qty = picked
                             out_orion_item_code = mapped_item_code
                             mapped_item_code = ""
@@ -565,7 +556,6 @@ def build_pre_alert_rows(
                             matched_by = "supplier-" + matching_mode + "+price+qty_first"
                             chosen_orion_code_minimal = out_orion_item_code
                         else:
-                            logging.info(f"Item {idx_item}: No exact qty found, marking as ambiguous (yellow).")
                             # STOP: no exact qty -> mark ambiguous, do NOT use closest-qty fallback
                             status = "B_multi_price_matches"
                             highlight = "yellow"
@@ -573,12 +563,10 @@ def build_pre_alert_rows(
                             mapped_item_desc = ""
                             debug_steps.append("No exact qty found -> Ambiguous price matches -> STOP and mark yellow (no UVW output)")
                 else:
-                    logging.info(f"Item {idx_item}: No supplier match found, trying Orion code + price.")
                     # Case C - no supplier match
                     highlight = "red"
                     status = "C_no_supplier_match"
                     debug_steps.append("Case C: No supplier match -> Highlight M/N red. Try Orion code + price.")
-                    logging.info(f"Item {idx_item}: No supplier match, checking Orion candidates.")
                     # Try by Orion item code + price
                     okey = (po_key, item_no_norm)
                     o_candidates = orion_index.get(okey, []) if orion_index else []
@@ -586,12 +574,9 @@ def build_pre_alert_rows(
                     if o_candidates:
                         for i_e, e in enumerate(o_candidates):
                             debug_steps.append(f"  orion_candidate[{i_e}]={e!r} parsed_price={as_float(e[2])} parsed_qty={as_float(e[3])}")
-                            logging.info(f"Item {idx_item}:   orion_candidate[{i_e}]={e} parsed_price={as_float(e[2])} parsed_qty={as_float(e[3])}")
                     price_matched = [e for e in o_candidates if pdf_unit_price_val is not None and as_float(e[2]) == pdf_unit_price_val]
                     debug_steps.append(f"Orion price_matched count={len(price_matched)}")
-                    logging.info(f"Item {idx_item}: Orion price-matched candidates: {len(price_matched)}")
                     if len(price_matched) == 1:
-                        logging.info(f"Item {idx_item}: Exactly one Orion price-matched candidate found.")
                         e = price_matched[0]
                         out_orion_unit_price = e[2]
                         out_orion_qty = e[3]
@@ -603,14 +588,12 @@ def build_pre_alert_rows(
                         matched_by = "orion+price"
                         chosen_orion_code_minimal = out_orion_item_code
                     else:
-                        logging.info(f"Item {idx_item}: No Orion price match, checking PO+price candidates.")
                         # New fallback: PO + price (ignore item codes)
                         po_candidates = po_price_index.get(po_key, []) if po_price_index else []
                         debug_steps.append(f"PO price candidates for PO {po_key}: count={len(po_candidates)}")
                         po_price_matched = [e for e in po_candidates if pdf_unit_price_val is not None and as_float(e[2]) == pdf_unit_price_val]
                         debug_steps.append(f"PO+price matched count={len(po_price_matched)}")
                         if len(po_price_matched) == 1:
-                            logging.info(f"Item {idx_item}: Exactly one PO+price-matched candidate found.")
                             e = po_price_matched[0]
                             out_orion_unit_price = e[2]
                             out_orion_qty = e[3]
@@ -622,7 +605,6 @@ def build_pre_alert_rows(
                             chosen_orion_code_minimal = out_orion_item_code
                             debug_steps.append("PO+price match success -> output UVW, keep M/N red")
                         else:
-                            logging.info(f"Item {idx_item}: PO+price match failure or ambiguous, keeping red highlight.")
                             status = "C_no_price_or_multi" if len(price_matched) != 1 else status
                             if len(po_price_matched) == 0:
                                 debug_steps.append("PO+price match failure: 0 matches -> Keep red highlight; no output")
@@ -631,7 +613,6 @@ def build_pre_alert_rows(
 
             # Always attach diagnostics entry with the very verbose message
             if diagnostics is not None:
-                logging.info(f"Item {idx_item}: Diagnostics: status={status}, highlight={highlight}, mapped_item_code={mapped_item_code}, out_orion_item_code={out_orion_item_code}, message={' | '.join(debug_steps)}")
                 fill_MN = bool(mapped_item_code or mapped_item_desc)
                 fill_UVW = bool(out_orion_item_code or out_orion_unit_price or out_orion_qty)
                 diagnostics.append({
@@ -670,7 +651,6 @@ def build_pre_alert_rows(
                 pass
 
         except Exception as exc:
-            logging.error(f"Exception processing item {idx_item}: {exc}")
             # Ensure one item's exception does not break whole run; log it in diagnostics/console
             err_msg = f"EXCEPTION processing item idx={idx_item}: {exc}"
             try:
@@ -710,33 +690,7 @@ def build_pre_alert_rows(
         ]
         rows.append(row)
     return rows
-# ...existing code...
 
-
-def debug_consolidation(pdf_path) -> Dict[str, Any]:
-    """Return diagnostic info for Consolidation parsing: nearby lines and numbers."""
-    info: Dict[str, Any] = {"matched_line": "", "next_line": "", "numbers": [], "value": ""}
-    with pdfplumber.open(pdf_path) as pdf:
-        raw_text_parts: List[str] = []
-        for page in pdf.pages:
-            t = page.extract_text()
-            if t:
-                raw_text_parts.append("\n".join([x.strip() for x in t.splitlines()]))
-        raw_full_text = "\n".join(raw_text_parts)
-        raw_lines = raw_full_text.splitlines()
-        for i, line in enumerate(raw_lines):
-            if "consolidation" in line.lower():
-                info["matched_line"] = line
-                if i + 1 < len(raw_lines):
-                    info["next_line"] = raw_lines[i + 1]
-                nums = re.findall(r"([0-9][0-9,]*\.[0-9]{2}|[0-9][0-9,]*)", line)
-                if not nums and i + 1 < len(raw_lines):
-                    nums = re.findall(r"([0-9][0-9,]*\.[0-9]{2}|[0-9][0-9,]*)", raw_lines[i + 1])
-                info["numbers"] = nums
-                if nums:
-                    info["value"] = nums[-1]
-                break
-    return info
 
 
 
