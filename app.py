@@ -1216,10 +1216,10 @@ elif tool == "📦 Barcode PDF Generator grouped":
 
 elif tool == "💻 Dell Invoice Extractor":
     st.title("Dell Invoice Extractor (Pre-Alert Upload)")
-    st.write("Upload one or more Dell invoice PDFs. We'll generate a single Excel with sheet 'PRE ALERT UPLOAD'.")
-    uploaded_files = st.file_uploader("Choose Dell invoice PDF(s)", type=["pdf"], accept_multiple_files=True, key="dell_upload")
-    master_file = st.file_uploader("Master Excel (starts header at row 9)", type=["xlsx"], key="dell_master")
-    if uploaded_files:
+st.write("Upload one or more Dell invoice PDFs. We'll generate a single Excel with sheet 'PRE ALERT UPLOAD'.")
+uploaded_files = st.file_uploader("Choose Dell invoice PDF(s)", type=["pdf"], accept_multiple_files=True, key="dell_upload")
+master_file = st.file_uploader("Master Excel (starts header at row 9)", type=["xlsx"], key="dell_master")
+if uploaded_files:
         from datetime import datetime, timedelta
         tomorrow_date = (datetime.today() + timedelta(days=1)).strftime("%d/%m/%Y")
         all_rows = []
@@ -1235,10 +1235,18 @@ elif tool == "💻 Dell Invoice Extractor":
             except Exception as e:
                 st.warning(f"Could not read master file: {e}")
         diag: list[dict] = []
+        import os
+        log_path = os.path.abspath('pdf_extract_debug.log')
+        import tempfile
         for f in uploaded_files:
+            st.info(f"DEBUG: Processing file: {getattr(f, 'name', str(f))} (type: {type(f)})")
+            # Save UploadedFile to a temp file for processing
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
+                tmp.write(f.read())
+                tmp_path = tmp.name
             try:
                 rows = build_pre_alert_rows(
-                    f,
+                    tmp_path,
                     tomorrow_date,
                     master_lookup=master_lookup,
                     supplier_counts=supplier_counts,
@@ -1251,6 +1259,12 @@ elif tool == "💻 Dell Invoice Extractor":
                 all_rows.extend(rows)
             except Exception as e:
                 st.warning(f"Failed to parse {getattr(f, 'name', 'file')}: {e}")
+            finally:
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+        st.info(f"PDF extraction debug log saved at: {log_path}")
         if all_rows:
             df = pd.DataFrame(all_rows, columns=PRE_ALERT_HEADERS)
             
@@ -1485,9 +1499,7 @@ elif tool == "💻 Dell Invoice Extractor":
                 file_name="pre_alert_upload.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="download_dell_pre_alert",
-                on_click=lambda: (
-                            update_usage("Dell Automation", team)
-                        ),
+               
             )
         else:
             st.warning("No items found in the uploaded PDF(s).")
