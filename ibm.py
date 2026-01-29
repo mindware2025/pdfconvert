@@ -952,9 +952,9 @@ def create_styled_excel(
     left_labels = ["Date:", "From:", "Email:", "Contact:", "", "Company:", "Attn:", "Email:"]
     left_values = [
         datetime.today().strftime('%d/%m/%Y'),
-        "Sneha Lokhandwala",
-        "s.lokhandwala@mindware.net",
-        "+971 55 456 6650",
+        "",
+        "",
+        "",
         "",
         header_info.get('Reseller Name', 'empty'),
         "empty",
@@ -1107,13 +1107,20 @@ def create_styled_excel(
         
         # Description wrap & left align (column D = 4) - applies to both templates
         ws.cell(row=excel_row, column=4).alignment = Alignment(wrap_text=True, horizontal="left", vertical="center")
-        
+
         # Currency formats
         if col_unit:
             ws.cell(row=excel_row, column=col_unit).number_format = '"AED"#,##0.00'
         if col_total:
             ws.cell(row=excel_row, column=col_total).number_format = '"AED"#,##0.00'
-    
+
+    # --- Add borders to the table ---
+    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+    # Table range: columns B to L (2-12), rows 16 to last data row
+    for row in range(16, start_row + len(data)):
+        for col in range(2, 13):  # B to L (columns 2-12)
+            ws.cell(row=row, column=col).border = thin_border
+
     # --- Summary rows ---
     summary_row = start_row + len(data) + 2
     ws.merge_cells(f"C{summary_row}:G{summary_row}")
@@ -1360,9 +1367,9 @@ def create_styled_excel_template2(
     left_labels = ["Date:", "From:", "Email:", "Contact:", "", "Company:", "Attn:", "Email:"]
     left_values = [
         datetime.today().strftime('%d/%m/%Y'),
-        "Sneha Lokhandwala",
-        "s.lokhandwala@mindware.net",
-        "+971 55 456 6650",
+        "",
+        "",
+        "",
         "",
         header_info.get('Reseller Name', 'empty'),
         "empty",
@@ -1520,7 +1527,14 @@ def create_styled_excel_template2(
         # Apply yellow fill to all data columns (B through K)
         for col in range(2, 12):
             ws.cell(row=excel_row, column=col).fill = row_fill
-    
+
+    # --- Add borders to the table ---
+    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+    # Table range: columns B to K (2-11), rows 16 to last data row
+    for row in range(16, start_row + len(data)):
+        for col in range(2, 12):  # B to K (columns 2-11)
+            ws.cell(row=row, column=col).border = thin_border
+
     # --- Template 2 Summary Rows ---
     summary_row = start_row + len(data) + 2
     

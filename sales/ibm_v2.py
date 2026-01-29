@@ -148,9 +148,9 @@ def create_styled_excel_v2(
     else:
         left_values = [
             datetime.today().strftime('%d/%m/%Y'),
-            "Priyansha Kapoor",
-            "p.Kapoor@mindware.net",
-            "+971 55 456 6650",
+            "",
+            "",
+            "",
             "",
             header_info.get('Reseller Name', 'empty'),
             "empty",
@@ -187,7 +187,6 @@ def create_styled_excel_v2(
 
     # --- Table Headers ---
     if country == "Qatar":
-        
         headers = [
                    "Sl", "SKU", "Product Description", "Quantity", "Start Date", "End Date",
                     "MEP Unit Price in USD", "Extended MEP Price USD", "Unit Partner Price USD", "Total Partner Price in USD"

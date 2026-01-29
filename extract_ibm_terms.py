@@ -6,6 +6,7 @@ def extract_ibm_terms_text(file_like) -> str:
     ibm_terms_lines = []
     useful_resources_lines = []
     capture_useful = False
+    useful_resources_captured = False  # Track if we've already captured useful resources
 
     for page in doc:
         lines = (page.get_text("text") or page.get_text()).splitlines()
@@ -15,9 +16,10 @@ def extract_ibm_terms_text(file_like) -> str:
                 found_terms = True
                 capture_useful = False
                 continue  # skip the header itself
-            if "Useful/Important web resources:" in line:
+            if "Useful/Important web resources:" in line and not useful_resources_captured:
                 capture_useful = True
                 useful_resources_lines.append(line)
+                useful_resources_captured = True  # Mark as captured to prevent duplicates
                 continue
             if found_terms and line:
                 # Stop at page numbers or footer

@@ -829,19 +829,47 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                             duration = f"{duration_match.group(1)}-{duration_match.group(2)}"
                             add_debug(f"  ✓ Duration extracted: {duration}")
                     
-                    # Extract SKU (search entire document backwards from current position)
+                    # --- For each table row: prefer the label from the block ABOVE this row (backwards-only search) ---
                     sku_table = None
-                    for j in range(i - 1, -1, -1):
-                        search_text = lines[j]
-                        sku_match = subscription_part_re.search(search_text)
-                        if sku_match:
-                            potential_sku = sku_match.group()
-                            # Validate SKU (should contain both letters and digits)
-                            if any(c.isalpha() for c in potential_sku) and any(c.isdigit() for c in potential_sku):
-                                if 5 <= len(potential_sku) <= 20:
-                                    sku_table = potential_sku
-                                    add_debug(f"  ✓ SKU found at line {j}: {sku_table}")
+                    corresponding_part = None
+                    overage_part_line = None
+                    window = 40  # a bit wider to be safe with IBM layouts
+                    
+                    # Strict label check at start-of-line (avoid matching "Corresponding Subscription Part#")
+                    def _starts_with_label(s: str, label: str) -> bool:
+                        return re.match(r'^\s*' + re.escape(label) + r'\s*', s) is not None
+                    
+                    # 0) Look BACKWARDS for the nearest Overage Part# (block header)
+                    for j in range(i - 1, max(-1, i - window), -1):
+                        if _starts_with_label(lines[j], "Overage Part#:"):
+                            overage_part_line = j
+                            m = subscription_part_re.search(lines[j])
+                            if m:
+                                sku_table = m.group()
+                                add_debug(f"  ✓ Overage Part SKU used for this row (backward/nearest-above): {sku_table}")
+                            break
+                    
+                    # 1) If no overage SKU found, look BACKWARDS for a TRUE 'Subscription Part#:' (exclude 'Corresponding...')
+                    if not sku_table:
+                        for j in range(i - 1, max(-1, i - window), -1):
+                            if _starts_with_label(lines[j], "Subscription Part#:") and not _starts_with_label(lines[j], "Corresponding Subscription Part#:"):
+                                sub_m = subscription_part_re.search(lines[j])
+                                if sub_m:
+                                    sku_table = sub_m.group()
+                                    add_debug(f"  ✓ Subscription Part SKU used for this row (backward/nearest-above): {sku_table}")
                                     break
+                    
+                    # 2) If this row belongs to an overage block, capture its Corresponding Subscription Part (optional, only for description)
+                    if overage_part_line is not None:
+                        for j in range(overage_part_line + 1, min(overage_part_line + 6, len(lines))):
+                            if _starts_with_label(lines[j], "Corresponding Subscription Part#:"):
+                                match = re.search(r'Corresponding Subscription Part#:?\s*([A-Z0-9]+)?', lines[j])
+                                if match and match.group(1):
+                                    corresponding_part = match.group(1)
+                                else:
+                                    corresponding_part = lines[j].split(':', 1)[-1].strip()
+                                add_debug(f"[LOGIC][STRATEGY2] Appending Corresponding Subscription Part to description: {corresponding_part}")
+                                break
                     
                     if not sku_table:
                         add_debug(f"  ✗ No SKU found for table row {line_stripped}")
@@ -1235,6 +1263,7 @@ def create_template2_styled_excel(
     # Data rows
     total_amount = 0
     for row_idx, row_data in enumerate(data, 1):
+        
         excel_row = table_start_row + row_idx
         
         # Extract data: [sku, desc, qty, duration, start_date, end_date, unit_price_aed, total_price_aed, partner_price_aed]
@@ -1282,6 +1311,7 @@ def create_template2_styled_excel(
     
     # Total row
     total_row = table_start_row + len(data) + 1
+    
     ws.merge_cells(f"A{total_row}:G{total_row}")
     ws[f"A{total_row}"] = "TOTAL AMOUNT"
     ws[f"A{total_row}"].font = Font(bold=True, size=11)

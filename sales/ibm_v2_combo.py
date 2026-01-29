@@ -38,7 +38,8 @@ def process_ibm_combo(pdf_file, excel_file=None, master_csv=None, country="UAE")
         'bid_number_error': None,
         'error': None,
         'ibm_terms_text': None,
-        'columns': None  # Add columns for DataFrame display
+        'columns': None,  # Add columns for DataFrame display
+        'date_validation_msg': None  # Add date validation message
     }
     try:
         # Detect template
@@ -67,6 +68,58 @@ def process_ibm_combo(pdf_file, excel_file=None, master_csv=None, country="UAE")
                     result['error'] = f"Failed to extract data from Excel: {e}"
             result['header_info'] = header_info
             result['ibm_terms_text'] = ibm_terms_text
+
+            # Date validation: Compare Excel dates with PDF dates for template 1
+            if excel_file and data:
+                try:
+                    logging.info("Starting date validation for template 1")
+                    pdf_file.seek(0)
+                    pdf_data, _ = extract_ibm_data_from_pdf(pdf_file)
+                    pdf_file.seek(0)
+                    logging.info(f"Extracted {len(pdf_data)} rows from PDF")
+
+                    # Create mapping of SKU to (start_date, end_date) from PDF
+                    pdf_sku_dates = {}
+                    for row in pdf_data:
+                        if len(row) >= 5:
+                            sku = str(row[0]).strip() if row[0] else ""
+                            start_date = str(row[3]).strip() if len(row) > 3 and row[3] else ""
+                            end_date = str(row[4]).strip() if len(row) > 4 and row[4] else ""
+                            if sku:
+                                pdf_sku_dates[sku] = (start_date, end_date)
+                    logging.info(f"Created PDF SKU mapping with {len(pdf_sku_dates)} SKUs")
+
+                    # Validate dates for each Excel row
+                    validation_messages = []
+                    for i, row in enumerate(data, 1):
+                        if len(row) >= 5:
+                            sku = str(row[0]).strip() if row[0] else ""
+                            excel_start = str(row[3]).strip() if len(row) > 3 and row[3] else ""
+                            excel_end = str(row[4]).strip() if len(row) > 4 and row[4] else ""
+                            logging.info(f"Validating row {i}: SKU={sku}, Excel dates={excel_start}-{excel_end}")
+
+                            if sku in pdf_sku_dates:
+                                pdf_start, pdf_end = pdf_sku_dates[sku]
+                                logging.info(f"Found PDF dates for SKU {sku}: {pdf_start}-{pdf_end}")
+                                if excel_start == pdf_start and excel_end == pdf_end:
+                                    validation_messages.append(f"Row {i} (SKU {sku}): Dates match between Excel and PDF")
+                                else:
+                                    validation_messages.append(f"Row {i} (SKU {sku}): Dates do NOT match - Excel: {excel_start}-{excel_end}, PDF: {pdf_start}-{pdf_end}")
+                            else:
+                                validation_messages.append(f"Row {i} (SKU {sku}): SKU not found in PDF data")
+                                logging.warning(f"SKU {sku} not found in PDF data")
+
+                    if validation_messages:
+                        result['date_validation_msg'] = "\n".join(validation_messages)
+                        logging.info(f"Generated {len(validation_messages)} validation messages")
+                    else:
+                        result['date_validation_msg'] = "No data to validate"
+                        logging.info("No validation messages generated")
+
+                except Exception as e:
+                    logging.error(f"Date validation failed: {e}")
+                    result['date_validation_msg'] = f"Failed to perform date validation: {e}"
+
             if country == "Qatar":
                 columns = [
                     "SKU", "Product Description", "Quantity", "Start Date", "End Date",

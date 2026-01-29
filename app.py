@@ -20,7 +20,7 @@ from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_mul
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
 from extractors.insurance import process_insurance_excel
 from extractors.insurance2  import process_grouped_customer_files
-from sales.mibb_quotation import create_mibb_excel, extract_mibb_header_from_pdf, extract_mibb_table_from_pdf
+#from sales.mibb_quotation import create_mibb_excel, extract_mibb_header_from_pdf, extract_mibb_table_from_pdf
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 from ibm import extract_ibm_data_from_pdf, create_styled_excel, create_styled_excel_template2, correct_descriptions, extract_last_page_text
@@ -1640,6 +1640,7 @@ elif tool == "AR to EDD file":
                         ),
         )
 elif tool == "IBM Quotation":
+
     st.header("🆕 IBM Excel to Excel + PDF to Excel (Combo)")
     st.info("Upload an IBM quotation PDF and (optionally) an Excel file. The tool will auto-detect the template and use the best logic for each.")
 
@@ -1678,6 +1679,8 @@ elif tool == "IBM Quotation":
                 st.info(result['mep_cost_msg'])
             if result['bid_number_error']:
                 st.error(result['bid_number_error'])
+            if result.get('date_validation_msg'):
+                st.info(f"📅 Date Validation:\n{result['date_validation_msg']}")
             if result['data']:
                 if result.get('columns'):
                     st.dataframe(pd.DataFrame(result['data'], columns=result['columns']))
@@ -1690,82 +1693,6 @@ elif tool == "IBM Quotation":
                     file_name="Styled_Quotation.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
-
-elif tool == "MIBB Quotations":
-    st.header("📋 MIBB Quotations")
-    st.info("Upload a MIBB quotation PDF. The tool will extract header information from page 1 and table data from page 2 (Parts Information table).")
-    
-    logo_path = "image.png"
-    
-    st.subheader("📤 Upload MIBB Quotation PDF")
-    
-    uploaded_pdf = st.file_uploader(
-        "Upload MIBB Quotation PDF (.pdf)",
-        type=["pdf"],
-        help="Upload a MIBB quotation PDF. The tool will extract header information and table data automatically."
-    )
-    
-    if uploaded_pdf:
-        
-        
-        
-        # Extract header from PDF
-        pdf_bytes = io.BytesIO(uploaded_pdf.getbuffer())
-        header_info = extract_mibb_header_from_pdf(pdf_bytes)
-        
-        # Extract table data from page 2
-        pdf_bytes.seek(0)  # Reset stream
-        table_data = extract_mibb_table_from_pdf(pdf_bytes)
-        
-        # Display extracted header info
-        st.subheader("📄 Extracted Header Information")
-        st.json(header_info)
-        
-        # Display extracted table data
-        if table_data:
-            st.subheader("📊 Extracted Table Data")
-            df = pd.DataFrame(
-                table_data,
-                columns=["Part Number", "Description", "Start Date", "End Date", "QTY", "Price USD"]
-            )
-            st.dataframe(df)
-            
-            # Allow editing if needed
-            st.subheader("✏️ Edit Table Data (Optional)")
-            edited_df = st.data_editor(df, num_rows="dynamic")
-            
-            # Convert edited dataframe back to list
-            table_data = edited_df.values.tolist()
-        else:
-            st.warning("⚠️ No table data found on page 2. Please check if the PDF contains a 'Parts Information' table.")
-        
-        if table_data:
-            # Create Excel
-            pdf_bytes.seek(0)  # Reset stream again
-            output = io.BytesIO()
-            create_mibb_excel(
-                data=table_data,
-                header_info=header_info,
-                logo_path=logo_path,
-                output=output
-            )
-            
-            st.success("✅ Excel file generated successfully!")
-            
-            st.download_button(
-                label="📥 Download MIBB Quotation Excel",
-                data=output.getvalue(),
-                file_name="MIBB_Quotation.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                on_click=lambda: update_usage("MIBB Quotations", team)
-            )
-    else:
-        st.info("👆 Please upload a MIBB quotation PDF to get started.")
-
-elif tool == "Other":
-    st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
-    st.info("Currently, only the Google DNTS Extractor tool is available. More tools can be added based on your requirements.")
-
 
 
 st.markdown("""
