@@ -1216,293 +1216,293 @@ elif tool == "📦 Barcode PDF Generator grouped":
 
 elif tool == "💻 Dell Invoice Extractor":
     st.title("Dell Invoice Extractor (Pre-Alert Upload)")
-st.write("Upload one or more Dell invoice PDFs. We'll generate a single Excel with sheet 'PRE ALERT UPLOAD'.")
-uploaded_files = st.file_uploader("Choose Dell invoice PDF(s)", type=["pdf"], accept_multiple_files=True, key="dell_upload")
-master_file = st.file_uploader("Master Excel (starts header at row 9)", type=["xlsx"], key="dell_master")
-if uploaded_files:
-        from datetime import datetime, timedelta
-        tomorrow_date = (datetime.today() + timedelta(days=1)).strftime("%d/%m/%Y")
-        all_rows = []
-        master_lookup = None
-        supplier_counts = None
-        orion_counts = None
-        supplier_index = None
-        orion_index = None
-        po_price_index = None
-        if master_file is not None:
-            try:
-                master_lookup, supplier_counts, orion_counts, supplier_index, orion_index, po_price_index = read_master_mapping(master_file)
-            except Exception as e:
-                st.warning(f"Could not read master file: {e}")
-        diag: list[dict] = []
-        import os
-        log_path = os.path.abspath('pdf_extract_debug.log')
-        import tempfile
-        for f in uploaded_files:
-            st.info(f"DEBUG: Processing file: {getattr(f, 'name', str(f))} (type: {type(f)})")
-            # Save UploadedFile to a temp file for processing
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
-                tmp.write(f.read())
-                tmp_path = tmp.name
-            try:
-                rows = build_pre_alert_rows(
-                    tmp_path,
-                    tomorrow_date,
-                    master_lookup=master_lookup,
-                    supplier_counts=supplier_counts,
-                    orion_counts=orion_counts,
-                    supplier_index=supplier_index,
-                    orion_index=orion_index,
-                    po_price_index=po_price_index,
-                    diagnostics=diag,
-                )
-                all_rows.extend(rows)
-            except Exception as e:
-                st.warning(f"Failed to parse {getattr(f, 'name', 'file')}: {e}")
-            finally:
+    st.write("Upload one or more Dell invoice PDFs. We'll generate a single Excel with sheet 'PRE ALERT UPLOAD'.")
+    uploaded_files = st.file_uploader("Choose Dell invoice PDF(s)", type=["pdf"], accept_multiple_files=True, key="dell_upload")
+    master_file = st.file_uploader("Master Excel (starts header at row 9)", type=["xlsx"], key="dell_master")
+    if uploaded_files:
+            from datetime import datetime, timedelta
+            tomorrow_date = (datetime.today() + timedelta(days=1)).strftime("%d/%m/%Y")
+            all_rows = []
+            master_lookup = None
+            supplier_counts = None
+            orion_counts = None
+            supplier_index = None
+            orion_index = None
+            po_price_index = None
+            if master_file is not None:
                 try:
-                    os.remove(tmp_path)
-                except Exception:
-                    pass
-        st.info(f"PDF extraction debug log saved at: {log_path}")
-        if all_rows:
-            df = pd.DataFrame(all_rows, columns=PRE_ALERT_HEADERS)
-            
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df.to_excel(writer, sheet_name='PRE ALERT UPLOAD', index=False)
-                ws = writer.sheets['PRE ALERT UPLOAD']
-                from datetime import datetime as _dt
-                for r in range(2, len(df) + 2):
-                    for c in (4, 11, 12):  # D, K, L
-                        cell = ws.cell(row=r, column=c)
-                        val = cell.value
-                        if isinstance(val, str):
-                            try:
-                                d = _dt.strptime(val, "%d/%m/%Y")
-                                cell.value = d
-                                cell.number_format = 'dd/mm/yyyy'
-                            except Exception:
-                                pass
-                # ====== NEW: Highlight Unit Rate (Q) vs Orion Unit Price (U) in PRE ALERT UPLOAD ======
-                from openpyxl.styles import PatternFill
-                red_fill = PatternFill(fill_type='solid', start_color='FFFFC7CE', end_color='FFFFC7CE')  # light red
-                green_fill = PatternFill(fill_type='solid', start_color='FFC6EFCE', end_color='FFC6EFCE')  # light green
-                
-                def safe_float(val):
+                    master_lookup, supplier_counts, orion_counts, supplier_index, orion_index, po_price_index = read_master_mapping(master_file)
+                except Exception as e:
+                    st.warning(f"Could not read master file: {e}")
+            diag: list[dict] = []
+            import os
+            log_path = os.path.abspath('pdf_extract_debug.log')
+            import tempfile
+            for f in uploaded_files:
+                st.info(f"DEBUG: Processing file: {getattr(f, 'name', str(f))} (type: {type(f)})")
+                # Save UploadedFile to a temp file for processing
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
+                    tmp.write(f.read())
+                    tmp_path = tmp.name
+                try:
+                    rows = build_pre_alert_rows(
+                        tmp_path,
+                        tomorrow_date,
+                        master_lookup=master_lookup,
+                        supplier_counts=supplier_counts,
+                        orion_counts=orion_counts,
+                        supplier_index=supplier_index,
+                        orion_index=orion_index,
+                        po_price_index=po_price_index,
+                        diagnostics=diag,
+                    )
+                    all_rows.extend(rows)
+                except Exception as e:
+                    st.warning(f"Failed to parse {getattr(f, 'name', 'file')}: {e}")
+                finally:
                     try:
-                        return float(str(val).replace(',', '').strip())
+                        os.remove(tmp_path)
                     except Exception:
-                        return None
-                # Columns: Q = 17, U = 21
-                for row_idx in range(2, len(df) + 2):
-                    unit_rate_cell = ws.cell(row=row_idx, column=17)
-                    orion_price_cell = ws.cell(row=row_idx, column=21)
-                    unit_rate_val = safe_float(unit_rate_cell.value)
-                    orion_price_val = safe_float(orion_price_cell.value)
-                    if unit_rate_val is not None and orion_price_val is not None:
-                        if abs(unit_rate_val - orion_price_val) < 1e-6:
-                            # Match: highlight green
-                            unit_rate_cell.fill = green_fill
-                            orion_price_cell.fill = green_fill
-                        else:
-                            # Mismatch: highlight red
-                            unit_rate_cell.fill = red_fill
-                            orion_price_cell.fill = red_fill
-                # ====== EXISTING color highlights on PRE ALERT UPLOAD based on diagnostics ======
-                if diag:
-                    red = PatternFill(fill_type='solid', start_color='FFFF0000', end_color='FFFF0000')
-                    yellow = PatternFill(fill_type='solid', start_color='FFFFFF00', end_color='FFFFFF00')
-                    green = PatternFill(fill_type='solid', start_color='FF00FF00', end_color='FF00FF00')
-                    for i, d in enumerate(diag, start=2):
-                        h = str(d.get('highlight', 'none')).lower()
-                        fill = None
-                        if h == 'red':
-                            fill = red
-                        elif h == 'yellow':
-                            fill = yellow
-                        elif h == 'green':
-                            fill = green
-                        if fill is not None:
-                            ws.cell(row=i, column=13).fill = fill
-                            ws.cell(row=i, column=14).fill = fill
-                # Add an extremely user-friendly REVIEW sheet (emoji + clear actions)
-                if diag:
-                    def _status_texts(h: str, status: str) -> tuple[str, str, str, int]:
-                        h = (h or 'none').lower()
-                        status = status or ''
-                        if h == 'red':
-                            if status in ('C_orion_price_single', 'C_po_price_single'):
+                        pass
+            st.info(f"PDF extraction debug log saved at: {log_path}")
+            if all_rows:
+                df = pd.DataFrame(all_rows, columns=PRE_ALERT_HEADERS)
+                
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    df.to_excel(writer, sheet_name='PRE ALERT UPLOAD', index=False)
+                    ws = writer.sheets['PRE ALERT UPLOAD']
+                    from datetime import datetime as _dt
+                    for r in range(2, len(df) + 2):
+                        for c in (4, 11, 12):  # D, K, L
+                            cell = ws.cell(row=r, column=c)
+                            val = cell.value
+                            if isinstance(val, str):
+                                try:
+                                    d = _dt.strptime(val, "%d/%m/%Y")
+                                    cell.value = d
+                                    cell.number_format = 'dd/mm/yyyy'
+                                except Exception:
+                                    pass
+                    # ====== NEW: Highlight Unit Rate (Q) vs Orion Unit Price (U) in PRE ALERT UPLOAD ======
+                    from openpyxl.styles import PatternFill
+                    red_fill = PatternFill(fill_type='solid', start_color='FFFFC7CE', end_color='FFFFC7CE')  # light red
+                    green_fill = PatternFill(fill_type='solid', start_color='FFC6EFCE', end_color='FFC6EFCE')  # light green
+                    
+                    def safe_float(val):
+                        try:
+                            return float(str(val).replace(',', '').strip())
+                        except Exception:
+                            return None
+                    # Columns: Q = 17, U = 21
+                    for row_idx in range(2, len(df) + 2):
+                        unit_rate_cell = ws.cell(row=row_idx, column=17)
+                        orion_price_cell = ws.cell(row=row_idx, column=21)
+                        unit_rate_val = safe_float(unit_rate_cell.value)
+                        orion_price_val = safe_float(orion_price_cell.value)
+                        if unit_rate_val is not None and orion_price_val is not None:
+                            if abs(unit_rate_val - orion_price_val) < 1e-6:
+                                # Match: highlight green
+                                unit_rate_cell.fill = green_fill
+                                orion_price_cell.fill = green_fill
+                            else:
+                                # Mismatch: highlight red
+                                unit_rate_cell.fill = red_fill
+                                orion_price_cell.fill = red_fill
+                    # ====== EXISTING color highlights on PRE ALERT UPLOAD based on diagnostics ======
+                    if diag:
+                        red = PatternFill(fill_type='solid', start_color='FFFF0000', end_color='FFFF0000')
+                        yellow = PatternFill(fill_type='solid', start_color='FFFFFF00', end_color='FFFFFF00')
+                        green = PatternFill(fill_type='solid', start_color='FF00FF00', end_color='FF00FF00')
+                        for i, d in enumerate(diag, start=2):
+                            h = str(d.get('highlight', 'none')).lower()
+                            fill = None
+                            if h == 'red':
+                                fill = red
+                            elif h == 'yellow':
+                                fill = yellow
+                            elif h == 'green':
+                                fill = green
+                            if fill is not None:
+                                ws.cell(row=i, column=13).fill = fill
+                                ws.cell(row=i, column=14).fill = fill
+                    # Add an extremely user-friendly REVIEW sheet (emoji + clear actions)
+                    if diag:
+                        def _status_texts(h: str, status: str) -> tuple[str, str, str, int]:
+                            h = (h or 'none').lower()
+                            status = status or ''
+                            if h == 'red':
+                                if status in ('C_orion_price_single', 'C_po_price_single'):
+                                    return (
+                                        '❌ No match (price suggested)',
+                                        'Use the suggested Orion code. Confirm Qty & Unit Price.',
+                                        'We did not find a supplier match, but price uniquely matched one item.',
+                                        0,
+                                    )
                                 return (
-                                    '❌ No match (price suggested)',
-                                    'Use the suggested Orion code. Confirm Qty & Unit Price.',
-                                    'We did not find a supplier match, but price uniquely matched one item.',
+                                    '❌ No match',
+                                    'Ask to add mapping in MASTER or correct Supplier Item code in PDF.',
+                                    'We could not find this PO + Supplier Item in MASTER.',
                                     0,
                                 )
-                            return (
-                                '❌ No match',
-                                'Ask to add mapping in MASTER or correct Supplier Item code in PDF.',
-                                'We could not find this PO + Supplier Item in MASTER.',
-                                0,
-                            )
-                        if h == 'yellow':
-                            if status == 'B_price_single':
+                            if h == 'yellow':
+                                if status == 'B_price_single':
+                                    return (
+                                        '✅ Price matched (needs quick check)',
+                                        'Quick check the suggested Orion Code, Qty, and Unit Price.',
+                                        'Multiple entries in MASTER; price selected exactly one.',
+                                        1,
+                                    )
                                 return (
-                                    '✅ Price matched (needs quick check)',
-                                    'Quick check the suggested Orion Code, Qty, and Unit Price.',
-                                    'Multiple entries in MASTER; price selected exactly one.',
+                                    '⚠️ Many matches',
+                                    'Pick the correct Orion code or ask to refine MASTER.',
+                                    'Multiple MASTER entries matched; price did not decide one.',
                                     1,
                                 )
                             return (
-                                '⚠️ Many matches',
-                                'Pick the correct Orion code or ask to refine MASTER.',
-                                'Multiple MASTER entries matched; price did not decide one.',
-                                1,
+                                '✅ All good',
+                                'No action. Just review and proceed.',
+                                'Single clear match found in MASTER.',
+                                2,
                             )
-                        return (
-                            '✅ All good',
-                            'No action. Just review and proceed.',
-                            'Single clear match found in MASTER.',
-                            2,
-                        )
-                    simple_rows = []
-                    for idx0, d in enumerate(diag):
-                        h = str(d.get('highlight', 'none')).lower()
-                        status = str(d.get('status', '')).strip()
-                        label, action, why, sort_key = _status_texts(h, status)
-                        try:
-                            row_df = df.iloc[idx0]
-                        except Exception:
-                            row_df = None
-                        qty_val = row_df['Qty'] if row_df is not None and 'Qty' in row_df else ''
-                        pdf_price = row_df['Unit Rate'] if row_df is not None and 'Unit Rate' in row_df else d.get('pdf_unit_price', '')
-                        use_price = d.get('out_orion_unit_price', '') or pdf_price
-                        orion_price_u = d.get('out_orion_unit_price', '')
-                        use_code = d.get('out_orion_item_code', '') or d.get('mapped_item_code', '')
-                        pre_alert_row_num = idx0 + 2  # header row is 1 in PRE ALERT
-                        simple_rows.append({
-                            'Row in PRE ALERT': pre_alert_row_num,
-                            'Status': label,
-                            'What to do now': action,
-                            'Why this happened': why,
-                            'PO': d.get('po', ''),
-                            'Supplier Item': d.get('supplier_item_code', ''),
-                            'Copy: Orion Code': use_code,
-                            'Copy: Qty': qty_val,
-                            'Copy: Unit Price': use_price,
-                            'Orion Unit Price (col U)': orion_price_u,
-                            '_sort': sort_key,
-                            '_highlight': h,
-                        })
-                    simple_rows.sort(key=lambda x: x.get('_sort', 1))
-                    for r in simple_rows:
-                        r.pop('_sort', None)
-                    review_columns = [
-                        'Row in PRE ALERT',
-                        'Status',
-                        'What to do now',
-                        'Why this happened',
-                        'Copy: Orion Code',
-                        'Copy: Qty',
-                        'Copy: Unit Price',
-                        'Orion Unit Price (col U)',
-                        'PO',
-                        'Supplier Item',
-                    ]
-                    review_df = pd.DataFrame(simple_rows, columns=review_columns + ['_highlight'])
-                    review_df.to_excel(writer, sheet_name='REVIEW', index=False)
-                    ws_review = writer.sheets['REVIEW']
-                    ws_review.freeze_panes = 'A2'
-                    widths = {
-                        'A': 16, 'B': 30, 'C': 38, 'D': 42,
-                        'E': 20, 'F': 12, 'G': 18, 'H': 12, 'I': 20,
-                    }
-                    for col, w in widths.items():
-                        try:
-                            ws_review.column_dimensions[col].width = w
-                        except Exception:
-                            pass
-                    try:
-                        from openpyxl.styles import Alignment
-                        wrap_align = Alignment(wrap_text=True, vertical='top')
-                        for r in ws_review.iter_rows(min_row=1, max_row=ws_review.max_row, min_col=1, max_col=ws_review.max_column):
-                            for cell in r:
-                                if cell.column in (2, 3, 4):  # B:Status, C:What to do, D:Why
-                                    cell.alignment = wrap_align
-                    except Exception:
-                        pass
-                    red_fill_row = PatternFill(fill_type='solid', start_color='FFFFE5E5', end_color='FFFFE5E5')
-                    yellow_fill_row = PatternFill(fill_type='solid', start_color='FFFFFBE6', end_color='FFFFFBE6')
-                    green_fill_row = PatternFill(fill_type='solid', start_color='FFE9FBE9', end_color='FFE9FBE9')
-                    for idx1, row_data in enumerate(simple_rows, start=2):
-                        hval = str(row_data.get('_highlight', '')).lower()
-                        fill = None
-                        if hval == 'red':
-                            fill = red_fill_row
-                        elif hval == 'yellow':
-                            fill = yellow_fill_row
-                        elif hval == 'green':
-                            fill = green_fill_row
-                        if fill is not None:
-                            for c in range(1, ws_review.max_column + 1):
-                                ws_review.cell(row=idx1, column=c).fill = fill
-                    header_map = {str(ws_review.cell(row=1, column=c).value): c for c in range(1, ws_review.max_column + 1)}
-                    orion_u_col = header_map.get('Orion Unit Price (col U)')
-                    red_cell = PatternFill(fill_type='solid', start_color='FFFFC7CE', end_color='FFFFC7CE')
-                    green_cell = PatternFill(fill_type='solid', start_color='FFC6EFCE', end_color='FFC6EFCE')
-                    def _as_float(x):
-                        try:
-                            return float(str(x).replace(',', '').strip())
-                        except Exception:
-                            return None
-                    if orion_u_col:
-                        for idx0 in range(len(simple_rows)):
-                            r_excel = idx0 + 2
+                        simple_rows = []
+                        for idx0, d in enumerate(diag):
+                            h = str(d.get('highlight', 'none')).lower()
+                            status = str(d.get('status', '')).strip()
+                            label, action, why, sort_key = _status_texts(h, status)
                             try:
                                 row_df = df.iloc[idx0]
                             except Exception:
                                 row_df = None
-                            pdf_price_val = _as_float(row_df['Unit Rate']) if row_df is not None and 'Unit Rate' in row_df else _as_float(simple_rows[idx0].get('Copy: Unit Price', ''))
-                            orion_price_val = _as_float(simple_rows[idx0].get('Orion Unit Price (col U)', ''))
-                            if orion_price_val is not None and pdf_price_val is not None and abs(orion_price_val - pdf_price_val) < 1e-6:
-                                ws_review.cell(row=r_excel, column=orion_u_col).fill = green_cell
-                            else:
-                                ws_review.cell(row=r_excel, column=orion_u_col).fill = red_cell
-                # Create COMPONENT UPLOAD sheet with only the header row
-                component_headers = [
-                    'PO Txn Code',
-                    'PO Number',
-                    'Parent Item Code',
-                    'Component Item Code',
-                    'UOM',
-                    'Qty',
-                    'Rate',
-                ]
-                pd.DataFrame(columns=component_headers).to_excel(
-                    writer, sheet_name='COMPONENT UPLOAD', index=False
+                            qty_val = row_df['Qty'] if row_df is not None and 'Qty' in row_df else ''
+                            pdf_price = row_df['Unit Rate'] if row_df is not None and 'Unit Rate' in row_df else d.get('pdf_unit_price', '')
+                            use_price = d.get('out_orion_unit_price', '') or pdf_price
+                            orion_price_u = d.get('out_orion_unit_price', '')
+                            use_code = d.get('out_orion_item_code', '') or d.get('mapped_item_code', '')
+                            pre_alert_row_num = idx0 + 2  # header row is 1 in PRE ALERT
+                            simple_rows.append({
+                                'Row in PRE ALERT': pre_alert_row_num,
+                                'Status': label,
+                                'What to do now': action,
+                                'Why this happened': why,
+                                'PO': d.get('po', ''),
+                                'Supplier Item': d.get('supplier_item_code', ''),
+                                'Copy: Orion Code': use_code,
+                                'Copy: Qty': qty_val,
+                                'Copy: Unit Price': use_price,
+                                'Orion Unit Price (col U)': orion_price_u,
+                                '_sort': sort_key,
+                                '_highlight': h,
+                            })
+                        simple_rows.sort(key=lambda x: x.get('_sort', 1))
+                        for r in simple_rows:
+                            r.pop('_sort', None)
+                        review_columns = [
+                            'Row in PRE ALERT',
+                            'Status',
+                            'What to do now',
+                            'Why this happened',
+                            'Copy: Orion Code',
+                            'Copy: Qty',
+                            'Copy: Unit Price',
+                            'Orion Unit Price (col U)',
+                            'PO',
+                            'Supplier Item',
+                        ]
+                        review_df = pd.DataFrame(simple_rows, columns=review_columns + ['_highlight'])
+                        review_df.to_excel(writer, sheet_name='REVIEW', index=False)
+                        ws_review = writer.sheets['REVIEW']
+                        ws_review.freeze_panes = 'A2'
+                        widths = {
+                            'A': 16, 'B': 30, 'C': 38, 'D': 42,
+                            'E': 20, 'F': 12, 'G': 18, 'H': 12, 'I': 20,
+                        }
+                        for col, w in widths.items():
+                            try:
+                                ws_review.column_dimensions[col].width = w
+                            except Exception:
+                                pass
+                        try:
+                            from openpyxl.styles import Alignment
+                            wrap_align = Alignment(wrap_text=True, vertical='top')
+                            for r in ws_review.iter_rows(min_row=1, max_row=ws_review.max_row, min_col=1, max_col=ws_review.max_column):
+                                for cell in r:
+                                    if cell.column in (2, 3, 4):  # B:Status, C:What to do, D:Why
+                                        cell.alignment = wrap_align
+                        except Exception:
+                            pass
+                        red_fill_row = PatternFill(fill_type='solid', start_color='FFFFE5E5', end_color='FFFFE5E5')
+                        yellow_fill_row = PatternFill(fill_type='solid', start_color='FFFFFBE6', end_color='FFFFFBE6')
+                        green_fill_row = PatternFill(fill_type='solid', start_color='FFE9FBE9', end_color='FFE9FBE9')
+                        for idx1, row_data in enumerate(simple_rows, start=2):
+                            hval = str(row_data.get('_highlight', '')).lower()
+                            fill = None
+                            if hval == 'red':
+                                fill = red_fill_row
+                            elif hval == 'yellow':
+                                fill = yellow_fill_row
+                            elif hval == 'green':
+                                fill = green_fill_row
+                            if fill is not None:
+                                for c in range(1, ws_review.max_column + 1):
+                                    ws_review.cell(row=idx1, column=c).fill = fill
+                        header_map = {str(ws_review.cell(row=1, column=c).value): c for c in range(1, ws_review.max_column + 1)}
+                        orion_u_col = header_map.get('Orion Unit Price (col U)')
+                        red_cell = PatternFill(fill_type='solid', start_color='FFFFC7CE', end_color='FFFFC7CE')
+                        green_cell = PatternFill(fill_type='solid', start_color='FFC6EFCE', end_color='FFC6EFCE')
+                        def _as_float(x):
+                            try:
+                                return float(str(x).replace(',', '').strip())
+                            except Exception:
+                                return None
+                        if orion_u_col:
+                            for idx0 in range(len(simple_rows)):
+                                r_excel = idx0 + 2
+                                try:
+                                    row_df = df.iloc[idx0]
+                                except Exception:
+                                    row_df = None
+                                pdf_price_val = _as_float(row_df['Unit Rate']) if row_df is not None and 'Unit Rate' in row_df else _as_float(simple_rows[idx0].get('Copy: Unit Price', ''))
+                                orion_price_val = _as_float(simple_rows[idx0].get('Orion Unit Price (col U)', ''))
+                                if orion_price_val is not None and pdf_price_val is not None and abs(orion_price_val - pdf_price_val) < 1e-6:
+                                    ws_review.cell(row=r_excel, column=orion_u_col).fill = green_cell
+                                else:
+                                    ws_review.cell(row=r_excel, column=orion_u_col).fill = red_cell
+                    # Create COMPONENT UPLOAD sheet with only the header row
+                    component_headers = [
+                        'PO Txn Code',
+                        'PO Number',
+                        'Parent Item Code',
+                        'Component Item Code',
+                        'UOM',
+                        'Qty',
+                        'Rate',
+                    ]
+                    pd.DataFrame(columns=component_headers).to_excel(
+                        writer, sheet_name='COMPONENT UPLOAD', index=False
+                    )
+                    # Write master file content as sheet 2 if provided
+                    if master_file is not None:
+                        try:
+                            master_file.seek(0)
+                        except Exception:
+                            pass
+                        try:
+                            df_master = pd.read_excel(master_file, header=8)
+                            df_master.to_excel(writer, sheet_name='MASTER', index=False)
+                        except Exception:
+                            pass
+                output.seek(0)
+                st.download_button(
+                    label="⬇️ Download PRE ALERT UPLOAD",
+                    data=output.getvalue(),
+                    file_name="pre_alert_upload.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="download_dell_pre_alert",
+                   
                 )
-                # Write master file content as sheet 2 if provided
-                if master_file is not None:
-                    try:
-                        master_file.seek(0)
-                    except Exception:
-                        pass
-                    try:
-                        df_master = pd.read_excel(master_file, header=8)
-                        df_master.to_excel(writer, sheet_name='MASTER', index=False)
-                    except Exception:
-                        pass
-            output.seek(0)
-            st.download_button(
-                label="⬇️ Download PRE ALERT UPLOAD",
-                data=output.getvalue(),
-                file_name="pre_alert_upload.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="download_dell_pre_alert",
-               
-            )
-        else:
-            st.warning("No items found in the uploaded PDF(s).")
+            else:
+                st.warning("No items found in the uploaded PDF(s).")
 
     
 elif tool == "🟨 AWS Invoice Tool":
