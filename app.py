@@ -268,7 +268,7 @@ def show_login():
         password = st.text_input("🔐 Password", type="password", key="login_pass", placeholder="Enter your password...")
         
         # Enhanced login button
-        if st.button("🎄 **Login** 🎄", key="login_btn", use_container_width=True, type="primary"):
+        if st.button(" **Login** ", key="login_btn", use_container_width=True, type="primary"):
             if username == CORRECT_USERNAME and password == CORRECT_PASSWORD:
                 st.session_state.login_state = "success"
               
@@ -339,7 +339,7 @@ if not st.session_state.show_team_selection:
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
             animation: pulse 2s infinite;
         ">
-            🎄 Ho Ho Ho! Welcome to Mindware Tools! 🎄
+             Welcome to Mindbot! 
         </h1>
         <p style="
             color: #f0f0f0;
@@ -656,7 +656,7 @@ if not st.session_state.show_team_selection:
     # Add a small delay for dramatic effect
     import time
     time.sleep(0.5)
-    st.snow()  # Another fun effect after the delay!
+   # st.snow()  # Another fun effect after the delay!
 
     # Big "Get Started" Button
     st.markdown("<br>", unsafe_allow_html=True)
@@ -668,7 +668,7 @@ if not st.session_state.show_team_selection:
                      help="Click to proceed to team selection!"):
             st.session_state.show_team_selection = True
             #st.balloons()
-            st.snow()
+          #  st.snow()
             st.rerun()
 
     # Stop here - don't show team selection yet
