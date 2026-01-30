@@ -273,7 +273,7 @@ def show_login():  # <-- right-side login
     with right:
         
         st.markdown('<div class="mw-title">Mindbot</div>', unsafe_allow_html=True)
-        st.markdown('<div class="mw-subtitle">AI-Powered Productivity Tools</div>', unsafe_allow_html=True)
+        st.markdown('<div class="mw-subtitle">Powered Productivity Tools</div>', unsafe_allow_html=True)
 
         username = st.text_input("👤 Username", key="login_user", placeholder="Enter your username…")
         password = st.text_input("🔐 Password", type="password", key="login_pass", placeholder="Enter your password…")
