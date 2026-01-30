@@ -1,4 +1,5 @@
 
+import base64
 import csv
 import logging
 import os
@@ -162,137 +163,283 @@ CORRECT_PASSWORD = os.getenv("PASSWORD")
 
 if "login_state" not in st.session_state:
     st.session_state.login_state = "login" 
+from pathlib import Path
+import streamlit as st
+
+def _img_to_base64(path: str) -> str:
+    p = Path(path)
+    if not p.exists():
+        return ""
+    return base64.b64encode(p.read_bytes()).decode("utf-8")
+def show_login():  # <-- right-side login
+    backg = "im.png"  # your AI-face image file name (put it in same folder as app.py)
+    bg_b64 = _img_to_base64(backg)
+
+    if not bg_b64:
+        st.warning(f"Background image not found: {backg}. Put it next to your app.py")
+        # continue anyway without background
+
+    st.markdown(f"""
+    <style>
+    /* Make Streamlit background transparent (login only) */
+    [data-testid="stAppViewContainer"],
+    [data-testid="stApp"],
+    [data-testid="stHeader"] {{
+        background: transparent !important;
+    }}
+
+    /* Fullscreen background image */
+    .mw-login-bg {{
+        position: fixed;
+        inset: 0;
+        z-index: -10;
+        background-image: url("data:image/png;base64,{bg_b64}");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+    }}
+
+    /* Dark overlay to improve contrast */
+    .mw-login-bg::after {{
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(90deg,
+            rgba(0,0,0,0.05) 0%,
+            rgba(0,0,0,0.22) 45%,
+            rgba(0,0,0,0.62) 100%
+        );
+    }}
+
+    /* Right-side wrapper */
+    .mw-right-wrap {{
+        margin-top: 10vh;
+        display: flex;
+        justify-content: flex-end;
+    }}
+
+    /* Glass login card */
+    .mw-card {{
+        width: min(430px, 92%);
+        background: rgba(255,255,255,0.10);
+        border: 1px solid rgba(255,255,255,0.22);
+        border-radius: 18px;
+        padding: 28px 28px 18px 28px;
+        backdrop-filter: blur(18px) saturate(170%);
+        -webkit-backdrop-filter: blur(18px) saturate(170%);
+        box-shadow: 0 22px 55px rgba(0,0,0,0.35);
+    }}
+
+    .mw-title {{
+        font-size: 40px;
+        font-weight: 800;
+        letter-spacing: -0.7px;
+        text-align: center;
+        margin: 0 0 4px 0;
+        color: #EAF2FF;
+        text-shadow: 0 6px 22px rgba(0,0,0,0.45);
+    }}
+
+    .mw-subtitle {{
+        text-align:center;
+        color: rgba(255,255,255,0.78);
+        margin: 0 0 18px 0;
+        font-weight: 500;
+        font-size: 13.5px;
+    }}
+
+    /* Labels */
+    label, .stTextInput label {{
+        color: rgba(255,255,255,0.88) !important;
+        font-weight: 600 !important;
+    }}
+
+    /* Inputs */
+    div[data-testid="stTextInput"] input {{
+        background: rgba(255,255,255,0.14) !important;
+        border-radius: 10px !important;
+        border: 1px solid rgba(255,255,255,0.28) !important;
+        color: #ffffff !important;
+        padding: 12px 14px !important;
+    }}
+    div[data-testid="stTextInput"] input::placeholder {{
+        color: rgba(255,255,255,0.65) !important;
+    }}
+
+    /* Fix browser autofill */
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus {{
+        -webkit-text-fill-color: #ffffff !important;
+        transition: background-color 9999s ease-in-out 0s;
+        box-shadow: 0 0 0px 1000px rgba(255,255,255,0.12) inset !important;
+        border: 1px solid rgba(255,255,255,0.28) !important;
+    }}
+
+    /* Button */
+    .stButton > button {{
+        border-radius: 12px !important;
+        padding: 12px 18px !important;
+        font-weight: 800 !important;
+        background: linear-gradient(90deg, #1a73e8, #2b7de9) !important;
+        border: none !important;
+        color: white !important;
+        box-shadow: 0 10px 24px rgba(26,115,232,0.25);
+    }}
+    .stButton > button:hover {{
+        background: linear-gradient(90deg, #2b7de9, #1a73e8) !important;
+    }}
+
+    .mw-footer {{
+        text-align: center;
+        margin-top: 12px;
+        color: rgba(255,255,255,0.60);
+        font-size: 12px;
+    }}
+
+    /* Hide top toolbar */
+    [data-testid="stToolbar"] {{
+        display: none !important;
+    }}
+    </style>
+
+    <div class="mw-login-bg"></div>
+    """, unsafe_allow_html=True)
+
+    # Layout: left space for image, right for card
+    left, right = st.columns([2.2, 1])
+    with right:
+        
+        st.markdown('<div class="mw-title">Mindbot</div>', unsafe_allow_html=True)
+        st.markdown('<div class="mw-subtitle">Powered Productivity Tools</div>', unsafe_allow_html=True)
+
+        username = st.text_input("👤 Username", key="login_user", placeholder="Enter your username…")
+        password = st.text_input("🔐 Password", type="password", key="login_pass", placeholder="Enter your password…")
+
+        if st.button("Login", key="login_btn", use_container_width=True):
+            if username == CORRECT_USERNAME and password == CORRECT_PASSWORD:
+                st.session_state.login_state = "success"
+            else:
+                st.session_state.login_state = "fail"
+
+        st.markdown('<div class="mw-footer">Made with ❤️ by Mindware • © 2025</div>', unsafe_allow_html=True)
+        st.markdown("</div></div>", unsafe_allow_html=True)
+
 # def show_login():
+#     # Add Christmas styling and animations
+#     st.markdown("""
+#     <style>
+#     @keyframes snowfall {
+#         0% { transform: translateY(-10px) rotate(0deg); opacity: 1; }
+#         100% { transform: translateY(100vh) rotate(360deg); opacity: 0; }
+#     }
+#     @keyframes glow {
+#         0%, 100% { text-shadow: 0 0 10px #1a73e8, 0 0 20px #1a73e8; }
+#         50% { text-shadow: 0 0 20px #1a73e8, 0 0 30px #1a73e8, 0 0 40px #1a73e8; }
+#     }
+#     @keyframes float {
+#         0%, 100% { transform: translateY(0px); }
+#         50% { transform: translateY(-8px); }
+#     }
+#     .login-snow {
+#         position: fixed;
+#         top: 0;
+#         left: 0;
+#         width: 100%;
+#         height: 100%;
+#         pointer-events: none;
+#         z-index: -1;
+#     }
+#     .snowflake {
+#         position: absolute;
+#         color: rgba(26, 115, 232, 0.6);
+#         user-select: none;
+#         animation: snowfall linear infinite;
+#     }
+#     .login-container {
+#         background: linear-gradient(135deg, #f8f9fa 0%, #e3f2fd 100%);
+#         border-radius: 20px;
+#         padding: 2rem;
+#         box-shadow: 0 15px 35px rgba(26, 115, 232, 0.1);
+#         border: 2px solid #e3f2fd;
+#         margin: 2rem 0;
+#         position: relative;
+#         overflow: hidden;
+#     }
+#     .login-title {
+#         animation: glow 3s ease-in-out infinite;
+#         color: #1a73e8;
+#         text-align: center;
+#         margin-bottom: 1rem;
+#         position: relative;
+#     }
+#     .christmas-icon {
+#         animation: float 2s ease-in-out infinite;
+#         display: inline-block;
+#         font-size: 1.5rem;
+#         margin: 0 0.5rem;
+#     }
+#     </style>
+    
+#     <!-- Animated snowflakes -->
+#     <div class="login-snow">
+#         <div class="snowflake" style="left: 10%; animation-duration: 3s; animation-delay: 0s;">❄️</div>
+#         <div class="snowflake" style="left: 20%; animation-duration: 4s; animation-delay: 1s;">🎄</div>
+#         <div class="snowflake" style="left: 30%; animation-duration: 3.5s; animation-delay: 0.5s;">❄️</div>
+#         <div class="snowflake" style="left: 40%; animation-duration: 5s; animation-delay: 2s;">⭐</div>
+#         <div class="snowflake" style="left: 50%; animation-duration: 3.2s; animation-delay: 1.5s;">❄️</div>
+#         <div class="snowflake" style="left: 60%; animation-duration: 4.5s; animation-delay: 0.8s;">🎁</div>
+#         <div class="snowflake" style="left: 70%; animation-duration: 3.8s; animation-delay: 2.2s;">❄️</div>
+#         <div class="snowflake" style="left: 80%; animation-duration: 4.2s; animation-delay: 1.2s;">🌟</div>
+#         <div class="snowflake" style="left: 90%; animation-duration: 3.6s; animation-delay: 0.3s;">❄️</div>
+#     </div>
+#     """, unsafe_allow_html=True)
     
 #     for _ in range(10):
 #         st.write("")
    
 #     col1, col2, col3 = st.columns([1,2,1])
 #     with col2:
-#         st.title("🔒 Login to PDF to Excel")
-#         username = st.text_input("Username", key="login_user")
-#         password = st.text_input("Password", type="password", key="login_pass")
-#         if st.button("Login", key="login_btn"):
+        
+#         # Animated title with Christmas emojis
+#         st.markdown("""
+#         <h1 class="login-title">
+#             <span class="christmas-icon" style="animation-delay: 0s;"></span>
+#          Mindbot 
+#             <span class="christmas-icon" style="animation-delay: 1s;"></span>
+#         </h1>
+#         """, unsafe_allow_html=True)
+        
+#         # Input fields with Christmas emojis
+#         username = st.text_input("👤 Username", key="login_user", placeholder="Enter your username...")
+#         password = st.text_input("🔐 Password", type="password", key="login_pass", placeholder="Enter your password...")
+        
+#         # Enhanced login button
+#         if st.button(" **Login** ", key="login_btn", use_container_width=True, type="primary"):
 #             if username == CORRECT_USERNAME and password == CORRECT_PASSWORD:
 #                 st.session_state.login_state = "success"
+              
+#                 st.snow()
 #             else:
 #                 st.session_state.login_state = "fail"
-
-def show_login():
-    # Add Christmas styling and animations
-    st.markdown("""
-    <style>
-    @keyframes snowfall {
-        0% { transform: translateY(-10px) rotate(0deg); opacity: 1; }
-        100% { transform: translateY(100vh) rotate(360deg); opacity: 0; }
-    }
-    @keyframes glow {
-        0%, 100% { text-shadow: 0 0 10px #1a73e8, 0 0 20px #1a73e8; }
-        50% { text-shadow: 0 0 20px #1a73e8, 0 0 30px #1a73e8, 0 0 40px #1a73e8; }
-    }
-    @keyframes float {
-        0%, 100% { transform: translateY(0px); }
-        50% { transform: translateY(-8px); }
-    }
-    .login-snow {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        pointer-events: none;
-        z-index: -1;
-    }
-    .snowflake {
-        position: absolute;
-        color: rgba(26, 115, 232, 0.6);
-        user-select: none;
-        animation: snowfall linear infinite;
-    }
-    .login-container {
-        background: linear-gradient(135deg, #f8f9fa 0%, #e3f2fd 100%);
-        border-radius: 20px;
-        padding: 2rem;
-        box-shadow: 0 15px 35px rgba(26, 115, 232, 0.1);
-        border: 2px solid #e3f2fd;
-        margin: 2rem 0;
-        position: relative;
-        overflow: hidden;
-    }
-    .login-title {
-        animation: glow 3s ease-in-out infinite;
-        color: #1a73e8;
-        text-align: center;
-        margin-bottom: 1rem;
-        position: relative;
-    }
-    .christmas-icon {
-        animation: float 2s ease-in-out infinite;
-        display: inline-block;
-        font-size: 1.5rem;
-        margin: 0 0.5rem;
-    }
-    </style>
-    
-    <!-- Animated snowflakes -->
-    <div class="login-snow">
-        <div class="snowflake" style="left: 10%; animation-duration: 3s; animation-delay: 0s;">❄️</div>
-        <div class="snowflake" style="left: 20%; animation-duration: 4s; animation-delay: 1s;">🎄</div>
-        <div class="snowflake" style="left: 30%; animation-duration: 3.5s; animation-delay: 0.5s;">❄️</div>
-        <div class="snowflake" style="left: 40%; animation-duration: 5s; animation-delay: 2s;">⭐</div>
-        <div class="snowflake" style="left: 50%; animation-duration: 3.2s; animation-delay: 1.5s;">❄️</div>
-        <div class="snowflake" style="left: 60%; animation-duration: 4.5s; animation-delay: 0.8s;">🎁</div>
-        <div class="snowflake" style="left: 70%; animation-duration: 3.8s; animation-delay: 2.2s;">❄️</div>
-        <div class="snowflake" style="left: 80%; animation-duration: 4.2s; animation-delay: 1.2s;">🌟</div>
-        <div class="snowflake" style="left: 90%; animation-duration: 3.6s; animation-delay: 0.3s;">❄️</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    for _ in range(10):
-        st.write("")
-   
-    col1, col2, col3 = st.columns([1,2,1])
-    with col2:
         
-        # Animated title with Christmas emojis
-        st.markdown("""
-        <h1 class="login-title">
-            <span class="christmas-icon" style="animation-delay: 0s;"></span>
-         Mindbot 
-            <span class="christmas-icon" style="animation-delay: 1s;"></span>
-        </h1>
-        """, unsafe_allow_html=True)
+#         # Christmas footer
+#         st.markdown("""
+#         <div style="
+#             text-align: center;
+#             margin-top: 2rem;
+#             padding: 1rem;
+#             background: linear-gradient(90deg, #e3f2fd, #f3e5f5);
+#             border-radius: 10px;
+#             border: 1px solid #e1f5fe;
+#         ">
+#             <p style="margin: 0; color: #1a73e8; font-weight: 500;">
+#                 Made with ❤️ by Mindware✨<br>
+#             </p>
+#         </div>
+#         """, unsafe_allow_html=True)
         
-        # Input fields with Christmas emojis
-        username = st.text_input("👤 Username", key="login_user", placeholder="Enter your username...")
-        password = st.text_input("🔐 Password", type="password", key="login_pass", placeholder="Enter your password...")
-        
-        # Enhanced login button
-        if st.button(" **Login** ", key="login_btn", use_container_width=True, type="primary"):
-            if username == CORRECT_USERNAME and password == CORRECT_PASSWORD:
-                st.session_state.login_state = "success"
-              
-                st.snow()
-            else:
-                st.session_state.login_state = "fail"
-        
-        # Christmas footer
-        st.markdown("""
-        <div style="
-            text-align: center;
-            margin-top: 2rem;
-            padding: 1rem;
-            background: linear-gradient(90deg, #e3f2fd, #f3e5f5);
-            border-radius: 10px;
-            border: 1px solid #e1f5fe;
-        ">
-            <p style="margin: 0; color: #1a73e8; font-weight: 500;">
-                Made with ❤️ by Mindware✨<br>
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown('</div>', unsafe_allow_html=True)  # Close login container
+#         st.markdown('</div>', unsafe_allow_html=True)  # Close login container
 
 def show_fail():
     st.error("Oops! Wrong credentials... Nice try, but no entry! 😜")
