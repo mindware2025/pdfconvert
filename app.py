@@ -288,7 +288,6 @@ def show_login():
         ">
             <p style="margin: 0; color: #1a73e8; font-weight: 500;">
                 Made with ❤️ by Mindware✨<br>
-                <small style="opacity: 0.8;">Happy holidays and productive work! 🌟</small>
             </p>
         </div>
         """, unsafe_allow_html=True)
