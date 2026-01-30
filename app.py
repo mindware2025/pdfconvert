@@ -271,8 +271,7 @@ def show_login():  # <-- right-side login
     # Layout: left space for image, right for card
     left, right = st.columns([2.2, 1])
     with right:
-        st.markdown('<div class="mw-right-wrap"><div class="mw-card">', unsafe_allow_html=True)
-
+        
         st.markdown('<div class="mw-title">Mindbot</div>', unsafe_allow_html=True)
         st.markdown('<div class="mw-subtitle">AI-Powered Productivity Tools</div>', unsafe_allow_html=True)
 
