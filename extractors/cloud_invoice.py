@@ -75,7 +75,8 @@ keyword_map = {
     ("MSRI-CNS",): "MSRI-CNS",
     ("dynamics 365","MS-CNS"): "MS-CNS",
     ("AWS Account","AWS"): "AWS-UTILITIES-CNS",
-    ("minecraft education per user (education faculty pricing)","MS-CNS"): "MS-CNS",
+    ("minecraft education per user","MS-CNS"): "MS-CNS",
+
     
 }
 
