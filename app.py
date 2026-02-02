@@ -1838,7 +1838,12 @@ elif tool == "IBM Quotation":
                     label="📥 Download Styled Excel File",
                     data=result['excel_bytes'],
                     file_name="Styled_Quotation.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    on_click=lambda: (
+                            update_usage("IBM Automation ", team)
+                            
+                        ),
+                    
                 )
 
 
