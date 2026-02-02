@@ -74,7 +74,9 @@ keyword_map = {
     ("Microsoft Entra ID Governance (Education Faculty Pricing)","MS-CNS"): "MS-CNS",
     ("MSRI-CNS",): "MSRI-CNS",
     ("dynamics 365","MS-CNS"): "MS-CNS",
-    ("AWS Account",): "AWS-UTILITIES-CNS"
+    ("AWS Account","AWS"): "AWS-UTILITIES-CNS",
+    ("minecraft education per user (education faculty pricing)","MS-CNS"): "MS-CNS",
+    
 }
 
 def debug_log(message):
