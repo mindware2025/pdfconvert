@@ -74,7 +74,7 @@ keyword_map = {
     ("Microsoft Entra ID Governance (Education Faculty Pricing)","MS-CNS"): "MS-CNS",
     ("MSRI-CNS",): "MSRI-CNS",
     ("dynamics 365","MS-CNS"): "MS-CNS",
-    ("AWS Account","AWS",): "AWS-UTILITIES-CNS",
+    ("AWS Account","AWS"): "AWS-UTILITIES-CNS",
     ("minecraft education per user (education faculty pricing)","MS-CNS"): "MS-CNS",
     
 }
@@ -205,7 +205,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                 if not item_code_found:
                     for keywords, code in keyword_map.items():
                         for keyword in keywords:  # Iterate through each keyword in the tuple
-                            if keyword in item_desc_lower:
+                            if str(keyword).lower() in item_desc_lower:
                                 out_row["ITEM Code"] = code
                                 debug_log(f"Found item code using keyword mapping: '{keyword}' -> '{code}'")
                                 item_code_found = True
@@ -478,7 +478,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
             matched = False
             for keywords, code in keyword_map.items():
                 for k in keywords:
-                    if k in item_desc_lower:
+                    if str(k).lower() in item_desc_lower:
                         out_row["ITEM Code"] = code
                         matched = True
                         break
