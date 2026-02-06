@@ -138,9 +138,9 @@ https://www.midisgroup.com/wp-content/uploads/2024/08/Code-of-Conduct-2023-Engli
 Mindware may include additional terms in its quotations before its acceptance by the Partner, which the Partner agrees to be bound by as if fully incorporated into the agreement.
 Notes:				
 It is understood that final coverage dates for New Licenses and Software Subscription and Support Reinstatement part numbers will be based upon IBM's acceptance of the Purchase Order, as defined by the Passport Advantage program, irrespective of the dates which may appear in this special bid.				
-"Pricing is valid for this transaction only.
+Pricing is valid for this transaction only.
 
-For Future Offers, any margin discounts, incentives, or promotions will be applied based on then current availability and terms at the actual time of billing for the Future Offer. For clarity, this means that the pricing for any Future Offering in this Quotation will be recalculated at the time of Distributor's actual order to apply existing applicable margin discounts, incentives, and promotions in effect at that time."				
+For Future Offers, any margin discounts, incentives, or promotions will be applied based on then current availability and terms at the actual time of billing for the Future Offer. For clarity, this means that the pricing for any Future Offering in this Quotation will be recalculated at the time of Distributor's actual order to apply existing applicable margin discounts, incentives, and promotions in effect at that time.				
 				
 This quote is contingent upon all paperwork being on file with IBM.				
 				
