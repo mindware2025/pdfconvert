@@ -1174,6 +1174,11 @@ def create_template2_styled_excel(
         add_debug(traceback.format_exc())
         terms = []
     
+    # Determine country (used only for header text, not calculations)
+    country = (header_info.get("country") or header_info.get("Country") or "").strip()
+    if not country:
+        country = "UAE"
+
     wb = Workbook()
     ws = wb.active
     ws.title = "IBM Software as a Service Quotation"
@@ -1237,19 +1242,34 @@ def create_template2_styled_excel(
         ws[f"C{row}"].font = normal_font
         row += 1
     
-    # Table headers for Template 2 (exact format requested)
+    # Table headers for Template 2
     table_start_row = row + 2
-    headers = [
-        "SI",
-        "SKU", 
-        "Product Description",
-        "Quantity",
-        "Duration",
-        "Unit Price in AED",
-        "Cost",
-        "Total Price in AED", 
-        "Partner Price in AED"
-    ]
+    if country == "Qatar":
+        # Qatar: remove explicit "AED" from visible headers
+        headers = [
+            "SI",
+            "SKU",
+            "Product Description",
+            "Quantity",
+            "Duration",
+            "Unit Price",
+            "Cost",
+            "Total Price",
+            "Partner Price",
+        ]
+    else:
+        # Default / UAE: keep AED in header text
+        headers = [
+            "SI",
+            "SKU",
+            "Product Description",
+            "Quantity",
+            "Duration",
+            "Unit Price in AED",
+            "Cost",
+            "Total Price in AED",
+            "Partner Price in AED",
+        ]
     
     # Create header row
     for col_idx, header in enumerate(headers, 1):
