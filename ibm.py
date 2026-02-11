@@ -1338,9 +1338,6 @@ def create_styled_excel_template2(
     ws.title = "Quotation"
     ws.sheet_view.showGridLines = False
     
-    # Country awareness (same behavior as Template 1 / v2)
-    country = header_info.get("country", "UAE")
-    
     # --- Header / Branding --- (EXACT COPY FROM TEMPLATE 1)
     ws.merge_cells("B1:C2")  # Move logo to row 1-2
     if logo_path and os.path.exists(logo_path):
@@ -1366,30 +1363,18 @@ def create_styled_excel_template2(
     ws.column_dimensions[get_column_letter(8)].width = 18  # H (Total Price AED)
     ws.column_dimensions[get_column_letter(9)].width = 18  # I (Partner Price AED)
     
-    # Left block (country-aware, aligned with Template 1 v2)
+    # Left block (EXACT COPY FROM TEMPLATE 1)
     left_labels = ["Date:", "From:", "Email:", "Contact:", "", "Company:", "Attn:", "Email:"]
-    if country == "Qatar":
-        left_values = [
-            datetime.today().strftime('%d/%m/%Y'),
-            "Eliana Youssef",
-            "e.youssef@mindware.net",
-            "70/519841",
-            "",
-            header_info.get('Reseller Name', 'empty'),
-            "empty",
-            "empty",
-        ]
-    else:
-        left_values = [
-            datetime.today().strftime('%d/%m/%Y'),
-            "",
-            "",
-            "",
-            "",
-            header_info.get('Reseller Name', 'empty'),
-            "empty",
-            "empty",
-        ]
+    left_values = [
+        datetime.today().strftime('%d/%m/%Y'),
+        "",
+        "",
+        "",
+        "",
+        header_info.get('Reseller Name', 'empty'),
+        "empty",
+        "empty"
+    ]
     row_positions = [5, 6, 7, 8, 9, 10, 11, 12]  # Move up by 1 row
     for row, label, value in zip(row_positions, left_labels, left_values):
         if label:
@@ -1426,34 +1411,18 @@ def create_styled_excel_template2(
         ws[f"F{row}"].alignment = Alignment(horizontal="left", vertical="center")
     
     # --- Template 2 Table Headers (8 columns ONLY) ---
-    if country == "Qatar":
-        # For Qatar, remove explicit "AED" from header text
-        headers = [
-            "SI",                  # Column B (2)
-            "SKU",                 # Column C (3)
-            "Product Description", # Column D (4)
-            "Quantity",            # Column E (5)
-            "Duration",            # Column F (6)
-            "Unit Price",          # Column G (7)
-            "cost",                # Column H (8) – still USD internally
-            "Total Price",         # Column I (9)
-            "Partner disc",        # Column J (10)
-            "Partner Price",       # Column K (11)
-        ]
-    else:
-        # Default / UAE: keep "in AED" in visible headers
-        headers = [
-            "SI",                      # Column B (2)
-            "SKU",                     # Column C (3)
-            "Product Description",     # Column D (4)
-            "Quantity",                # Column E (5)
-            "Duration",                # Column F (6)
-            "Unit Price\nin AED",      # Column G (7)
-            "cost",                    # Column H (8)
-            "Total Price\nin AED",     # Column I (9)
-            "Partner disc",            # Column J (10)
-            "Partner Price\nin AED",   # Column K (11)
-        ]
+    headers = [
+        "SI",                      # Column B (2)
+        "SKU",                     # Column C (3)
+        "Product Description",     # Column D (4)
+        "Quantity",                # Column E (5)
+        "Duration",                # Column F (6)
+        "Unit Price\nin AED",      # Column G (7)
+        "cost",                    # Column H (8)
+        "Total Price\nin AED",     # Column I (9)
+        "Partner disc",            # Column J (10)
+        "Partner Price\nin AED"    # Column K (11)
+    ]
     header_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
     for col, header in enumerate(headers, start=2):
         ws.merge_cells(start_row=16, start_column=col, end_row=17, end_column=col)  # Move up by 1 row
@@ -1483,7 +1452,7 @@ def create_styled_excel_template2(
         bid_unit_aed = row[6] if len(row) > 6 else 0  # Extracted unit price
         bid_total_aed_extracted = row[7] if len(row) > 7 else 0  # Already converted AED amount
         
-        # Convert back to USD to use in the H formula (base currency)
+        # Convert back to USD to use in the H formula
         extracted_total_usd = round(bid_total_aed_extracted / 3.6725, 2) if bid_total_aed_extracted else 0
         
         # Fill basic data in columns C, D, E, F (no formulas)
@@ -1504,45 +1473,32 @@ def create_styled_excel_template2(
             margin_discount = 0.92  # Default 8% discount -> 0.92 multiplier
         
         # Add FORMULAS for calculated columns G, H, I
-        # H (cost) = Extracted USD value (base)
+        # H (cost) = Extracted USD value
         cost_formula = f"={extracted_total_usd}"
         ws.cell(row=excel_row, column=8, value=cost_formula)  # Column H
         add_debug(f"[TEMPLATE2 FORMULA] Cost (USD): {cost_formula}")
-
-        # Currency‑specific behavior
-        if country == "Qatar":
-            # For Qatar, keep everything in USD (no AED conversion)
-            # G (Unit Price, USD) = H / Qty
-            if qty and qty > 0:
-                unit_price_formula = f"=H{excel_row}/E{excel_row}"
-            else:
-                unit_price_formula = f"=H{excel_row}"
-            add_debug(f"[TEMPLATE2 FORMULA][Qatar] Unit Price USD: {unit_price_formula}")
-
-            # I (Total Price, USD) = H (extended cost)
-            total_price_formula = f"=H{excel_row}"
-            ws.cell(row=excel_row, column=9, value=total_price_formula)  # Column I
-            add_debug(f"[TEMPLATE2 FORMULA][Qatar] Total Price USD: {total_price_formula}")
+        
+        # G (Unit Price AED) - special handling for cases with no "Bid Total Commit Value"
+        # If total_price is 0, use the extracted unit_price directly (from Bid Unit Price column)
+        # Otherwise, calculate from total/qty
+        if bid_total_aed_extracted == 0 and bid_unit_aed > 0:
+            # No "Bid Total Commit Value" column - use extracted unit price directly
+            unit_price_formula = f"={bid_unit_aed}"
+            add_debug(f"[TEMPLATE2 FORMULA] Unit Price AED: {unit_price_formula} (from extracted Bid Unit Price)")
+        elif qty and qty > 0:
+            # Normal case - calculate unit price from total
+            unit_price_formula = f"=I{excel_row}/E{excel_row}"
+            add_debug(f"[TEMPLATE2 FORMULA] Unit Price AED: {unit_price_formula}")
         else:
-            # UAE / others: prices shown in AED
-            # G (Unit Price AED) - special handling for cases with no "Bid Total Commit Value"
-            if bid_total_aed_extracted == 0 and bid_unit_aed > 0:
-                # No "Bid Total Commit Value" column - use extracted unit price directly
-                unit_price_formula = f"={bid_unit_aed}"
-                add_debug(f"[TEMPLATE2 FORMULA] Unit Price AED: {unit_price_formula} (from extracted Bid Unit Price)")
-            elif qty and qty > 0:
-                # Normal case - calculate unit price from total
-                unit_price_formula = f"=I{excel_row}/E{excel_row}"
-                add_debug(f"[TEMPLATE2 FORMULA] Unit Price AED: {unit_price_formula}")
-            else:
-                unit_price_formula = f"=I{excel_row}"
-                add_debug(f"[TEMPLATE2 FORMULA] Unit Price AED: {unit_price_formula}")
-
-            ws.cell(row=excel_row, column=9, value=f"=H{excel_row}*3.6725")  # Column I (Total Price AED)
-            add_debug(f"[TEMPLATE2 FORMULA] Total Price in AED: =H{excel_row}*3.6725")
-
-        # Write unit price (G) after we choose formula
+            unit_price_formula = f"=I{excel_row}"
+            add_debug(f"[TEMPLATE2 FORMULA] Unit Price AED: {unit_price_formula}")
+        
         ws.cell(row=excel_row, column=7, value=unit_price_formula)  # Column G
+        
+        # I (Total Price in AED) = Cost in USD * 3.6725
+        total_price_aed_formula = f"=H{excel_row}*3.6725"
+        ws.cell(row=excel_row, column=9, value=total_price_aed_formula)  # Column I
+        add_debug(f"[TEMPLATE2 FORMULA] Total Price in AED: {total_price_aed_formula}")
         
         # J (Partner disc) = ROUNDUP(Unit Price * 0.99, 2)
         partner_disc_formula = f"=ROUNDUP(G{excel_row}*0.99,2)"
@@ -1562,16 +1518,11 @@ def create_styled_excel_template2(
             cell = ws.cell(row=excel_row, column=col)
             cell.font = Font(size=11, color="1F497D")
             cell.alignment = Alignment(horizontal="center", vertical="center")
-
-            if country == "Qatar":
-                # All monetary columns in USD for Qatar
+            # Column H (cost) shows USD, all others show AED
+            if col == 8:  # Column H is cost column
                 cell.number_format = '"USD"#,##0.00'
             else:
-                # Column H (cost) shows USD, all others show AED
-                if col == 8:  # Column H is cost column
-                    cell.number_format = '"USD"#,##0.00'
-                else:
-                    cell.number_format = '"AED"#,##0.00'
+                cell.number_format = '"AED"#,##0.00'
         
         # Apply yellow fill to all data columns (B through K)
         for col in range(2, 12):
