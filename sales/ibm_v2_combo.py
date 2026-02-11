@@ -207,148 +207,37 @@ def process_ibm_combo(pdf_file, excel_file=None, master_csv=None, country="UAE")
                 except Exception as e:
                     result['error'] = f"Failed to create styled Excel: {e}"
         elif template in ('2', 'template2'):
+            # Template 2: PDF-to-Excel logic (ibm_template2.py)
             try:
                 data, header_info = extract_ibm_template2_from_pdf(pdf_file)
                 pdf_file.seek(0)
                 ibm_terms_text = extract_ibm_terms_text(pdf_file)
-        
-                # Default
                 result['header_info'] = header_info
+                result['data'] = data
                 result['ibm_terms_text'] = ibm_terms_text
-        
-                USD_TO_AED = 3.6725  # must match ibm_template2.py
-        
-                if country == "Qatar" and data:
-                    # Qatar-specific columns (USD and 1% discount)
-                    result['columns'] = [
-                        "SKU", "Product Description", "Quantity", "Start Date", "End Date",
-                        "MEP Unit Price in USD", "Extended MEP Price USD",
-                        "Unit Partner Price USD", "Total Partner Price in USD"
-                    ]
-        
-                    filtered_data = []
-                    excel_row = 18  # align with your Template 1 Qatar layout
-        
-                    def _to_float(x):
-                        try:
-                            return float(x) if x not in (None, "", "-",) else 0.0
-                        except Exception:
-                            return 0.0
-        
-                    for row in data:
-                        sku           = row[0] if len(row) > 0 else ""
-                        desc          = row[1] if len(row) > 1 else ""
-                        qty           = row[2] if len(row) > 2 else 0
-                        start_date    = row[4] if len(row) > 4 else ""
-                        end_date      = row[5] if len(row) > 5 else ""
-                        unit_aed      = row[6] if len(row) > 6 else 0.0
-                        total_aed     = row[7] if len(row) > 7 else 0.0
-                        # partner_price_aed = row[8] if len(row) > 8 else 0.0  # not used for Qatar display
-        
-                        qty_num    = _to_float(qty)
-                        unit_usd   = ( _to_float(unit_aed)  / USD_TO_AED ) if unit_aed else 0.0
-                        total_usd  = ( _to_float(total_aed) / USD_TO_AED ) if total_aed else 0.0
-        
-                        # Build A1 refs for this row (match your Template 1 Qatar logic)
-                        E = f"E{excel_row}"  # Quantity
-                        F = f"F{excel_row}"  # Unit Price USD
-                        G = f"G{excel_row}"  # Extended MEP USD (numeric)
-                        H = f"H{excel_row}"  # Unit Partner Price USD (formula)
-                        I = f"I{excel_row}"  # Total Partner Price USD (formula)
-        
-                        # We’ll set:
-                        #  - F (Unit Price USD) by formula from G and E → =ROUND(G/E,2)
-                        #  - G (Extended MEP USD) as numeric (from total_usd)
-                        #  - H (Unit Partner USD) as 1% discount on F → =ROUND(F*0.99,2)
-                        #  - I (Total Partner USD) → =H*E
-        
-                        unit_price_formula    = f"=ROUND({G}/{E},2)"   # F
-                        unit_partner_formula  = f"=ROUND({F}*0.99,2)"  # H (1% discount)
-                        total_partner_formula = f"={H}*{E}"            # I
-        
-                        filtered_data.append([
-                            sku,                 # A
-                            desc,                # B
-                            qty_num,             # C (numeric)
-                            start_date,          # D
-                            end_date,            # E
-                            unit_price_formula,  # F (formula)
-                            round(total_usd, 2), # G (numeric extended)
-                            unit_partner_formula,# H (formula)
-                            total_partner_formula# I (formula)
-                        ])
-                        excel_row += 1
-        
-                    result['data'] = filtered_data
-        
-                    # IMPORTANT: use the Template 1 Excel creator (it renders these columns)
-                    output = BytesIO()
-                    create_styled_excel_v2(
-                        data=result['data'],
-                        header_info=header_info,
-                        logo_path="image.png",
-                        output=output,
-                        compliance_text="",
-                        ibm_terms_text=ibm_terms_text,
-                        country=country
-                    )
-                    result['excel_bytes'] = output.getvalue()
-                else:
-                    # Default (non-Qatar) Template 2 path
-                    result['data']    = data
-                    # Infer columns or leave None
-                    if data and isinstance(data[0], (list, tuple)):
+                # Try to infer columns from data if available, else use generic
+                if data and isinstance(data, list) and len(data) > 0:
+                    if isinstance(data[0], (list, tuple)):
                         result['columns'] = [f"Col{i+1}" for i in range(len(data[0]))]
-                    elif data and isinstance(data[0], dict):
+                    elif isinstance(data[0], dict):
                         result['columns'] = list(data[0].keys())
                     else:
                         result['columns'] = None
-        
-                    output = BytesIO()
-                    create_styled_excel_template2(
-                        data=data,
-                        header_info=header_info,
-                        logo_path="image.png",
-                        output=output,
-                        compliance_text="",
-                        ibm_terms_text=ibm_terms_text
-                    )
-                    result['excel_bytes'] = output.getvalue()
-        
+                else:
+                    result['columns'] = None
+
+                output = BytesIO()
+                create_styled_excel_template2(
+                    data=data,
+                    header_info=header_info,
+                    logo_path="image.png",
+                    output=output,
+                    compliance_text="",
+                    ibm_terms_text=ibm_terms_text
+                )
+                result['excel_bytes'] = output.getvalue()
             except Exception as e:
                 result['error'] = f"Failed to process Template 2: {e}"
-        # elif template in ('2', 'template2'):
-        #     # Template 2: PDF-to-Excel logic (ibm_template2.py)
-        #     try:
-        #         data, header_info = extract_ibm_template2_from_pdf(pdf_file)
-        #         pdf_file.seek(0)
-        #         ibm_terms_text = extract_ibm_terms_text(pdf_file)
-        #         result['header_info'] = header_info
-        #         result['data'] = data
-        #         result['ibm_terms_text'] = ibm_terms_text
-        #         # Try to infer columns from data if available, else use generic
-        #         if data and isinstance(data, list) and len(data) > 0:
-        #             if isinstance(data[0], (list, tuple)):
-        #                 result['columns'] = [f"Col{i+1}" for i in range(len(data[0]))]
-        #             elif isinstance(data[0], dict):
-        #                 result['columns'] = list(data[0].keys())
-        #             else:
-        #                 result['columns'] = None
-        #         else:
-        #             result['columns'] = None
-
-        #         output = BytesIO()
-        #         create_styled_excel_template2(
-        #             data=data,
-        #             header_info=header_info,
-        #             logo_path="image.png",
-        #             output=output,
-        #             compliance_text="",
-        #             ibm_terms_text=ibm_terms_text
-        #         )
-        #         result['excel_bytes'] = output.getvalue()
-        #     except Exception as e:
-        #         result['error'] = f"Failed to process Template 2: {e}"
         else:
             result['error'] = f"Unknown or unsupported template: {template}"
     except Exception as e:
