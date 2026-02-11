@@ -213,51 +213,22 @@ def process_ibm_combo(pdf_file, excel_file=None, master_csv=None, country="UAE")
                 pdf_file.seek(0)
                 ibm_terms_text = extract_ibm_terms_text(pdf_file)
                 result['header_info'] = header_info
+                result['data'] = data
                 result['ibm_terms_text'] = ibm_terms_text
-
-                if country == "Qatar":
-                    USD_TO_AED = 3.6725
-                    # Adjust columns: rename AED to USD
-                    columns = None
-                    if data and isinstance(data, list) and len(data) > 0:
-                        if isinstance(data[0], (list, tuple)):
-                            columns = [f"Col{i+1}" for i in range(len(data[0]))]
-                        elif isinstance(data[0], dict):
-                            columns = list(data[0].keys())
-                    # Rename columns containing 'AED' to 'USD'
-                    if columns:
-                        columns = [c.replace('AED', 'USD') for c in columns]
-                        result['columns'] = columns
-                    # Convert AED values to USD for relevant columns (unit price, total price, partner price)
-                    # Assume columns: SI, SKU, Product Description, Quantity, Duration, Unit Price in AED, Cost, Total Price in AED, Partner Price in AED
-                    # Convert columns 5, 6, 7, 8 (0-based: 5,6,7,8) if present
-                    new_data = []
-                    for row in data:
-                        row = list(row)
-                        # Unit Price in AED (index 5), Total Price in AED (index 7), Partner Price in AED (index 8)
-                        if len(row) > 5 and isinstance(row[5], (int, float)):
-                            row[5] = round(row[5] / USD_TO_AED, 2)
-                        if len(row) > 7 and isinstance(row[7], (int, float)):
-                            row[7] = round(row[7] / USD_TO_AED, 2)
-                        if len(row) > 8 and isinstance(row[8], (int, float)):
-                            row[8] = round(row[8] / USD_TO_AED, 2)
-                        new_data.append(row)
-                    result['data'] = new_data
-                else:
-                    result['data'] = data
-                    if data and isinstance(data, list) and len(data) > 0:
-                        if isinstance(data[0], (list, tuple)):
-                            result['columns'] = [f"Col{i+1}" for i in range(len(data[0]))]
-                        elif isinstance(data[0], dict):
-                            result['columns'] = list(data[0].keys())
-                        else:
-                            result['columns'] = None
+                # Try to infer columns from data if available, else use generic
+                if data and isinstance(data, list) and len(data) > 0:
+                    if isinstance(data[0], (list, tuple)):
+                        result['columns'] = [f"Col{i+1}" for i in range(len(data[0]))]
+                    elif isinstance(data[0], dict):
+                        result['columns'] = list(data[0].keys())
                     else:
                         result['columns'] = None
+                else:
+                    result['columns'] = None
 
                 output = BytesIO()
                 create_styled_excel_template2(
-                    data=result['data'],
+                    data=data,
                     header_info=header_info,
                     logo_path="image.png",
                     output=output,
