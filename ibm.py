@@ -1338,6 +1338,9 @@ def create_styled_excel_template2(
     ws.title = "Quotation"
     ws.sheet_view.showGridLines = False
     
+    # Country awareness (same behavior as Template 1 / v2)
+    country = header_info.get("country", "UAE")
+    
     # --- Header / Branding --- (EXACT COPY FROM TEMPLATE 1)
     ws.merge_cells("B1:C2")  # Move logo to row 1-2
     if logo_path and os.path.exists(logo_path):
@@ -1363,18 +1366,30 @@ def create_styled_excel_template2(
     ws.column_dimensions[get_column_letter(8)].width = 18  # H (Total Price AED)
     ws.column_dimensions[get_column_letter(9)].width = 18  # I (Partner Price AED)
     
-    # Left block (EXACT COPY FROM TEMPLATE 1)
+    # Left block (country-aware, aligned with Template 1 v2)
     left_labels = ["Date:", "From:", "Email:", "Contact:", "", "Company:", "Attn:", "Email:"]
-    left_values = [
-        datetime.today().strftime('%d/%m/%Y'),
-        "",
-        "",
-        "",
-        "",
-        header_info.get('Reseller Name', 'empty'),
-        "empty",
-        "empty"
-    ]
+    if country == "Qatar":
+        left_values = [
+            datetime.today().strftime('%d/%m/%Y'),
+            "Eliana Youssef",
+            "e.youssef@mindware.net",
+            "70/519841",
+            "",
+            header_info.get('Reseller Name', 'empty'),
+            "empty",
+            "empty",
+        ]
+    else:
+        left_values = [
+            datetime.today().strftime('%d/%m/%Y'),
+            "",
+            "",
+            "",
+            "",
+            header_info.get('Reseller Name', 'empty'),
+            "empty",
+            "empty",
+        ]
     row_positions = [5, 6, 7, 8, 9, 10, 11, 12]  # Move up by 1 row
     for row, label, value in zip(row_positions, left_labels, left_values):
         if label:

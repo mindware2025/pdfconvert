@@ -212,19 +212,41 @@ def process_ibm_combo(pdf_file, excel_file=None, master_csv=None, country="UAE")
                 data, header_info = extract_ibm_template2_from_pdf(pdf_file)
                 pdf_file.seek(0)
                 ibm_terms_text = extract_ibm_terms_text(pdf_file)
+
+                # Attach country so Template 2 Excel + terms can adjust (same style as Template 1)
+                if country:
+                    header_info["country"] = country
+
                 result['header_info'] = header_info
                 result['data'] = data
                 result['ibm_terms_text'] = ibm_terms_text
-                # Try to infer columns from data if available, else use generic
-                if data and isinstance(data, list) and len(data) > 0:
-                    if isinstance(data[0], (list, tuple)):
-                        result['columns'] = [f"Col{i+1}" for i in range(len(data[0]))]
-                    elif isinstance(data[0], dict):
-                        result['columns'] = list(data[0].keys())
+
+                # Explicit, meaningful columns for Template 2 instead of generic Col1..ColN
+                # Data rows from extract_ibm_template2_from_pdf:
+                # [sku, desc, qty, duration, start_date, end_date, bid_unit_aed, bid_total_aed, partner_price_aed]
+                if data and isinstance(data, list) and len(data) > 0 and isinstance(data[0], (list, tuple)) and len(data[0]) >= 9:
+                    result['columns'] = [
+                        "SKU",
+                        "Product Description",
+                        "Quantity",
+                        "Duration",
+                        "Start Date",
+                        "End Date",
+                        "Unit Price in AED",
+                        "Total Price in AED",
+                        "Partner Price in AED",
+                    ]
+                else:
+                    # Fallback to generic inference if structure is unexpected
+                    if data and isinstance(data, list) and len(data) > 0:
+                        if isinstance(data[0], (list, tuple)):
+                            result['columns'] = [f"Col{i+1}" for i in range(len(data[0]))]
+                        elif isinstance(data[0], dict):
+                            result['columns'] = list(data[0].keys())
+                        else:
+                            result['columns'] = None
                     else:
                         result['columns'] = None
-                else:
-                    result['columns'] = None
 
                 output = BytesIO()
                 create_styled_excel_template2(
