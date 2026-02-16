@@ -616,35 +616,70 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
     result_df = pd.DataFrame(out_rows, columns=CLOUD_INVOICE_HEADER)
 
     # AS-CNS aggregation
+    # AS-CNS aggregation with BillingPeriod condition:
+    # - If BillingPeriod is ManualDebitMemo or ManualCreditMemo -> DO NOT aggregate those AS-CNS rows.
+    # - Else (anything else or missing) -> aggregate as per current rule.
     try:
         if not result_df.empty:
-            is_as_cns = result_df["ITEM Code"].astype(str).str.strip().str.upper() == "AS-CNS"
-            df_as = result_df[is_as_cns].copy()
-            df_other = result_df[~is_as_cns].copy()
-            if not df_as.empty:
-                df_as["Gross Value"] = pd.to_numeric(df_as["Gross Value"], errors="coerce").fillna(0.0)
-                df_as["Cost"] = pd.to_numeric(df_as["Cost"], errors="coerce").fillna(0.0)
+            # Check if BillingPeriod exists
+            has_bp = "BillingPeriod" in result_df.columns
+    
+            # Identify AS-CNS rows
+            as_mask = result_df["ITEM Code"].astype(str).str.strip().str.upper() == "AS-CNS"
+    
+            # Exemption mask: true only if BillingPeriod is one of the two manual memo values
+            if has_bp:
+                bp_vals = result_df["BillingPeriod"].astype(str).str.strip()
+                exempt_mask = bp_vals.isin(["ManualDebitMemo", "ManualCreditMemo"])
+            else:
+                # If BillingPeriod column is absent, no exemptions -> aggregate all AS-CNS
+                exempt_mask = pd.Series(False, index=result_df.index)
+    
+            # Split frames
+            df_as_to_aggregate = result_df[as_mask & ~exempt_mask].copy()
+            df_as_exempt       = result_df[as_mask &  exempt_mask].copy()   # leave untouched
+            df_non_as          = result_df[~as_mask].copy()
+    
+            # Aggregate only the non-exempt AS-CNS rows
+            if not df_as_to_aggregate.empty:
+                df_as_to_aggregate["Gross Value"] = pd.to_numeric(df_as_to_aggregate["Gross Value"], errors="coerce").fillna(0.0)
+                df_as_to_aggregate["Cost"]        = pd.to_numeric(df_as_to_aggregate["Cost"],        errors="coerce").fillna(0.0)
+    
                 group_cols = ["Invoice No.", "End User", "LPO Number"]
-                agg = df_as.groupby(group_cols, as_index=False).agg({"Gross Value": "sum"})
+                agg = df_as_to_aggregate.groupby(group_cols, as_index=False).agg({
+                    "Gross Value": "sum"
+                })
+    
+                # Merge back a representative row for the non-group fields
                 merged = agg.merge(
-                    df_as.drop(columns=["Gross Value"]).drop_duplicates(subset=group_cols),
+                    df_as_to_aggregate.drop(columns=["Gross Value"]).drop_duplicates(subset=group_cols),
                     on=group_cols,
                     how="left"
                 )
-                merged["Gross Value"] = merged["Gross Value"].round(2)
-                merged["Quantity"] = 1
+    
+                # Set quantity/rate/cost according to current rule
+                merged["Gross Value"]  = merged["Gross Value"].round(2)
+                merged["Quantity"]     = 1
                 merged["Rate Per Qty"] = merged["Gross Value"]
-                merged["Cost"] = merged["Gross Value"]
-
-                # <-- FIX: recalculate ITEM Tax Value based on summed Gross Value -->
+                merged["Cost"]         = merged["Gross Value"]
+    
+                # Recompute ITEM Tax Value by Document Location
                 tax_rate_map = {"TC000": 0.05, "OM000": 0.05, "KA000": 0.15, "UJ000": 0}
                 merged["ITEM Tax Value"] = merged.apply(
-                    lambda x: round(x["Gross Value"] * tax_rate_map.get(x["Document Location"], 0), 2),
+                    lambda x: round(float(x.get("Gross Value", 0)) * tax_rate_map.get(str(x.get("Document Location", "")).strip(), 0), 2),
                     axis=1
                 )
-
-                result_df = pd.concat([df_other, merged], ignore_index=True)[CLOUD_INVOICE_HEADER]
+    
+                # Recombine: non-AS + exempt-AS (untouched) + aggregated-AS
+                result_df = pd.concat([df_non_as, df_as_exempt, merged], ignore_index=True)
+            else:
+                # No rows to aggregate; just recombine others
+                result_df = pd.concat([df_non_as, df_as_exempt], ignore_index=True)
+    
+            # Restrict to expected output columns (drops helper like BillingPeriod if present)
+            result_df = result_df[CLOUD_INVOICE_HEADER]
     except Exception:
+        # Preserve original silent behavior
         pass
 
     return result_df
