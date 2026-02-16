@@ -143,6 +143,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         out_row["Mode Of Payment"] = row.get("ModeOfPayment", "")
         out_row["Status"] = "Unpaid"
         out_row["Credit Card Transaction No."] = ""
+        out_row["BillingPeriod"] = row.get("BillingPeriod", "")
         for field in CLOUD_INVOICE_HEADER[16:26]:
             out_row[field] = ""
         item_code = str(row.get("ITEMCode", "")).strip().lower()
@@ -613,7 +614,8 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
         except: out_row["Cost"] = cost
         out_rows.append(out_row)
 
-    result_df = pd.DataFrame(out_rows, columns=CLOUD_INVOICE_HEADER)
+    #result_df = pd.DataFrame(out_rows, columns=CLOUD_INVOICE_HEADER)
+    result_df = pd.DataFrame(out_rows)
 
     # AS-CNS aggregation
     # AS-CNS aggregation with BillingPeriod condition:
@@ -681,7 +683,7 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
     except Exception:
         # Preserve original silent behavior
         pass
-
+    result_df = result_df[CLOUD_INVOICE_HEADER]
     return result_df
 
 # === Versioning / Invoice Number Mapping ===
