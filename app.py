@@ -1839,7 +1839,10 @@ elif tool == "IBM Quotation":
                     data=result['excel_bytes'],
                     file_name="Styled_Quotation.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    
+                    on_click=lambda: (
+                            update_usage("IBM Automation", team)
+                            
+                        ),
                     
                 )
 
