@@ -536,6 +536,11 @@ def build_cloud_invoice_df(df: pd.DataFrame) -> pd.DataFrame:
                 manual_parts.append(f"{billing_start}-{billing_end}")
         
             out_row["ITEM Name"] = "-".join([p for p in manual_parts if p and p.lower() != "nan"])
+            out_row["ITEM Name"] = re.sub(r'\bManual\s*Debit\s*Memo\b', '', out_row["ITEM Name"], flags=re.IGNORECASE)
+            out_row["ITEM Name"] = re.sub(r'\bManual\s*Credit\s*Memo\b', '', out_row["ITEM Name"], flags=re.IGNORECASE)
+                # Normalize spaces and stray hyphens after removal
+            out_row["ITEM Name"] = re.sub(r'\s{2,}', ' ', out_row["ITEM Name"]).strip()
+            out_row["ITEM Name"] = out_row["ITEM Name"].strip('- ').strip()
         
         else:
             # --- Original behavior for non-manual rows ---
