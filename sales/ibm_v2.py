@@ -72,6 +72,13 @@ def check_bid_number_match(excel_file, pdf_bid_number):
 
 
 USD_TO_AED = 3.6725
+USD_TO_SAR = 3.75  # KSA
+
+def _usd_rate(country: str):
+    return USD_TO_SAR if (country and str(country).upper() == "KSA") else USD_TO_AED
+
+def _currency_label(country: str):
+    return "SAR" if (country and str(country).upper() == "KSA") else "AED"
 
 
 def estimate_line_count(text, max_chars_per_line=80):
@@ -186,6 +193,7 @@ def create_styled_excel_v2(
         ws[f"H{row}"].alignment = Alignment(horizontal="left", vertical="center")
 
     # --- Table Headers ---
+    curr = _currency_label(country)
     if country == "Qatar":
         headers = [
                    "Sl", "SKU", "Product Description", "Quantity", "Start Date", "End Date",
@@ -195,9 +203,10 @@ def create_styled_excel_v2(
         ws.column_dimensions[get_column_letter(11)].width = 25  # Column K (Partner Price in USD)
         ws.column_dimensions[get_column_letter(12)].width = 25  # Column L (for extra space)
     else:
+        # UAE and KSA: same layout with AED or SAR
         headers = [
             "Sl", "SKU", "Product Description", "Quantity", "Start Date", "End Date",
-            "Unit Price in AED", "Cost (USD)", "Total Price in AED", "Partner Discount", "Partner Price in AED"
+            f"Unit Price in {curr}", "Cost (USD)", f"Total Price in {curr}", "Partner Discount", f"Partner Price in {curr}"
         ]
 
     header_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
@@ -269,7 +278,7 @@ def create_styled_excel_v2(
             ws.cell(row=excel_row, column=9, value=cost).number_format = '"USD"#,##0.00'
             ws.cell(row=excel_row, column=9).font = Font(size=11, color="1F497D")
 
-            total_formula = f"=I{excel_row}*{USD_TO_AED}"
+            total_formula = f"=I{excel_row}*{_usd_rate(country)}"
             ws.cell(row=excel_row, column=10, value=total_formula)
             ws.cell(row=excel_row, column=10).font = Font(size=11, color="1F497D")
 
@@ -282,7 +291,7 @@ def create_styled_excel_v2(
             ws.cell(row=excel_row, column=12).font = Font(size=11, color="1F497D")
 
             for price_col in [8, 10, 11, 12]:
-                ws.cell(row=excel_row, column=price_col).number_format = '"AED"#,##0.00'
+                ws.cell(row=excel_row, column=price_col).number_format = f'"{_currency_label(country)}"#,##0.00'
             ws.cell(row=excel_row, column=9).number_format = '"USD"#,##0.00'
 
             for col in range(2, 2 + len(headers)):
@@ -341,7 +350,7 @@ def create_styled_excel_v2(
 
             total_formula = f"=SUM(J{data_start_row}:J{data_end_row})"
             ws[f"J{summary_row}"] = total_formula
-            ws[f"J{summary_row}"].number_format = '"AED"#,##0.00'
+            ws[f"J{summary_row}"].number_format = f'"{_currency_label(country)}"#,##0.00'
             ws[f"J{summary_row}"].font = Font(bold=True, color="1F497D")
             ws[f"J{summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
 
@@ -354,7 +363,7 @@ def create_styled_excel_v2(
 
             bp_total_formula = f"=SUM(L{data_start_row}:L{data_end_row})"
             ws[f"L{bp_summary_row}"] = bp_total_formula
-            ws[f"L{bp_summary_row}"].number_format = '"AED"#,##0.00'
+            ws[f"L{bp_summary_row}"].number_format = f'"{_currency_label(country)}"#,##0.00'
             ws[f"L{bp_summary_row}"].font = Font(bold=True, color="1F497D")
             ws[f"L{bp_summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
         else:

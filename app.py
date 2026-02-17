@@ -1792,7 +1792,7 @@ elif tool == "IBM Quotation":
     st.info("Upload an IBM quotation PDF and (optionally) an Excel file. The tool will auto-detect the template and use the best logic for each.")
 
     # Country selection
-    country = st.selectbox("Choose a country:", ["UAE", "Qatar"])
+    country = st.selectbox("Choose a country:", ["UAE", "Qatar", "KSA"])
 
     logo_path = "image.png"
     compliance_text = ""  # Add compliance text if needed
@@ -1839,12 +1839,10 @@ elif tool == "IBM Quotation":
                     data=result['excel_bytes'],
                     file_name="Styled_Quotation.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    on_click=lambda: (
-                            update_usage("IBM Automation ", team)
-                            
-                        ),
+                    
                     
                 )
+
 
 
 st.markdown("""

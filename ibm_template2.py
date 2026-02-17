@@ -39,8 +39,18 @@ logger.propagate = False
 # Use the same debug system as ibm.py
 debug_info = []
 
-# Constants
-USD_TO_AED = 3.6725  # Fixed conversion rate
+# Constants: conversion rate and currency by country
+USD_TO_AED = 3.6725  # UAE
+USD_TO_SAR = 3.75    # KSA
+# Qatar Template 2: keep USD (rate 1), same as Template 1 Qatar
+
+def _usd_to_local_rate(country: str):
+    c = (country or "").strip().upper()
+    if c == "KSA":
+        return USD_TO_SAR
+    if c == "QATAR":
+        return 1.0  # no conversion, keep USD
+    return USD_TO_AED
 
 def add_debug(message):
     """Add debug info to both in-memory list and log file"""
@@ -84,9 +94,6 @@ def save_debug_to_file():
     except Exception as e:
         logger.error(f"Failed to save debug log: {e}")
 
-# Constants
-USD_TO_AED = 3.6725
-
 def parse_number(value: str):
     """Parse numbers with various formats (including European: 107.856,00 or 1.550)"""
     try:
@@ -122,12 +129,14 @@ def parse_quantity(value: str):
         return int(num)
     return None
 
-def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
+def extract_ibm_template2_from_pdf(file_like, country: str = "UAE") -> tuple[list, dict]:
     """
     Extract data from IBM Template 2 (Software as a Service / Subscription format)
+    country: UAE, Qatar -> AED (3.6725); KSA -> SAR (3.75)
     Returns: (extracted_data, header_info)
     """
     clear_debug()
+    usd_to_local = _usd_to_local_rate(country)
     
     try:
         add_debug("="*80)
@@ -717,7 +726,7 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                     add_debug("✗ No line-item pricing found - leaving prices blank")
                 
                 # Convert USD to AED - Total Price first, then Unit Price from Total
-                bid_total_aed = round(bid_total_price * USD_TO_AED, 2) if bid_total_price else None
+                bid_total_aed = round(bid_total_price * usd_to_local, 2) if bid_total_price else None
                 bid_unit_aed = round(bid_total_aed / qty, 2) if bid_total_aed and qty > 0 else bid_total_aed
                 
                 # Calculate Partner Price in AED using Channel Discount
@@ -746,7 +755,7 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                     add_debug(f"  Partner Price: ROUNDUP({partner_unit_discounted}, 2) = {partner_unit_rounded}")
                     add_debug(f"  Partner Price: {partner_unit_rounded} × {qty} = AED {partner_price_aed}")
                 
-                add_debug(f"\n[CURRENCY CONVERSION] USD to AED (rate: {USD_TO_AED}):")
+                add_debug(f"\n[CURRENCY CONVERSION] USD to local (rate: {usd_to_local}):")
                 add_debug(f"  Total: ${bid_total_price} → AED {bid_total_aed}")
                 add_debug(f"  Unit: AED {bid_total_aed} ÷ {qty} → AED {bid_unit_aed}")
                 add_debug(f"  Partner: AED {partner_price_aed} (with {channel_discount_pct*100}% discount)")
@@ -1059,7 +1068,7 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                                     total_price_usd = _parse_price_usd(price_candidates[3])
                                     if has_partner_bid_extended_monthly and len(price_candidates) >= 6:
                                         partner_total_usd = _parse_price_usd(price_candidates[5])
-                                        partner_price_aed_extracted = partner_total_usd * USD_TO_AED
+                                        partner_price_aed_extracted = partner_total_usd * usd_to_local
                                         add_debug(f"    ✓ Partner Extended Monthly Rate detected: USD {partner_total_usd:,.2f}")
                                     add_debug(f"    ✓ Using monthly-rate layout: Unit USD {unit_price_usd:,.2f}, Total USD {total_price_usd:,.2f}")
                                 else:
@@ -1076,8 +1085,8 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                                 add_debug(f"    ✓ Extracted: Total USD {total_price_usd:,.2f}, Unit USD {unit_price_usd:,.2f}")
                                 
                                 # Convert USD to AED
-                                unit_price_aed = unit_price_usd * USD_TO_AED
-                                total_price_aed = total_price_usd * USD_TO_AED
+                                unit_price_aed = unit_price_usd * usd_to_local
+                                total_price_aed = total_price_usd * usd_to_local
                                 
                                 add_debug(f"  ✓ Prices found: USD {unit_price_usd:,.2f} → AED {unit_price_aed:,.2f}")
                                 add_debug(f"  ✓ Total: USD {total_price_usd:,.2f} → AED {total_price_aed:,.2f}")

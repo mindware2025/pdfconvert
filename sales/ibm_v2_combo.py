@@ -209,7 +209,7 @@ def process_ibm_combo(pdf_file, excel_file=None, master_csv=None, country="UAE")
         elif template in ('2', 'template2'):
             # Template 2: PDF-to-Excel logic (ibm_template2.py)
             try:
-                data, header_info = extract_ibm_template2_from_pdf(pdf_file)
+                data, header_info = extract_ibm_template2_from_pdf(pdf_file, country=country)
                 pdf_file.seek(0)
                 ibm_terms_text = extract_ibm_terms_text(pdf_file)
                 result['header_info'] = header_info
@@ -233,7 +233,8 @@ def process_ibm_combo(pdf_file, excel_file=None, master_csv=None, country="UAE")
                     logo_path="image.png",
                     output=output,
                     compliance_text="",
-                    ibm_terms_text=ibm_terms_text
+                    ibm_terms_text=ibm_terms_text,
+                    country=country
                 )
                 result['excel_bytes'] = output.getvalue()
             except Exception as e:

@@ -1324,12 +1324,24 @@ def create_styled_excel_template2(
     logo_path: str,
     output: BytesIO,
     compliance_text: str,
-    ibm_terms_text: str
+    ibm_terms_text: str,
+    country: str = "UAE"
 ):
     """
     Template 2 Excel generation - Clean 8-column layout ONLY
     data rows: [sku, desc, qty, duration, start_date, end_date, bid_unit_aed, bid_total_aed, partner_price_aed]
+    country: UAE -> AED (3.6725); Qatar -> USD (1.0, same as Template 1); KSA -> SAR (3.75)
     """
+    c = (country or "").strip().upper()
+    if c == "KSA":
+        currency_label = "SAR"
+        usd_to_local = 3.75
+    elif c == "QATAR":
+        currency_label = "USD"
+        usd_to_local = 1.0
+    else:
+        currency_label = "AED"
+        usd_to_local = 3.6725
     add_debug(f"[TEMPLATE2 EXCEL] Creating Template 2 Excel with {len(data)} rows - 8 COLUMNS ONLY")
     print(f"🔥 TEMPLATE 2 FUNCTION CALLED! Creating {len(data)} rows with 8 columns only!")
     
@@ -1412,16 +1424,16 @@ def create_styled_excel_template2(
     
     # --- Template 2 Table Headers (8 columns ONLY) ---
     headers = [
-        "SI",                      # Column B (2)
-        "SKU",                     # Column C (3)
-        "Product Description",     # Column D (4)
-        "Quantity",                # Column E (5)
-        "Duration",                # Column F (6)
-        "Unit Price\nin AED",      # Column G (7)
-        "cost",                    # Column H (8)
-        "Total Price\nin AED",     # Column I (9)
-        "Partner disc",            # Column J (10)
-        "Partner Price\nin AED"    # Column K (11)
+        "SI",                          # Column B (2)
+        "SKU",                         # Column C (3)
+        "Product Description",         # Column D (4)
+        "Quantity",                    # Column E (5)
+        "Duration",                    # Column F (6)
+        f"Unit Price\nin {currency_label}",   # Column G (7)
+        "cost",                        # Column H (8)
+        f"Total Price\nin {currency_label}",  # Column I (9)
+        "Partner disc",                # Column J (10)
+        f"Partner Price\nin {currency_label}" # Column K (11)
     ]
     header_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
     for col, header in enumerate(headers, start=2):
@@ -1453,7 +1465,7 @@ def create_styled_excel_template2(
         bid_total_aed_extracted = row[7] if len(row) > 7 else 0  # Already converted AED amount
         
         # Convert back to USD to use in the H formula
-        extracted_total_usd = round(bid_total_aed_extracted / 3.6725, 2) if bid_total_aed_extracted else 0
+        extracted_total_usd = round(bid_total_aed_extracted / usd_to_local, 2) if bid_total_aed_extracted else 0
         
         # Fill basic data in columns C, D, E, F (no formulas)
         basic_data = [sku, desc, qty, duration]
@@ -1495,8 +1507,8 @@ def create_styled_excel_template2(
         
         ws.cell(row=excel_row, column=7, value=unit_price_formula)  # Column G
         
-        # I (Total Price in AED) = Cost in USD * 3.6725
-        total_price_aed_formula = f"=H{excel_row}*3.6725"
+        # I (Total Price in local currency) = Cost in USD * rate
+        total_price_aed_formula = f"=H{excel_row}*{usd_to_local}"
         ws.cell(row=excel_row, column=9, value=total_price_aed_formula)  # Column I
         add_debug(f"[TEMPLATE2 FORMULA] Total Price in AED: {total_price_aed_formula}")
         
@@ -1518,11 +1530,11 @@ def create_styled_excel_template2(
             cell = ws.cell(row=excel_row, column=col)
             cell.font = Font(size=11, color="1F497D")
             cell.alignment = Alignment(horizontal="center", vertical="center")
-            # Column H (cost) shows USD, all others show AED
+            # Column H (cost) shows USD, all others show local currency (AED/SAR)
             if col == 8:  # Column H is cost column
                 cell.number_format = '"USD"#,##0.00'
             else:
-                cell.number_format = '"AED"#,##0.00'
+                cell.number_format = f'"{currency_label}"#,##0.00'
         
         # Apply yellow fill to all data columns (B through K)
         for col in range(2, 12):
@@ -1549,7 +1561,7 @@ def create_styled_excel_template2(
     total_formula = f"=SUM(I{data_start_row}:I{data_end_row})"
     
     ws[f"I{summary_row}"] = total_formula
-    ws[f"I{summary_row}"].number_format = '"AED"#,##0.00'
+    ws[f"I{summary_row}"].number_format = f'"{currency_label}"#,##0.00'
     ws[f"I{summary_row}"].font = Font(bold=True, color="1F497D")
     ws[f"I{summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
     
@@ -1562,7 +1574,7 @@ def create_styled_excel_template2(
     
     bp_total_formula = f"=SUM(K{data_start_row}:K{data_end_row})"
     ws[f"K{bp_summary_row}"] = bp_total_formula
-    ws[f"K{bp_summary_row}"].number_format = '"AED"#,##0.00'
+    ws[f"K{bp_summary_row}"].number_format = f'"{currency_label}"#,##0.00'
     ws[f"K{bp_summary_row}"].font = Font(bold=True, color="1F497D")
     ws[f"K{bp_summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
     
@@ -1570,7 +1582,8 @@ def create_styled_excel_template2(
     
     # --- Terms Section ---
     total_price_sum = sum(((row[7] if len(row) > 7 and row[7] else 0) for row in data))  # Use bid_total_aed
-    terms = get_terms_section(header_info, total_price_sum)
+    terms_header = {**header_info, "country": country or "UAE"}
+    terms = get_terms_section(terms_header, total_price_sum)
     
     def estimate_line_count(text, max_chars_per_line=80):
         lines = text.split('\n')
