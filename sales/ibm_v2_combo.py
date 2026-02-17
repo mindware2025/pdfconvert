@@ -4,6 +4,7 @@ Combo logic for IBM Excel-to-Excel (Template 1) and PDF-to-Excel (Template 2) in
 - Template 2: PDF-to-Excel logic from ibm.py
 """
 
+from extract_ibm_terms import extract_ibm_terms_text
 from sales.ibm_v2 import (
     compare_mep_and_cost,
     check_bid_number_match,
@@ -17,7 +18,6 @@ from ibm import (
     extract_last_page_text
 )
 from ibm_template2 import extract_ibm_template2_from_pdf
-from extract_ibm_terms import extract_ibm_terms_text
 from template_detector import detect_ibm_template
 from io import BytesIO
 import logging

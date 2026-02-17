@@ -295,7 +295,9 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
     
     # PRE-SCAN: Detect if this is a multi-row case (e.g., rows 001-006)
     add_debug("\n[PRE-SCAN] Checking for multi-row table case...")
-    table_row_pattern = re.compile(r'^00[1-9]$|^0[1-9][0-9]$')
+    # Match row markers even when the PDF extractor puts the whole row on one line
+    # Examples it should match: "001", "001 170 1-12 ...", "004 50 1-36 ..."
+    table_row_pattern = re.compile(r'^(0\d{2})\b')
     table_row_count = 0
     for line in lines:
         if table_row_pattern.match(line.strip()):
@@ -790,9 +792,11 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
             line_stripped = line.strip()
             
             # Check if this line is a table row marker
-            if table_row_pattern.match(line_stripped):
+            row_match = table_row_pattern.match(line_stripped)
+            if row_match:
                 try:
-                    add_debug(f"\n[STRATEGY 2] Processing table row: {line_stripped}")
+                    row_marker = row_match.group(1)
+                    add_debug(f"\n[STRATEGY 2] Processing table row: {row_marker} (raw: {line_stripped})")
                     
                     # Check if "Quantity" column exists by searching backwards for column headers
                     has_quantity_column = False
@@ -803,25 +807,40 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                             add_debug(f"  ℹ️ Quantity column detected in header (line {j})")
                             break
                     
-                    # Extract quantity from next line (only if quantity column exists)
+                    # Extract quantity (prefer from the same row line, fallback to next line)
                     qty = 1
-                    if has_quantity_column and i + 1 < len(lines):
-                        qty_line = lines[i + 1].strip()
-                        add_debug(f"  Qty line: '{qty_line}'")
-                        
-                        # Use parse_quantity to handle all formats, but only accept integers
-                        parsed_qty = parse_quantity(qty_line)
-                        if parsed_qty is not None:
-                            qty = parsed_qty
-                            add_debug(f"  ✓ Quantity parsed: {qty}")
-                        else:
-                            add_debug(f"  ⚠️ Invalid quantity format '{qty_line}' - using default qty=1")
+                    if has_quantity_column:
+                        # Try to parse quantity from the row itself when values are on the same line
+                        tokens = re.split(r'\s+', line_stripped)
+                        parsed_from_row = None
+                        for tok in tokens[1:]:
+                            parsed_qty = parse_quantity(tok)
+                            if parsed_qty is not None:
+                                parsed_from_row = parsed_qty
+                                break
+                        if parsed_from_row is not None:
+                            qty = parsed_from_row
+                            add_debug(f"  ✓ Quantity parsed from row line: {qty}")
+                        elif i + 1 < len(lines):
+                            qty_line = lines[i + 1].strip()
+                            add_debug(f"  Qty line: '{qty_line}'")
+                            
+                            parsed_qty = parse_quantity(qty_line)
+                            if parsed_qty is not None:
+                                qty = parsed_qty
+                                add_debug(f"  ✓ Quantity parsed: {qty}")
+                            else:
+                                add_debug(f"  ⚠️ Invalid quantity format '{qty_line}' - using default qty=1")
                     elif not has_quantity_column:
                         add_debug(f"  ⚠️ No Quantity column found - using default qty=1")
                     
                     # Extract duration (e.g., "1-12" or "13-24")
                     duration = "1-12"
-                    if i + 2 < len(lines):
+                    duration_match = re.search(r'(\d+)-(\d+)', line_stripped)
+                    if duration_match:
+                        duration = f"{duration_match.group(1)}-{duration_match.group(2)}"
+                        add_debug(f"  ✓ Duration extracted from row line: {duration}")
+                    elif i + 2 < len(lines):
                         duration_line = lines[i + 2].strip()
                         add_debug(f"  Duration line: '{duration_line}'")
                         duration_match = re.search(r'(\d+)-(\d+)', duration_line)
@@ -833,7 +852,7 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                     sku_table = None
                     corresponding_part = None
                     overage_part_line = None
-                    window = 40  # a bit wider to be safe with IBM layouts
+                    window = 120  # wider to support multi-section pages (e.g., "Future Offer" blocks)
                     
                     # Strict label check at start-of-line (avoid matching "Corresponding Subscription Part#")
                     def _starts_with_label(s: str, label: str) -> bool:
@@ -968,23 +987,30 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                     add_debug(f"  ✓ Using cached description for {sku_table}")
                     
                     # Extract pricing using SAME LOGIC as Strategy 1
-                    # First, check if "Bid Total Commit Value" column exists in the header
+                    # First, check which table layout we're in by searching backwards for column headers
                     has_bid_total_commit = False
+                    has_bid_extended_monthly = False
+                    has_partner_bid_extended_monthly = False
                     for j in range(i - 1, max(0, i - 100), -1):  # Extended from 30 to 50 lines
                         header_line = lines[j].lower()
                         if 'bid total commit value' in header_line or 'total commit value' in header_line:
                             has_bid_total_commit = True
                             add_debug(f"  ℹ️ 'Bid Total Commit Value' column detected in header (line {j})")
                             break
+                        if 'bid extended monthly rate' in header_line:
+                            has_bid_extended_monthly = True
+                        if 'partner bid extended monthly rate' in header_line:
+                            has_partner_bid_extended_monthly = True
                     
                     unit_price_aed = 0
                     total_price_aed = 0
+                    partner_price_aed_extracted = None
                     
                     add_debug(f"  [PRICING] Searching lines {i+1} to {min(i+15, len(lines))} for prices (same as Strategy 1):")
                     
-                    # Collect all price values from lines after the row marker
+                    # Collect all price values from the row line + lines after the row marker
                     all_prices = []
-                    for j in range(i + 1, min(i + 15, len(lines))):
+                    for j in range(i, min(i + 15, len(lines))):
                         price_line = lines[j].strip()
                         # Look for European formatted numbers (including 0,00 and 864.960,00)
                         found_prices = re.findall(r'\b\d{1,3}(?:[.,]\d{3})*[.,]\d{2}(?:\s*USD)?\b', price_line)
@@ -1004,7 +1030,6 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                                 add_debug(f"    Price candidates (non-zero): {price_candidates}")
                                 
                                 # If "Bid Total Commit Value" column exists, use it (4th position)
-                                # Otherwise use "Bid Unit Price" (which is typically 3rd position)
                                 if has_bid_total_commit:
                                     # Use 4th position (index 3) for "Bid Total Commit Value"
                                     if len(price_candidates) >= 4:
@@ -1016,34 +1041,37 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                                     else:
                                         total_str = price_candidates[0]
                                         add_debug(f"    Selected only available: {total_str}")
-                                else:
-                                    # No "Bid Total Commit Value" column - use "Bid Unit Price" instead (3rd position)
-                                    # Set total_price_aed = 0 and use unit_price as the displayed unit price
-                                    if len(price_candidates) >= 3:
-                                        total_str = price_candidates[2]
-                                        add_debug(f"    Selected position 3 (index 2): {total_str} [Bid Unit Price - no Total Commit Value column]")
-                                    elif len(price_candidates) >= 2:
-                                        total_str = price_candidates[1]
-                                        add_debug(f"    Selected position 2: {total_str}")
-                                    else:
-                                        total_str = price_candidates[0]
-                                        add_debug(f"    Selected only available: {total_str}")
                                 
-                                # Parse European format
-                                if ',' in total_str and total_str.count(',') == 1:
-                                    clean_str = total_str.replace('.', '').replace(',', '.')
-                                else:
-                                    clean_str = total_str.replace(',', '')
+                                def _parse_price_usd(s: str):
+                                    v = parse_number(s)
+                                    if v is None:
+                                        raise ValueError(f"Could not parse price '{s}'")
+                                    return float(v)
                                 
                                 if has_bid_total_commit:
                                     # Normal case: total_str is the total price
-                                    total_price_usd = float(clean_str)
+                                    total_price_usd = _parse_price_usd(total_str)
                                     unit_price_usd = total_price_usd / qty if qty > 0 else total_price_usd
+                                elif has_bid_extended_monthly and len(price_candidates) >= 4:
+                                    # "Future Offer" / monthly rate table:
+                                    # ... Unit Monthly Rate, Extended Monthly Rate, Bid Unit Monthly Rate, Bid Extended Monthly Rate, Partner Bid Unit, Partner Bid Extended ...
+                                    unit_price_usd = _parse_price_usd(price_candidates[2])
+                                    total_price_usd = _parse_price_usd(price_candidates[3])
+                                    if has_partner_bid_extended_monthly and len(price_candidates) >= 6:
+                                        partner_total_usd = _parse_price_usd(price_candidates[5])
+                                        partner_price_aed_extracted = partner_total_usd * USD_TO_AED
+                                        add_debug(f"    ✓ Partner Extended Monthly Rate detected: USD {partner_total_usd:,.2f}")
+                                    add_debug(f"    ✓ Using monthly-rate layout: Unit USD {unit_price_usd:,.2f}, Total USD {total_price_usd:,.2f}")
                                 else:
-                                    # Special case: total_str is the unit price, set total to 0
-                                    unit_price_usd = float(clean_str)
-                                    total_price_usd = 0  # No "Bid Total Commit Value" column
-                                    add_debug(f"    ⚠️ No 'Bid Total Commit Value' column - using Bid Unit Price as Unit Price, setting Total=0")
+                                    # Fallback: use "Bid Unit Price" as unit, and keep total if we can infer it
+                                    if len(price_candidates) >= 3:
+                                        unit_price_usd = _parse_price_usd(price_candidates[2])
+                                        add_debug(f"    Selected position 3 (index 2): {price_candidates[2]} [Unit Price fallback]")
+                                    else:
+                                        unit_price_usd = _parse_price_usd(price_candidates[0])
+                                        add_debug(f"    Selected only available: {price_candidates[0]} [Unit Price fallback]")
+                                    total_price_usd = unit_price_usd * qty if qty > 0 else unit_price_usd
+                                    add_debug(f"    ⚠️ No total-commit column found - inferring Total = Unit × Qty")
                                 
                                 add_debug(f"    ✓ Extracted: Total USD {total_price_usd:,.2f}, Unit USD {unit_price_usd:,.2f}")
                                 
@@ -1077,7 +1105,10 @@ def extract_ibm_template2_from_pdf(file_like) -> tuple[list, dict]:
                     
                     # Add extracted row to results - use same format as Strategy 1
                     # Format: [sku, desc, qty, duration, start_date, end_date, unit_price_aed, total_price_aed, partner_price_aed]
-                    partner_price_aed = round(total_price_aed * (1 - 0.08), 2)  # 8% discount
+                    if partner_price_aed_extracted is not None:
+                        partner_price_aed = round(partner_price_aed_extracted, 2)
+                    else:
+                        partner_price_aed = round(total_price_aed * (1 - global_channel_discount), 2)
                     row_data = [
                         sku_table,
                         desc_table,
