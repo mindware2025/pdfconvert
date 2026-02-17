@@ -71,7 +71,7 @@ keyword_map = {
     ("planner", "project plan","MS-CNS"): "MS-CNS",
     ("power automate premium","MS-CNS"): "MS-CNS",
     ("visio","MS-CNS"): "MS-CNS",
-    ("Microsoft Entra ID Governance (Education Faculty Pricing)","MS-CNS"): "MS-CNS",
+    ("Microsoft Entra ID Governance (Education Faculty Pricing)","Power Apps Premium (Non-Profit Pricing)","MS-CNS"): "MS-CNS",
     ("MSRI-CNS",): "MSRI-CNS",
     ("dynamics 365","MS-CNS"): "MS-CNS",
     ("AWS Account","AWS"): "AWS-UTILITIES-CNS",
