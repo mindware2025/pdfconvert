@@ -325,14 +325,17 @@ def show_login():  # <-- right-side login
         st.markdown('<div class="mw-ramadan">🌙 Ramadan Kareem • Blessed Ramadan</div>', unsafe_allow_html=True)
         st.markdown('<div class="mw-subtitle">Powered Productivity Tools</div>', unsafe_allow_html=True)
 
-        username = st.text_input("👤 Username", key="login_user", placeholder="Enter your username…")
-        password = st.text_input("🔐 Password", type="password", key="login_pass", placeholder="Enter your password…")
+        with st.form("login_form", clear_on_submit=False):
+            username = st.text_input("👤 Username", key="login_user", placeholder="Enter your username…")
+            password = st.text_input("🔐 Password", type="password", key="login_pass", placeholder="Enter your password…")
+            submitted = st.form_submit_button("Login", type="primary")
 
-        if st.button("Login", key="login_btn", use_container_width=True):
+        if submitted:
             if username == CORRECT_USERNAME and password == CORRECT_PASSWORD:
                 st.session_state.login_state = "success"
             else:
                 st.session_state.login_state = "fail"
+            st.rerun()
 
         st.markdown('<div class="mw-footer">Made with ❤️ by Mindware • © 2025</div>', unsafe_allow_html=True)
         st.markdown("</div></div>", unsafe_allow_html=True)
