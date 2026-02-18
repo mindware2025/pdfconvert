@@ -218,11 +218,11 @@ def show_login():  # <-- right-side login
         justify-content: flex-end;
     }}
 
-    /* Glass login card */
+    /* Glass login card - subtle Ramadan accent */
     .mw-card {{
         width: min(430px, 92%);
         background: rgba(255,255,255,0.10);
-        border: 1px solid rgba(255,255,255,0.22);
+        border: 1px solid rgba(245,215,142,0.35);
         border-radius: 18px;
         padding: 28px 28px 18px 28px;
         backdrop-filter: blur(18px) saturate(170%);
@@ -246,6 +246,17 @@ def show_login():  # <-- right-side login
         margin: 0 0 18px 0;
         font-weight: 500;
         font-size: 13.5px;
+    }}
+
+    /* Ramadan greeting */
+    .mw-ramadan {{
+        text-align: center;
+        color: #f5d78e;
+        font-size: 15px;
+        font-weight: 600;
+        margin: 0 0 8px 0;
+        letter-spacing: 0.5px;
+        text-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }}
 
     /* Labels */
@@ -311,6 +322,7 @@ def show_login():  # <-- right-side login
     with right:
         
         st.markdown('<div class="mw-title">Mindbot</div>', unsafe_allow_html=True)
+        st.markdown('<div class="mw-ramadan">🌙 Ramadan Kareem • Blessed Ramadan</div>', unsafe_allow_html=True)
         st.markdown('<div class="mw-subtitle">Powered Productivity Tools</div>', unsafe_allow_html=True)
 
         username = st.text_input("👤 Username", key="login_user", placeholder="Enter your username…")
