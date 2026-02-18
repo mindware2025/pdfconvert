@@ -18,36 +18,69 @@ import logging
 from pathlib import Path
 
 # Configure MIBB-specific logging
-MIBB_LOG_DIR = Path("mibb_logs")
-MIBB_LOG_DIR.mkdir(exist_ok=True)
+# MIBB_LOG_DIR = Path("mibb_logs")
+# MIBB_LOG_DIR.mkdir(exist_ok=True)
 
-# Create logger for MIBB extraction
-mibb_logger = logging.getLogger('mibb_extraction')
-mibb_logger.setLevel(logging.DEBUG)
+# # Create logger for MIBB extraction
+# mibb_logger = logging.getLogger('mibb_extraction')
+# mibb_logger.setLevel(logging.DEBUG)
 
-# Remove existing handlers to avoid duplicates
-for handler in mibb_logger.handlers[:]:
-    mibb_logger.removeHandler(handler)
+# # Remove existing handlers to avoid duplicates
+# for handler in mibb_logger.handlers[:]:
+#     mibb_logger.removeHandler(handler)
 
-# Create file handler with timestamp
-log_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-log_file_path = MIBB_LOG_DIR / f'mibb_extraction_{log_timestamp}.log'
-file_handler = logging.FileHandler(log_file_path, mode='w', encoding='utf-8')
-file_handler.setLevel(logging.DEBUG)
+# # Create file handler with timestamp
+# log_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+# log_file_path = MIBB_LOG_DIR / f'mibb_extraction_{log_timestamp}.log'
+# file_handler = logging.FileHandler(log_file_path, mode='w', encoding='utf-8')
+# file_handler.setLevel(logging.DEBUG)
 
-# Create formatter
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-file_handler.setFormatter(formatter)
+# # Create formatter
+# formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+# file_handler.setFormatter(formatter)
 
-# Add handler to logger
-mibb_logger.addHandler(file_handler)
-mibb_logger.propagate = False
+# # Add handler to logger
+# mibb_logger.addHandler(file_handler)
+# mibb_logger.propagate = False
+
+# def log_debug(message):
+#     """Helper function to log debug messages"""
+#     mibb_logger.debug(message)
+#     print(f"[MIBB DEBUG] {message}")  # Also print to console for immediate feedback
 
 def log_debug(message):
-    """Helper function to log debug messages"""
-    mibb_logger.debug(message)
-    print(f"[MIBB DEBUG] {message}")  # Also print to console for immediate feedback
+    # logging disabled
+    return
 
+def correct_mibb_descriptions(extracted_data, master_map=None):
+    """
+    MIBB rows: [part_number, description, start_date, end_date, qty, price_usd]
+
+    Policy:
+    - If master_map uploaded:
+        - If SKU found: use master description
+        - If SKU not found: blank description
+    - If master_map NOT uploaded:
+        - blank description for all rows
+    """
+    corrected = []
+    use_master = bool(master_map)
+
+    for row in extracted_data:
+        # make sure description column exists
+        if len(row) < 2:
+            row = row + [""] * (2 - len(row))
+
+        part = str(row[0]).strip().upper()
+
+        if use_master:
+            row[1] = master_map.get(part, "")   # ✅ blank if not found
+        else:
+            row[1] = ""                         # ✅ blank if no pricelist
+
+        corrected.append(row)
+
+    return corrected
 
 def parse_euro_number(value: str):
     """Parse EU-formatted numbers like '733,00' -> 733.00"""
@@ -73,15 +106,12 @@ def extract_mibb_header_from_pdf(file_like) -> dict:
     Uses same logic as IBM header extraction.
     Returns: dict with header fields
     """
-    log_debug("="*80)
-    log_debug("MIBB HEADER EXTRACTION STARTED")
-    log_debug("="*80)
+
     
     try:
         doc = fitz.open(stream=file_like.read(), filetype="pdf")
-        log_debug(f"PDF opened successfully: {len(doc)} pages")
+     
     except Exception as e:
-        log_debug(f"ERROR opening PDF: {e}")
         return {}
     
     # Collect lines
@@ -93,10 +123,7 @@ def extract_mibb_header_from_pdf(file_like) -> dict:
             if l and l.strip():
                 lines.append(l.rstrip())
                 page_lines.append(l.rstrip())
-        log_debug(f"Page {page_num + 1}: Extracted {len(page_lines)} lines")
-    
-    log_debug(f"Total lines extracted: {len(lines)}")
-    log_debug("\nFirst 50 lines of PDF:")
+        
     for idx, line in enumerate(lines[:50]):
         log_debug(f"  Line {idx:3d}: {line}")
     
@@ -190,14 +217,14 @@ def extract_mibb_header_from_pdf(file_like) -> dict:
 
 def extract_mibb_table_from_pdf(file_like) -> list:
     """
-    Extract table data from page 2 of MIBB quotation PDF.
-    Looks for "Subscription Quotation - Parts Information" table.
-    Returns: list of rows, each row is [Part Number, Description, Start Date, End Date, QTY, Price USD]
+    Extract table data from MIBB quotation PDF.
+    Returns: list of rows [Part Number, Description, Start Date, End Date, QTY, Price USD]
+    Handles tables spanning multiple pages (e.g., items continue on page 3). [1](https://midisgroup1-my.sharepoint.com/personal/z_mama_mindware_net/Documents/Microsoft%20Copilot%20Chat%20Files/WTA%20Ooredoo.pdf)
     """
-    log_debug("="*80)
+    log_debug("=" * 80)
     log_debug("MIBB TABLE EXTRACTION STARTED")
-    log_debug("="*80)
-    
+    log_debug("=" * 80)
+
     try:
         doc = fitz.open(stream=file_like.read(), filetype="pdf")
         log_debug(f"PDF opened for table extraction: {len(doc)} pages")
@@ -209,27 +236,13 @@ def extract_mibb_table_from_pdf(file_like) -> list:
         log_debug("ERROR: PDF has 0 pages")
         return []
 
-    # ------------------------------------------------------------------
-    # Page selection: don't assume the table is on page 2.
-    # We scan all pages for strong signals, then fall back gracefully.
-    # ------------------------------------------------------------------
-    marker_patterns = [
-        "parts information",
-        "subscription quotation",
-        "quotation - parts information",
-    ]
-    header_signals = [
-        "part number",
-        "coverage start",
-        "coverage end",
-        "quantity",
-        "qty",
-        "bid ext",
-        "bid extended",
-    ]
+    # -----------------------------
+    # Find candidate pages
+    # -----------------------------
+    marker_patterns = ["parts information", "subscription quotation", "quotation - parts information"]
+    header_signals = ["part number", "coverage start", "coverage end", "quantity", "qty", "bid ext", "bid extended"]
 
-    candidate_pages: list[tuple[int, int, int]] = []
-    # (page_index, marker_score, header_score)
+    candidate_pages: list[tuple[int, int, int]] = []  # (page_index, marker_score, header_score)
 
     for page_idx in range(len(doc)):
         try:
@@ -242,383 +255,222 @@ def extract_mibb_table_from_pdf(file_like) -> list:
         marker_score = sum(1 for p in marker_patterns if p in text_lower)
         header_score = sum(1 for s in header_signals if s in text_lower)
 
-        # Only consider pages with at least some evidence.
-        if marker_score > 0 or header_score >= 2:
+        if marker_score > 0 or header_score >= 4:
             candidate_pages.append((page_idx, marker_score, header_score))
-            log_debug(
-                f"[PAGE SCAN] Candidate page {page_idx+1}: marker_score={marker_score}, header_score={header_score}"
-            )
+            log_debug(f"[PAGE SCAN] Candidate page {page_idx+1}: marker_score={marker_score}, header_score={header_score}")
 
     if candidate_pages:
-        # Prefer higher marker_score, then header_score, then earlier page
         candidate_pages.sort(key=lambda t: (-t[1], -t[2], t[0]))
-        page_index, marker_score, header_score = candidate_pages[0]
-        log_debug(
-            f"[PAGE SELECT] Using page {page_index+1} (marker_score={marker_score}, header_score={header_score})"
-        )
-        page = doc[page_index]
+        pages_to_process = [doc[p[0]] for p in candidate_pages]
+        log_debug(f"[PAGE SELECT] Will process pages: {[p[0] + 1 for p in candidate_pages]}")
     else:
-        # Fallback to page 2 if present, else page 1
-        page_index = 1 if len(doc) >= 2 else 0
-        log_debug(
-            f"[PAGE SELECT] No candidates found; falling back to page {page_index+1}"
-        )
-        page = doc[page_index]
+        # fallback if scan fails
+        fallback_idx = 1 if len(doc) >= 2 else 0
+        pages_to_process = [doc[fallback_idx]]
+        log_debug(f"[PAGE SELECT] No candidates found; falling back to page {fallback_idx+1}")
+
+    # -----------------------------
+    # Extract from each page and combine
+    # -----------------------------
+    all_extracted: list[list] = []
     
-    # Try to extract tables using PyMuPDF's table detection
-    log_debug(f"\n[STRATEGY 1] Attempting PyMuPDF table detection on page {page_index+1}...")
-    try:
-        tables = page.find_tables()
-        log_debug(f"Found {len(tables)} table(s) using PyMuPDF")
-        
-        if tables:
-            # Use the first table found (should be Parts Information table)
-            table = tables[0]
-            rows = table.extract()
-            log_debug(f"Table extracted: {len(rows)} rows found")
+
+    for page in pages_to_process:
+        page_no = page.number + 1
+        log_debug(f"\n==================== PROCESSING PAGE {page_no} ====================")
+
+        extracted_data: list[list] = []
+
+        # -------------------------
+        # STRATEGY 1: Table detection (preferred)
+        # -------------------------
+        try:
+            log_debug(f"[STRATEGY 1] Table detection on page {page_no}...")
+            tf = page.find_tables()
+            tables = getattr(tf, "tables", [])
+            log_debug(f"Found {len(tables)} table(s) using PyMuPDF")
+
+            if tables:
+                # ✅ Pick ONLY the "Subscription Quotation - Parts Information" table
+                best_rows = None
+                best_score = -1
             
-            if len(rows) < 2:  # Need at least header + 1 data row
-                log_debug("WARNING: Table has less than 2 rows, falling back to text extraction")
-                raise Exception("Insufficient rows")
+                for t_idx, t in enumerate(tables):
+                    r = t.extract()
+                    if not r or len(r) < 2:
+                        continue
             
-            log_debug(f"\nHeader row: {rows[0]}")
+                    header = r[0]
+                    header_text = " ".join(str(x).upper() for x in header if x)
             
-            # Find column indices
-            header_row = rows[0]
-            part_num_col = None
-            desc_col = None
-            start_date_col = None
-            end_date_col = None
-            qty_col = None
-            bid_ext_svp_col = None
+                    # Score based on Parts Information signals
+                    score = 0
+                    if "COVERAGE START" in header_text: score += 3
+                    if "COVERAGE END" in header_text: score += 3
+                    if "TRANSACTION TYPE" in header_text: score += 2
+                    if "BID EXT SVP" in header_text or "BID EXTENDED" in header_text: score += 3
+                    if "DISCOUNT%" in header_text: score += 1
+                    if "ENTITLED" in header_text: score += 1
             
-            log_debug("\nIdentifying column indices:")
-            for idx, header in enumerate(header_row):
-                header_upper = str(header).upper() if header else ""
-                log_debug(f"  Column {idx}: '{header}'")
-                if "PART NUMBER" in header_upper or "PART#" in header_upper:
-                    part_num_col = idx
-                    log_debug(f"    -> Part Number column: {idx}")
-                elif "DESCRIPTION" in header_upper:
-                    desc_col = idx
-                    log_debug(f"    -> Description column: {idx}")
-                elif "COVERAGE START" in header_upper or ("START" in header_upper and "DATE" in header_upper):
-                    start_date_col = idx
-                    log_debug(f"    -> Start Date column: {idx}")
-                elif "COVERAGE END" in header_upper or ("END" in header_upper and "DATE" in header_upper):
-                    end_date_col = idx
-                    log_debug(f"    -> End Date column: {idx}")
-                elif "QUANTITY" in header_upper or "QTY" in header_upper:
-                    qty_col = idx
-                    log_debug(f"    -> Quantity column: {idx}")
-                elif "BID EXT SVP" in header_upper or "BID EXTENDED" in header_upper:
-                    bid_ext_svp_col = idx
-                    log_debug(f"    -> Bid Ext SVP column: {idx}")
+                    log_debug(f"[TABLE CHECK] Table #{t_idx+1}: rows={len(r)}, score={score}, header='{header_text[:120]}'")
             
-            extracted_data = []
+                    if score > best_score:
+                        best_score = score
+                        best_rows = r
             
-            # Process data rows (skip header)
-            log_debug(f"\nProcessing {len(rows)-1} data rows:")
-            for row_idx, row in enumerate(rows[1:], start=1):
-                if not row or len(row) == 0:
-                    log_debug(f"  Row {row_idx}: Empty row, skipping")
-                    continue
-                
-                part_number = str(row[part_num_col]).strip() if part_num_col is not None and part_num_col < len(row) else ""
-                description = str(row[desc_col]).strip() if desc_col is not None and desc_col < len(row) else ""
-                start_date = str(row[start_date_col]).strip() if start_date_col is not None and start_date_col < len(row) else ""
-                end_date = str(row[end_date_col]).strip() if end_date_col is not None and end_date_col < len(row) else ""
-                qty_str = str(row[qty_col]).strip() if qty_col is not None and qty_col < len(row) else "1"
-                price_str = str(row[bid_ext_svp_col]).strip() if bid_ext_svp_col is not None and bid_ext_svp_col < len(row) else "0"
-                
-                log_debug(f"\n  Row {row_idx}:")
-                log_debug(f"    Part Number: '{part_number}'")
-                log_debug(f"    Description: '{description[:50]}...'")
-                log_debug(f"    Start Date: '{start_date}'")
-                log_debug(f"    End Date: '{end_date}'")
-                log_debug(f"    Qty (raw): '{qty_str}'")
-                log_debug(f"    Price (raw): '{price_str}'")
-                
-                # Validate part number (should start with D and have alphanumeric)
-                if not part_number or not re.match(r'^D[A-Z0-9]{5,7}', part_number):
-                    log_debug(f"    SKIPPED: Invalid part number format")
-                    continue
-                
-                # Parse quantity
-                try:
-                    qty = int(float(qty_str.replace(',', ''))) if qty_str else 1
-                except:
+                # If we couldn't identify Parts Information, treat as failure -> fallback to Strategy 2
+                if best_score < 5 or not best_rows:
+                    raise Exception("Could not identify 'Parts Information' table (found tables but headers don't match)")
+            
+                rows = best_rows
+                log_debug(f"[TABLE SELECT] Using Parts Information table score={best_score} rows={len(rows)}")
+                log_debug(f"Table extracted: {len(rows)} rows found")
+
+                if len(rows) < 2:
+                    raise Exception("Insufficient rows")
+
+                header_row = rows[0]
+                part_num_col = desc_col = start_date_col = end_date_col = qty_col = bid_ext_svp_col = None
+
+                for idx, header in enumerate(header_row):
+                    h = str(header).upper() if header else ""
+                    if "PART NUMBER" in h:
+                        part_num_col = idx
+                    elif "DESCRIPTION" in h:
+                        desc_col = idx
+                    elif "COVERAGE START" in h:
+                        start_date_col = idx
+                    elif "COVERAGE END" in h:
+                        end_date_col = idx
+                    elif "QUANTITY" in h or "QTY" in h:
+                        qty_col = idx
+                    elif "BID EXT SVP" in h or "BID EXTENDED" in h:
+                        bid_ext_svp_col = idx
+
+                for r in rows[1:]:
+                    if not r:
+                        continue
+
+                    part_number = str(r[part_num_col]).strip() if part_num_col is not None and part_num_col < len(r) else ""
+                    description = str(r[desc_col]).strip() if desc_col is not None and desc_col < len(r) else ""
+                    start_date = str(r[start_date_col]).strip() if start_date_col is not None and start_date_col < len(r) else ""
+                    end_date = str(r[end_date_col]).strip() if end_date_col is not None and end_date_col < len(r) else ""
+                    qty_str = str(r[qty_col]).strip() if qty_col is not None and qty_col < len(r) else "1"
+                    price_str = str(r[bid_ext_svp_col]).strip() if bid_ext_svp_col is not None and bid_ext_svp_col < len(r) else "0"
+
+                    # Accept SKUs like E0ELXLL, E0ELHLL etc. [1](https://midisgroup1-my.sharepoint.com/personal/z_mama_mindware_net/Documents/Microsoft%20Copilot%20Chat%20Files/WTA%20Ooredoo.pdf)
+                    if not part_number or not re.match(r'^[A-Z0-9]{6,12}$', part_number):
+                        continue
+
+                    # QTY integer only (handles 5,400.00)
+                    try:
+                        qty = int(float(qty_str.replace(",", "")))
+                    except:
+                        qty = 1
+
+                    price_usd = parse_euro_number(price_str) or 0.0
+
+                    extracted_data.append([
+                        part_number,
+                        description,
+                        start_date.replace(" ", ""),
+                        end_date.replace(" ", ""),
+                        qty,
+                        price_usd
+                    ])
+
+            if len(extracted_data) == 0:
+                raise Exception("Strategy 1 got 0 rows")
+
+            log_debug(f"[STRATEGY 1 SUCCESS] Extracted {len(extracted_data)} rows from page {page_no}")
+
+        except Exception as e:
+            # -------------------------
+            # STRATEGY 2: Text fallback
+            # -------------------------
+            log_debug(f"[STRATEGY 1 FAILED] {e}")
+            log_debug(f"[STRATEGY 2] Text extraction on page {page_no}...")
+
+            page_text = page.get_text("text") or page.get_text()
+            lines = [l.rstrip() for l in page_text.splitlines() if l and l.strip()]
+
+            # ✅ Anchor Strategy 2 to "Subscription Quotation" / "Parts Information" (ignore Overage)
+            start_idx = None
+            for i, line in enumerate(lines):
+                up = line.upper()
+                if "SUBSCRIPTION QUOTATION" in up:
+                    start_idx = i
+                    break
+            
+            if start_idx is None:
+                for i, line in enumerate(lines):
+                    if "PARTS INFORMATION" in line.upper():
+                        start_idx = i
+                        break
+            
+            header_line_idx = None
+            if start_idx is not None:
+                for i in range(start_idx, min(start_idx + 60, len(lines))):
+                    if "PART NUMBER" in lines[i].upper():
+                        header_line_idx = i
+                        break
+            
+            if header_line_idx is None:
+                log_debug("[STRATEGY 2] Could not find 'Subscription Quotation - Parts Information' header anchor")
+                extracted_data = []
+                # IMPORTANT: skip processing this page in Strategy 2
+                # (return extracted_data or continue depending on your structure)
+
+            if header_line_idx is None:
+                extracted_data = []
+            else:
+                part_number_pattern = re.compile(r'\b[A-Z][A-Z0-9]{5,11}\b')
+                date_pattern = re.compile(r'\b\d{2}/\d{2}/\d{4}\b')
+
+                extracted_data = []
+                i = header_line_idx + 1
+
+                while i < len(lines):
+                    part_match = part_number_pattern.search(lines[i])
+                    if not part_match:
+                        i += 1
+                        continue
+
+                    part_number = part_match.group()
+                    description = lines[i + 1].strip() if i + 1 < len(lines) else ""
+
+                    # Scan wider for start/end dates (fixes missing end date case) [1](https://midisgroup1-my.sharepoint.com/personal/z_mama_mindware_net/Documents/Microsoft%20Copilot%20Chat%20Files/WTA%20Ooredoo.pdf)
+                    dates_found = []
+                    for j in range(i + 1, min(i + 16, len(lines))):
+                        dates_found += date_pattern.findall(lines[j])
+                    dates_found = list(dict.fromkeys(dates_found))
+                    start_date = dates_found[0] if len(dates_found) >= 1 else ""
+                    end_date = dates_found[1] if len(dates_found) >= 2 else ""
+
+                    # QTY integer only (handles 5,400.00) [1](https://midisgroup1-my.sharepoint.com/personal/z_mama_mindware_net/Documents/Microsoft%20Copilot%20Chat%20Files/WTA%20Ooredoo.pdf)
                     qty = 1
-                    log_debug(f"    WARNING: Could not parse quantity, using default: 1")
-                
-                # Parse price (Bid Ext SVP)
-                try:
-                    price_usd = parse_euro_number(price_str)
-                    if price_usd is None:
-                        price_usd = 0.0
-                        log_debug(f"    WARNING: Could not parse price, using 0.0")
-                except Exception as e:
+                    for j in range(i + 6, min(i + 16, len(lines))):
+                        s = lines[j].strip()
+                        if s == "-":
+                            break
+                        m = re.match(r'^(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)$', s)
+                        if m:
+                            qty = int(float(m.group(1).replace(",", "")))
+                            break
+
+                    # Price in Strategy 2 is not reliable yet; prefer Strategy 1 for price.
                     price_usd = 0.0
-                    log_debug(f"    ERROR parsing price: {e}")
-                
-                # Clean dates
-                start_date = start_date.replace(' ', '')
-                end_date = end_date.replace(' ', '')
-                
-                log_debug(f"    FINAL: Part={part_number}, Qty={qty}, Price={price_usd}")
-                
-                extracted_data.append([
-                    part_number,
-                    description,
-                    start_date,
-                    end_date,
-                    qty,
-                    price_usd
-                ])
-            
-            log_debug(f"\n[STRATEGY 1 SUCCESS] Extracted {len(extracted_data)} rows using PyMuPDF table detection")
-            log_debug("="*80 + "\n")
-            return extracted_data
-    except Exception as e:
-        log_debug(f"[STRATEGY 1 FAILED] PyMuPDF table detection error: {e}")
-        log_debug("Falling back to text-based extraction...")
-    
-    # Fallback: Text-based extraction
-    log_debug(f"\n[STRATEGY 2] Text-based extraction (fallback) on page {page_index+1}...")
-    page_text = page.get_text("text") or page.get_text()
-    lines = []
-    for l in page_text.splitlines():
-        if l and l.strip():
-            lines.append(l.rstrip())
-    
-    log_debug(f"Extracted {len(lines)} lines from page 2 text")
-    log_debug("\nFirst 100 lines of page 2:")
-    for idx, line in enumerate(lines[:100]):
-        log_debug(f"  Line {idx:3d}: {line}")
-    
-    extracted_data = []
-    
-    # Look for "Parts Information" or "Subscription Quotation" table
-    table_start_idx = None
-    log_debug("\nSearching for table start marker...")
-    for i, line in enumerate(lines):
-        if "Parts Information" in line or ("Subscription" in line and "Quotation" in line):
-            table_start_idx = i
-            log_debug(f"  Found table start at line {i}: '{line}'")
-            break
-    
-    if table_start_idx is None:
-        log_debug("  ERROR: Could not find 'Parts Information' or 'Subscription Quotation' marker")
-        log_debug("="*80 + "\n")
-        return []
-    
-    # Look for table headers
-    #
-    # NOTE: In these MIBB PDFs, the header is spread across multiple lines:
-    #   "Part Number"
-    #   "Description"
-    #   ...
-    #   "Coverage Start"
-    #   "Coverage End"
-    #   "Quantity"
-    # so we only require a line with "Part Number" and then treat that as
-    # the anchor; data rows start after that group of header lines.
-    header_line_idx = None
-    log_debug("\nSearching for header line...")
-    for i in range(table_start_idx, min(table_start_idx + 15, len(lines))):
-        line = lines[i].upper()
-        if "PART NUMBER" in line:
-            header_line_idx = i
-            log_debug(f"  Found header anchor at line {i}: '{lines[i]}'")
-            break
-    
-    if header_line_idx is None:
-        log_debug("  ERROR: Could not find header line containing 'Part Number'")
-        log_debug("="*80 + "\n")
-        return []
-    
-    # Extract data rows after header
-    
-    part_number_pattern = re.compile(r'\b[A-Z][A-Z0-9]{5,7}\b')
 
+                    extracted_data.append([part_number, description, start_date, end_date, qty, price_usd])
+                    i += 1
 
-    date_pattern = re.compile(r'\b\d{2}/\d{2}/\d{4}\b')  # Format: DD/MM/YYYY
-    
-    log_debug(f"\nExtracting data rows starting from line {header_line_idx + 1}:")
-    i = header_line_idx + 1
-    row_count = 0
-    while i < len(lines):
-        line = lines[i]
-        
-        # Look for part number
-        part_match = part_number_pattern.search(line)
-        if not part_match:
-            i += 1
-            continue
-        
-        row_count += 1
-        part_number = part_match.group()
-        log_debug(f"\n  Row {row_count} (line {i}):")
-        log_debug(f"    Raw line: '{line}'")
-        log_debug(f"    Part Number found: '{part_number}'")
-        
-        # Extract data from vertical table structure
-        # Structure: Part Number (i), Description (i+1), Transaction Type (i+2), Billing (i+3),
-        #            Coverage Start (i+4), Coverage End (i+5), Quantity (i+6), ... Bid Ext SVP (i+15 or so)
-        
-        # Extract description (next line after part number)
-        description = ""
-        if i + 1 < len(lines):
-            description = lines[i + 1].strip()
-            # Clean up description - remove if it's just "Planning Analytics" or similar
-            if len(description) > 100:
-                description = description[:100]
-        
-        log_debug(f"    Description: '{description[:50]}...'")
-        
-        # Extract dates - Coverage Start is ~4 lines after part number, Coverage End is ~5 lines
-        start_date = ""
-        end_date = ""
-        dates_found = []
-        
-        # Search up to 10 lines ahead for dates
-        for j in range(i + 1, min(i + 11, len(lines))):
-            line_text = lines[j]
-            found_dates = date_pattern.findall(line_text)
-            if found_dates:
-                dates_found.extend(found_dates)
-                log_debug(f"    Found dates at line {j}: {found_dates}")
-        
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_dates = []
-        for d in dates_found:
-            if d not in seen:
-                seen.add(d)
-                unique_dates.append(d)
-        
-        if len(unique_dates) >= 1:
-            start_date = unique_dates[0]
-        if len(unique_dates) >= 2:
-            end_date = unique_dates[1]
-        
-        log_debug(f"    Dates found: Start='{start_date}', End='{end_date}'")
-        qty = 1
-        qty_extracted = False
-        
-        # QTY is ALWAYS the first number after Coverage End
-        # Coverage End is at: i+5 (based on the IBM vertical layout)
-        start_search = i + 6
-        
-        for j in range(start_search, min(i + 15, len(lines))):
-            line_j = lines[j].strip()
-        
-            # Stop if we hit non-numeric placeholder
-            if line_j == "-":
-                break
-        
-            # Match integer or decimal
-            qty_match = re.match(r'^(\d+(?:\.\d+)?)$', line_j)
-            if qty_match:
-                qty_val = float(qty_match.group(1))
-        
-                # QTY in IBM MIBB PDFs is always integer (85, 30, 838)
-                if qty_val.is_integer():
-                    qty = int(qty_val)
-                    log_debug(f"    Extracted QTY at line {j}: {qty}")
-                    qty_extracted = True
-                    break
-        
-        if not qty_extracted:
-            log_debug("    QTY not found, defaulting to 1")
-        
-        # Extract Bid Ext SVP (Price USD) - this appears after Bid Unit SVP
-        # Structure: Entitled Unit -> Entitled Extended -> Discount% -> Bid Unit SVP -> Bid Ext SVP
-        price_usd = 0.0
-        price_pattern = re.compile(r'\b(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})\b')
-        
-        seen_discount = False
-        price_after_discount_count = 0
-        
-        for j in range(i + 1, min(i + 30, len(lines))):
-            line_j = lines[j].strip()
-        
-            # Stop if next part number → next item block
-            if part_number_pattern.search(line_j) and j != i:
-                break
-        
-            # Step 1: detect discount line (xx.xx)
-            if not seen_discount:
-                m = re.match(r'^(\d+\.\d{2})$', line_j)
-                if m:
-                    seen_discount = True
-                    log_debug(f"    Found Discount% at line {j}: {m.group(1)}")
-                    continue
-        
-            # Step 2: after discount, collect prices
-            if seen_discount:
-                matches = price_pattern.findall(line_j)
-                if not matches:
-                    continue
-        
-                raw = matches[0]
-        
-                # Clean "15,857.60" or "125.750,28"
-                if "," in raw and "." in raw:
-                    cleaned = raw.replace(",", "")
-                else:
-                    cleaned = raw.replace(",", ".")
-        
-                try:
-                    val = float(cleaned)
-                except:
-                    continue
-        
-                price_after_discount_count += 1
-        
-                if price_after_discount_count == 1:
-                    log_debug(f"    Unit SVP found at line {j}: {val}")
-                    continue
-        
-                if price_after_discount_count == 2:
-                    price_usd = val
-                    log_debug(f"    Bid Ext SVP found at line {j}: {price_usd}")
-                    break
-        
-        log_debug(f"    Final: Part={part_number}, Desc={description[:30]}, Start={start_date}, End={end_date}, Qty={qty}, Price={price_usd}")
-        
-        # Accept row if we have part number and at least one date
-        if part_number and (start_date or end_date):
-            extracted_data.append([
-                part_number,
-                description,
-                start_date,
-                end_date,
-                qty,
-                price_usd
-            ])
-            log_debug(f"    ✓ Row added successfully")
-        else:
-            log_debug(f"    ✗ Row skipped: missing part_number or dates (part_number={bool(part_number)}, start_date={bool(start_date)}, end_date={bool(end_date)})")
-        
-        i += 1
-        
-        if i < len(lines):
-            next_line = lines[i].upper()
-            if ("PAGE" in next_line and "OF" in next_line) or \
-               ("TOTAL" in next_line and "PRICE" in next_line) or \
-               ("AUTORENEWAL" in next_line):
-                log_debug(f"\n  Stopping at line {i}: End marker found ('{lines[i]}')")
-                break
-    
-    log_debug(f"\n[STRATEGY 2 COMPLETE] Extracted {len(extracted_data)} rows using text-based extraction")
-    log_debug("\nFinal extracted data summary:")
-    for idx, row in enumerate(extracted_data, 1):
-        log_debug(f"  Row {idx}: Part={row[0]}, Qty={row[4]}, Price={row[5]}")
-    log_debug("="*80 + "\n")
-    
-    return extracted_data
+            log_debug(f"[STRATEGY 2 COMPLETE] Extracted {len(extracted_data)} rows from page {page_no}")
 
+        # Merge results (dedupe by part number)
+        all_extracted.extend(extracted_data)
+
+    log_debug(f"\n[FINAL] Total extracted rows from all pages: {len(all_extracted)}")
+    return all_extracted
 
 
 def get_mibb_terms_section(header_info, data):
@@ -791,7 +643,15 @@ def create_mibb_excel(
 
     # --- Table Headers ---
     headers = [
-        "Sl", "Part Number", "Description", "Start Date", "End Date", "QTY","Partner Price USD", "Price USD"
+        "Sl",
+        "Part Number",
+        "Description",
+        "Start Date",
+        "End Date",
+        "QTY",
+        "Partner Price USD",
+        "Bid extended price",
+        "Extend BP price"
     ]
     
     header_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
@@ -824,24 +684,35 @@ def create_mibb_excel(
         ws.cell(row=excel_row, column=4, value=description).font = Font(size=11, color="1F497D")
         ws.cell(row=excel_row, column=5, value=start_date).font = Font(size=11, color="1F497D")
         ws.cell(row=excel_row, column=6, value=end_date).font = Font(size=11, color="1F497D")
+        # QTY (column G = 7)
         ws.cell(row=excel_row, column=7, value=qty).font = Font(size=11, color="1F497D")
-        partner_formula = f"=ROUNDUP(I{excel_row}*0.99, 2)"   # H = Price USD column
+        ws.cell(row=excel_row, column=7).alignment = Alignment(horizontal="center", vertical="center")
+        
+        # Bid extended price (column I = 9)  ✅ this is the extracted price_usd
+        ws.cell(row=excel_row, column=9, value=price_usd).font = Font(size=11, color="1F497D")
+        ws.cell(row=excel_row, column=9).number_format = '"USD"#,##0.00'
+        ws.cell(row=excel_row, column=9).alignment = Alignment(horizontal="center", vertical="center")
+        
+        # Partner Price USD (column H = 8) ✅ same logic as before: 99% of Bid extended price
+        partner_formula = f"=ROUNDUP(I{excel_row}*0.99, 2)"
         ws.cell(row=excel_row, column=8, value=partner_formula)
         ws.cell(row=excel_row, column=8).font = Font(size=11, color="1F497D")
         ws.cell(row=excel_row, column=8).number_format = '"USD"#,##0.00'
         ws.cell(row=excel_row, column=8).alignment = Alignment(horizontal="center", vertical="center")
         
-        ws.cell(row=excel_row, column=9, value=price_usd).font = Font(size=11, color="1F497D")
+        # Extend BP price (column J = 10) ✅ Partner Price USD * QTY
+        extend_bp_formula = f"=H{excel_row}*G{excel_row}"
+        ws.cell(row=excel_row, column=10, value=extend_bp_formula)
+        ws.cell(row=excel_row, column=10).font = Font(size=11, color="1F497D")
+        ws.cell(row=excel_row, column=10).number_format = '"USD"#,##0.00'
+        ws.cell(row=excel_row, column=10).alignment = Alignment(horizontal="center", vertical="center")
         
-        # Format price as USD currency
-        ws.cell(row=excel_row, column=9).number_format = '"USD"#,##0.00'
         
-        
-        for col in range(2, 9):
+        for col in range(2, 11):
             ws.cell(row=excel_row, column=col).fill = row_fill
         
         ws.cell(row=excel_row, column=4).alignment = Alignment(wrap_text=True, horizontal="left", vertical="center")
-        for col in [2, 3, 5, 6, 7, 8]:
+        for col in [2, 3, 5, 6, 7, 8, 9, 10]:
             ws.cell(row=excel_row, column=col).alignment = Alignment(horizontal="center", vertical="center")
 
     # --- Summary row (if data exists) ---
@@ -856,11 +727,11 @@ def create_mibb_excel(
         
         # Calculate total
         total_sum = sum(float(row[5]) if len(row) > 5 and row[5] else 0 for row in data)
-        total_formula = f"=SUM(H{start_row}:H{data_end_row})"
-        ws[f"H{summary_row}"] = total_formula
-        ws[f"H{summary_row}"].number_format = '"USD"#,##0.00'
-        ws[f"H{summary_row}"].font = Font(bold=True, color="1F497D")
-        ws[f"H{summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+        total_formula = f"=SUM(I{start_row}:I{data_end_row})"
+        ws[f"I{summary_row}"] = total_formula
+        ws[f"I{summary_row}"].number_format = '"USD"#,##0.00'
+        ws[f"I{summary_row}"].font = Font(bold=True, color="1F497D")
+        ws[f"I{summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
     else:
         summary_row = start_row + 1
 
@@ -893,12 +764,16 @@ def create_mibb_excel(
                 end_row = row_num + (merge_rows - 1 if merge_rows else 0)
                 is_bold_title = style and "bold" in style[0] and style[0].get("bold") is True
                 if is_bold_title:
-                    ws.merge_cells(f"{col_letter}{row_num}:E{end_row}")
-                    ws.row_dimensions[row_num].height = 24
+                    ws.merge_cells(f"{col_letter}{row_num}:L{end_row}")
+                    ws.row_dimensions[row_num].height = 32
                 else:
-                    ws.merge_cells(f"{col_letter}{row_num}:H{end_row}")
-                    line_count = estimate_line_count(str(text), max_chars_per_line=80)
-                    total_height = max(18, line_count * 16)
+                    # Merge across full width for proper PDF wrapping
+                    ws.merge_cells(f"{col_letter}{row_num}:L{end_row}")
+                
+                    # Better wrap estimation for PDF export
+                    line_count = estimate_line_count(str(text), max_chars_per_line=55)
+                    total_height = max(40, line_count * 22)
+                
                     ws.row_dimensions[row_num].height = total_height
                 ws[cell_addr] = text
                 ws[cell_addr].alignment = Alignment(wrap_text=True, vertical="top")
