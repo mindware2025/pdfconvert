@@ -1577,9 +1577,15 @@ def create_styled_excel_template2(
     ws[f"K{bp_summary_row}"].number_format = f'"{currency_label}"#,##0.00'
     ws[f"K{bp_summary_row}"].font = Font(bold=True, color="1F497D")
     ws[f"K{bp_summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
-    
-    
-    
+
+    # UAE only (Template 2): Partner Plus Sales Incentive line after Total BP price
+    if country == "UAE":
+        partner_row = bp_summary_row + 1
+        ws.merge_cells(f"C{partner_row}:K{partner_row}")
+        ws[f"C{partner_row}"] = "2026 IBM Partner Plus Sales Incentive Program Guide for Business Partners: http://www.ibm.biz/PartnerPlusIncentiveProgramBPs"
+        ws[f"C{partner_row}"].font = Font(size=10, color="1F497D")
+        ws[f"C{partner_row}"].alignment = Alignment(wrap_text=True, horizontal="left", vertical="center")
+
     # --- Terms Section ---
     total_price_sum = sum(((row[7] if len(row) > 7 and row[7] else 0) for row in data))  # Use bid_total_aed
     terms_header = {**header_info, "country": country or "UAE"}

@@ -366,6 +366,15 @@ def create_styled_excel_v2(
             ws[f"L{bp_summary_row}"].number_format = f'"{_currency_label(country)}"#,##0.00'
             ws[f"L{bp_summary_row}"].font = Font(bold=True, color="1F497D")
             ws[f"L{bp_summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+
+            # UAE only: Partner Plus Sales Incentive line after Total BP price
+            if country == "UAE":
+                partner_row = bp_summary_row + 1
+                ws.merge_cells(f"C{partner_row}:L{partner_row}")
+                ws[f"C{partner_row}"] = "2026 IBM Partner Plus Sales Incentive Program Guide for Business Partners: http://www.ibm.biz/PartnerPlusIncentiveProgramBPs"
+                ws[f"C{partner_row}"].font = Font(size=10, color="1F497D")
+                ws[f"C{partner_row}"].alignment = Alignment(wrap_text=True, horizontal="left", vertical="center")
+                summary_row = partner_row  # so terms start below this line
         else:
             # If no data, set summary_row to a safe default after headers
             summary_row = start_row + 1
