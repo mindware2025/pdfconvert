@@ -1660,7 +1660,9 @@ elif tool == "💻 Dell Invoice Extractor":
                     file_name="pre_alert_upload.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     key="download_dell_pre_alert",
-                   
+                    on_click=lambda: (
+                            update_usage("Dell Automation", team)
+                        ),
                 )
             else:
                 st.warning("No items found in the uploaded PDF(s).")
