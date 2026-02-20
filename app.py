@@ -1851,12 +1851,15 @@ elif tool == "IBM Quotation":
                 else:
                     st.dataframe(pd.DataFrame(result['data']))
             if result.get('excel_bytes'):
+                # Normalize template to "1" or "2" for usage label
+                t = result['template']
+                temp_num = "1" if t in ('1', 'template1') else "2"
                 st.download_button(
                     label="📥 Download Styled Excel File",
                     data=result['excel_bytes'],
                     file_name="Styled_Quotation.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    on_click=lambda co=country: update_usage(f"IBM Automation ({co})", team),
+                    on_click=lambda co=country, tn=temp_num: update_usage(f"IBM Automation ({co}) temp {tn}", team),
                 )
 
 
