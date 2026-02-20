@@ -93,61 +93,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
-
-
-# CSS: hide top-right icons but keep sidebar visible
-st.markdown("""
-    <style>
-    /* Hide Share, GitHub, Settings icons on top-right */
-    [data-testid="stToolbar"] {
-        display: none !important;
-    }
-    /* Ensure sidebar is always visible */
-    [data-testid="stSidebar"] {
-        visibility: visible !important;
-        min-width: 280px !important;
-    }
-    /* Optional: adjust sidebar content font */
-    [data-testid="stSidebar"] * {
-        font-family: 'Google Sans', sans-serif !important;
-    }
-    /* General styling */
-    html, body, [class*="css"] {
-        font-family: 'Google Sans', sans-serif !important;
-        background: #f6f8fa;
-        color: #202124;
-    }
-    h1, h2, h3 {
-        color: #1a73e8;
-        font-weight: 700;
-        letter-spacing: -1px;
-        margin-bottom: 0.5em;
-    }
-    .stButton > button, .stDownloadButton > button {
-        background: linear-gradient(90deg, #1a73e8, #188038);
-        color: white;
-        border-radius: 8px;
-        font-weight: 600;
-        font-size: 16px;
-        border: none;
-        padding: 12px 28px;
-        margin-top: 10px;
-        margin-bottom: 10px;
-        box-shadow: 0 2px 8px rgba(26, 115, 232, 0.08);
-        transition: background 0.2s;
-    }
-    .stButton > button:hover, .stDownloadButton > button:hover {
-        background: linear-gradient(90deg, #188038, #1a73e8);
-        color: #fff;
-    }
-    .stDataFrame {
-        background: #fff;
-        border-radius: 10px;
-        box-shadow: 0 2px 8px rgba(26, 115, 232, 0.06);
-        margin-bottom: 2em;
-    }
-    </style>
-""", unsafe_allow_html=True)
 # ----------- Constants -----------
 DEFAULTS = {
     "supp_code": "SDIG005",
@@ -166,11 +111,13 @@ if "login_state" not in st.session_state:
 from pathlib import Path
 import streamlit as st
 
+@st.cache_data(ttl=3600)
 def _img_to_base64(path: str) -> str:
     p = Path(path)
     if not p.exists():
         return ""
     return base64.b64encode(p.read_bytes()).decode("utf-8")
+
 def show_login():  # <-- right-side login
     backg = "im.png"  # your AI-face image file name (put it in same folder as app.py)
     bg_b64 = _img_to_base64(backg)
@@ -474,6 +421,60 @@ if st.session_state.login_state == "login":
 elif st.session_state.login_state == "fail":
     show_fail()
     st.stop()
+
+# Main app CSS (only after login — avoids flash/flicker when typing on login page)
+st.markdown("""
+    <style>
+    /* Hide Share, GitHub, Settings icons on top-right */
+    [data-testid="stToolbar"] {
+        display: none !important;
+    }
+    /* Ensure sidebar is always visible */
+    [data-testid="stSidebar"] {
+        visibility: visible !important;
+        min-width: 280px !important;
+    }
+    /* Optional: adjust sidebar content font */
+    [data-testid="stSidebar"] * {
+        font-family: 'Google Sans', sans-serif !important;
+    }
+    /* General styling */
+    html, body, [class*="css"] {
+        font-family: 'Google Sans', sans-serif !important;
+        background: #f6f8fa;
+        color: #202124;
+    }
+    h1, h2, h3 {
+        color: #1a73e8;
+        font-weight: 700;
+        letter-spacing: -1px;
+        margin-bottom: 0.5em;
+    }
+    .stButton > button, .stDownloadButton > button {
+        background: linear-gradient(90deg, #1a73e8, #188038);
+        color: white;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 16px;
+        border: none;
+        padding: 12px 28px;
+        margin-top: 10px;
+        margin-bottom: 10px;
+        box-shadow: 0 2px 8px rgba(26, 115, 232, 0.08);
+        transition: background 0.2s;
+    }
+    .stButton > button:hover, .stDownloadButton > button:hover {
+        background: linear-gradient(90deg, #188038, #1a73e8);
+        color: #fff;
+    }
+    .stDataFrame {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(26, 115, 232, 0.06);
+        margin-bottom: 2em;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # Initialize session state for welcome flow
 if "show_team_selection" not in st.session_state:
