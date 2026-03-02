@@ -8,7 +8,9 @@ import pdfplumber
 import re
 import pandas as pd
 from typing import List, Dict
+
 import concurrent.futures
+from typing import Tuple
 
 REQUIRED_FIELDS = [
     "Billed To",
@@ -200,7 +202,7 @@ def extract_fields(text: str) -> Dict[str, str]:
 
 import io
 
-def process_pdfs(pdf_files: List) -> (pd.DataFrame, dict):
+def process_pdfs(pdf_files: List) -> Tuple[pd.DataFrame, dict]:
     data = []
     logs = {}
 

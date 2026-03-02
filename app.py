@@ -1017,9 +1017,10 @@ if team == "Finance":
         "-- Select a tool --",
         "🟦 Google DNTS Extractor",
         "🟩 Google Invoice Extractor",
+        "🟧 Oracle Invoice Tool",
         "📄 Claims Automation",
         "🟨 AWS Invoice Tool",
-        "🟧 Oracle Invoice Tool"
+        
     ]
 elif team == "Operations":
     TOOL_OPTIONS = [
