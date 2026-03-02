@@ -22,6 +22,7 @@ from extractors.google_dnts import extract_invoice_info, extract_table_from_text
 from extractors.insurance import process_insurance_excel
 from extractors.insurance2  import process_grouped_customer_files
 #from sales.mibb_quotation import create_mibb_excel, extract_mibb_header_from_pdf, extract_mibb_table_from_pdf
+from oracle_invoice import show_oracle_tool
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 from ibm import extract_ibm_data_from_pdf, create_styled_excel, create_styled_excel_template2, correct_descriptions, extract_last_page_text
@@ -1017,7 +1018,8 @@ if team == "Finance":
         "🟦 Google DNTS Extractor",
         "🟩 Google Invoice Extractor",
         "📄 Claims Automation",
-        "🟨 AWS Invoice Tool"
+        "🟨 AWS Invoice Tool",
+        "🟧 Oracle Invoice Tool"
     ]
 elif team == "Operations":
     TOOL_OPTIONS = [
@@ -1856,7 +1858,8 @@ elif tool == "IBM Quotation":
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     on_click=lambda co=country: update_usage(f"IBM Automation ({co})", team),
                 )
-
+elif tool == "🟧 Oracle Invoice Tool":
+    show_oracle_tool()
 
 
 st.markdown("""
