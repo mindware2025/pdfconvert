@@ -1804,6 +1804,8 @@ elif tool == "AR to EDD file":
                             
                         ),
         )
+elif tool == "🟧 Oracle Invoice Tool":
+    show_oracle_tool()
 elif tool == "IBM Quotation":
 
     st.header("🆕 IBM Excel to Excel + PDF to Excel (Combo)")
@@ -1859,8 +1861,7 @@ elif tool == "IBM Quotation":
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     on_click=lambda co=country: update_usage(f"IBM Automation ({co})", team),
                 )
-elif tool == "🟧 Oracle Invoice Tool":
-    show_oracle_tool()
+
 
 
 st.markdown("""
