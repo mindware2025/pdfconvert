@@ -203,22 +203,20 @@ def extract_fields(text: str) -> Dict[str, str]:
 import io
 
 def process_pdfs(pdf_files: List) -> Tuple[pd.DataFrame, dict]:
+    import streamlit as st
     data = []
     logs = {}
+    progress_bar = st.progress(0, text="Processing PDFs...")
+    total = len(pdf_files)
 
-    def process_single_pdf(pdf_file):
+    for i, pdf_file in enumerate(pdf_files):
         with pdfplumber.open(pdf_file) as pdf:
             first_page = pdf.pages[0]
             text = first_page.extract_text()
         fields = extract_fields(text)
-        return pdf_file.name, fields, text
-
-    # Use ThreadPoolExecutor for parallel processing
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        results = list(executor.map(process_single_pdf, pdf_files))
-    for fname, fields, text in results:
-        logs[fname] = text
+        logs[pdf_file.name] = text
         data.append(fields)
+        progress_bar.progress((i + 1) / total, text=f"Processed {i+1} of {total} PDFs")
     df = pd.DataFrame(data, columns=REQUIRED_FIELDS)
     return df, logs
 

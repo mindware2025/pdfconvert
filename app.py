@@ -644,7 +644,6 @@ if not st.session_state.show_team_selection:
     # Add a small delay for dramatic effect
     import time
     time.sleep(0.5)
-    st.snow()  
 
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -656,7 +655,6 @@ if not st.session_state.show_team_selection:
                      help="Click to proceed to team selection!"):
             st.session_state.show_team_selection = True
             #st.balloons()
-            st.snow()
             st.rerun()
 
     # Stop here - don't show team selection yet
