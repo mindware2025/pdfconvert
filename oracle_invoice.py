@@ -138,7 +138,7 @@ def extract_fields(text: str) -> Dict[str, str]:
 
     codes = re.findall(r"\b[A-Z]{3}\b", search_block)
 
-    for c in ["AED", "USD", "EUR", "QAR", "OMR", "GBP", "SAR", "KWD", "BHD"]:
+    for c in ["AED", "USD", "EUR", "QAR", "OMR", "GBP","KES" ,"SAR", "KWD", "BHD"]:
         if c in codes:
             result["Currency Code"] = c
             break
@@ -166,9 +166,9 @@ def extract_fields(text: str) -> Dict[str, str]:
     # -----------------------------
     # 6) Bank details
     # -----------------------------
-    m = re.search(r"IBAN[:# ]*[:\s]*([A-Z0-9 ]+)", text, re.IGNORECASE)
-    if m:
-        result["IBAN #"] = m.group(1).replace(" ", "")
+    iban_match = re.search(r"\b([A-Z]{2}\d{2}[A-Z0-9]{11,30})\b", text.replace(" ", ""), re.IGNORECASE)
+    if iban_match:
+        result["IBAN #"] = iban_match.group(1).upper()
 
     m = re.search(r"ACCT[:# ]*[:\s]*([0-9 ]+)", text, re.IGNORECASE)
     if m:
