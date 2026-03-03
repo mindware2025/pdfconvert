@@ -2237,46 +2237,32 @@ elif tool == "🟧 Oracle Invoice Tool":
     uploaded_files = st.file_uploader(
         "Choose Oracle invoice PDF(s)",
         type=["pdf"],
-        key="oracle_upload",
         accept_multiple_files=True,
     )
 
     if uploaded_files:
-        # Read uploads into bytes once for stable caching
-        file_blobs = []
-        for f in uploaded_files:
-            b = f.read()
-            f.seek(0)
-            file_blobs.append((f.name, b))
-
-        # Process (cached) — prevents re-work on reruns like download clicks
+        file_blobs = [(f.name, f.read()) for f in uploaded_files]
         df, text_map = process_oracle_pdfs_cached(file_blobs)
 
-        if df is not None and not df.empty:
-            # Primary Excel export (extracted fields)
+        if not df.empty:
             excel_bytes = prepare_excel_bytes(df)
             st.download_button(
                 label="⬇️ Download Extracted Oracle Invoice Data",
                 data=excel_bytes,
                 file_name="oracle_invoice_data.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="oracle_download_data",
             )
 
             with st.expander("Preview extracted data"):
-                st.dataframe(df, use_container_width=True)
+                st.dataframe(df)
         else:
-            st.warning("No data extracted from the uploaded Oracle PDFs.")
+            st.warning("No data extracted.")
     else:
-        st.info("Please upload one or more Oracle invoice PDFs to begin.")
-
-
+        st.info("Please upload Oracle invoices.")
 
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
     st.info("Currently, only the Google DNTS Extractor tool is available. More tools can be added based on your requirements.")
-
-
 
 st.markdown("""
 <footer style='text-align:center; margin-top:3rem; color:#1a73e8; font-size:20px; font-weight:bold; font-family: Google Sans, sans-serif;'>
