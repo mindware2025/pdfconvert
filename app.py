@@ -21,6 +21,7 @@ from extractors.insurance2  import process_grouped_customer_files
 from extractors.ibm import correct_descriptions, create_styled_excel, create_styled_excel_template2, extract_ibm_data_from_pdf, extract_last_page_text, get_extraction_debug
 from extractors.ibm_template2 import extract_ibm_template2_from_pdf
 from extractors.template_detector import detect_ibm_template
+from oracle_invoice import prepare_excel_bytes, process_oracle_pdfs_cached
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 load_dotenv()
@@ -2228,17 +2229,48 @@ elif tool == "AR to EDD file":
         )
         
 
-elif tool == "🟧 Oracle Invoice Tool":
-    st.header("Oracle Invoice PDF Extractor")
-    st.write("Upload one or more Oracle invoice PDFs to extract key fields and export to Excel.")
 
-    # IMPORTANT: give file_uploader a stable key
+elif tool == "🟧 Oracle Invoice Tool":
+    st.title("Oracle Invoice Tool")
+    st.write("Upload Oracle invoice PDF(s) and download the extracted data as Excel.")
+
     uploaded_files = st.file_uploader(
-        "Upload PDF files",
+        "Choose Oracle invoice PDF(s)",
         type=["pdf"],
+        key="oracle_upload",
         accept_multiple_files=True,
-        key="oracle_pdf_uploader"
     )
+
+    if uploaded_files:
+        # Read uploads into bytes once for stable caching
+        file_blobs = []
+        for f in uploaded_files:
+            b = f.read()
+            f.seek(0)
+            file_blobs.append((f.name, b))
+
+        # Process (cached) — prevents re-work on reruns like download clicks
+        df, text_map = process_oracle_pdfs_cached(file_blobs)
+
+        if df is not None and not df.empty:
+            # Primary Excel export (extracted fields)
+            excel_bytes = prepare_excel_bytes(df)
+            st.download_button(
+                label="⬇️ Download Extracted Oracle Invoice Data",
+                data=excel_bytes,
+                file_name="oracle_invoice_data.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="oracle_download_data",
+            )
+
+            with st.expander("Preview extracted data"):
+                st.dataframe(df, use_container_width=True)
+        else:
+            st.warning("No data extracted from the uploaded Oracle PDFs.")
+    else:
+        st.info("Please upload one or more Oracle invoice PDFs to begin.")
+
+
 
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
