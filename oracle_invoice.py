@@ -3,15 +3,16 @@
 Oracle Tool: PDF Invoice Extraction and Excel Export
 """
 
-import streamlit as st
 import pdfplumber
+import streamlit as st
+import fitz  # PyMuPDF
 import re
 import pandas as pd
 from typing import List, Dict
-
 import concurrent.futures
-from typing import Tuple
+import time
 
+from typing import Tuple
 REQUIRED_FIELDS = [
     "Billed To",
     "Invoice Number",
@@ -26,9 +27,11 @@ REQUIRED_FIELDS = [
 ]
 
 def extract_text_from_pdf(pdf_path: str) -> str:
-    with pdfplumber.open(pdf_path) as pdf:
-        first_page = pdf.pages[0]
-        return first_page.extract_text()
+    doc = fitz.open(stream=pdf_path.read(), filetype="pdf")
+    text = ""
+    for page in doc:
+        text += page.get_text()
+    return text
 
 def extract_fields(text: str) -> Dict[str, str]:
     lines = text.splitlines()
@@ -203,22 +206,27 @@ def extract_fields(text: str) -> Dict[str, str]:
 import io
 
 def process_pdfs(pdf_files: List) -> Tuple[pd.DataFrame, dict]:
-    import streamlit as st
     data = []
     logs = {}
-    progress_bar = st.progress(0, text="Processing PDFs...")
-    total = len(pdf_files)
+    timings = []
 
-    for i, pdf_file in enumerate(pdf_files):
+    def process_single_pdf(pdf_file):
+        start = time.time()
         with pdfplumber.open(pdf_file) as pdf:
             first_page = pdf.pages[0]
             text = first_page.extract_text()
         fields = extract_fields(text)
-        logs[pdf_file.name] = text
+        elapsed = time.time() - start
+        return pdf_file.name, fields, text, elapsed
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        results = list(executor.map(process_single_pdf, pdf_files))
+    for fname, fields, text, elapsed in results:
+        logs[fname] = text
         data.append(fields)
-        progress_bar.progress((i + 1) / total, text=f"Processed {i+1} of {total} PDFs")
+        timings.append((fname, elapsed))
     df = pd.DataFrame(data, columns=REQUIRED_FIELDS)
-    return df, logs
+    return df, logs, timings
 
 def show_oracle_tool():
     st.header("Oracle Invoice PDF Extractor")
@@ -226,7 +234,7 @@ def show_oracle_tool():
     uploaded_files = st.file_uploader("Upload PDF files", type=["pdf"], accept_multiple_files=True)
     if uploaded_files:
         with st.spinner("Processing PDFs..."):
-            df, _ = process_pdfs(uploaded_files)
+            df, _, timings = process_pdfs(uploaded_files)
             output = io.BytesIO()
             df.to_excel(output, index=False)
             output.seek(0)
@@ -236,3 +244,6 @@ def show_oracle_tool():
             file_name="oracle_invoices.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+        st.subheader("PDF Processing Time Summary (seconds)")
+        for fname, elapsed in timings:
+            st.write(f"{fname}: {elapsed:.2f} seconds")
