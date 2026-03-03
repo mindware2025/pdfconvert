@@ -2,17 +2,16 @@
 """
 Oracle Tool: PDF Invoice Extraction and Excel Export
 """
-
-import pdfplumber
+ 
 import streamlit as st
-import fitz  # PyMuPDF
+import pdfplumber
 import re
 import pandas as pd
 from typing import List, Dict
+ 
 import concurrent.futures
-import time
-
 from typing import Tuple
+ 
 REQUIRED_FIELDS = [
     "Billed To",
     "Invoice Number",
@@ -25,18 +24,16 @@ REQUIRED_FIELDS = [
     "ACCT #",
     "SWIFT Code"
 ]
-
+ 
 def extract_text_from_pdf(pdf_path: str) -> str:
-    doc = fitz.open(stream=pdf_path.read(), filetype="pdf")
-    text = ""
-    for page in doc:
-        text += page.get_text()
-    return text
-
+    with pdfplumber.open(pdf_path) as pdf:
+        first_page = pdf.pages[0]
+        return first_page.extract_text()
+ 
 def extract_fields(text: str) -> Dict[str, str]:
     lines = text.splitlines()
     result = {field: "" for field in REQUIRED_FIELDS}
-
+ 
     # Billed To: match from known list, search after 'Reference Invoice Number:' or in address blocks
     billed_to_options = [
         "Mindware for Computers",
@@ -76,7 +73,7 @@ def extract_fields(text: str) -> Dict[str, str]:
                     break
         if found_billed_to:
             break
-
+ 
     # Purchase Order: look for PO- pattern (prefer 'PO Number' line, else any PO-)
     for line in lines:
         if 'PO Number' in line:
@@ -88,7 +85,7 @@ def extract_fields(text: str) -> Dict[str, str]:
         po_match = re.search(r'PO\s*-\s*([\w-]+)', text, re.IGNORECASE)
         if po_match:
             result["Purchase Order"] = f"PO-{po_match.group(1)}"
-
+ 
     # Invoice Amount: find all 'Total' lines and use the highest value (should include VAT)
     total_amounts = []
     for line in lines:
@@ -101,7 +98,7 @@ def extract_fields(text: str) -> Dict[str, str]:
     if total_amounts:
         # Use the highest total (should be with VAT)
         result["Invoice Amount"] = max(total_amounts, key=lambda x: x[0])[1]
-
+ 
     # IBAN and ACCT (extract full IBAN, clean spaces, stop at non-IBAN word)
     iban_match = re.search(r"IBAN[:# ]*[:\s]*([A-Z0-9 ]{10,})", text, re.IGNORECASE)
     acct_match = re.search(r"ACCT[:# ]*[:\s]*([0-9 ]+)", text, re.IGNORECASE)
@@ -119,8 +116,8 @@ def extract_fields(text: str) -> Dict[str, str]:
     # If IBAN is missing, use ACCT as IBAN fallback
     if not result["IBAN #"] and result["ACCT #"]:
         result["IBAN #"] = result["ACCT #"]
-
-
+ 
+ 
     # Look for lines with multiple values (e.g., 'TotalAmount DueDate InvoiceNumber' and the next line)
     for idx, line in enumerate(lines):
         if re.sub(r"\s+", "", line).lower() == "totalamountduedateinvoicenumber":
@@ -132,7 +129,7 @@ def extract_fields(text: str) -> Dict[str, str]:
                     result["Due Date"] = values[1]
                     result["Invoice Number"] = values[2]
             break
-
+ 
     # Fallback: Invoice Number, Due Date, Invoice Date from their respective lines if not found
     if not result["Invoice Number"]:
         for line in lines:
@@ -141,7 +138,7 @@ def extract_fields(text: str) -> Dict[str, str]:
                 if match:
                     result["Invoice Number"] = match.group(1)
                 break
-
+ 
     if not result["Due Date"]:
         for line in lines:
             if 'Due Date' in line:
@@ -149,7 +146,7 @@ def extract_fields(text: str) -> Dict[str, str]:
                 if match:
                     result["Due Date"] = match.group(1)
                 break
-
+ 
     if not result["Invoice Date"]:
         for line in lines:
             if 'Invoice Date' in line:
@@ -157,7 +154,7 @@ def extract_fields(text: str) -> Dict[str, str]:
                 if match:
                     result["Invoice Date"] = match.group(1)
                 break
-
+ 
     # Invoice Date: look for 'Invoice Date' line, extract value
     for idx, line in enumerate(lines):
         if 'Invoice Date' in line:
@@ -171,7 +168,7 @@ def extract_fields(text: str) -> Dict[str, str]:
                 if re.match(r'[\dA-Z-]+', next_line):
                     result["Invoice Date"] = next_line
             break
-
+ 
     # Currency Code: extract any 3-letter currency code from 'Total' line (not just at end)
     currency_candidates = set(["USD", "AED", "KES", "QAR", "OMR", "EUR", "GBP", "SAR", "BHD", "KWD"])
     found_currency = False
@@ -193,57 +190,33 @@ def extract_fields(text: str) -> Dict[str, str]:
             if code in currency_candidates:
                 result["Currency Code"] = code
                 break
-
+ 
     # SWIFT Code: extract from 'SWIFT Code:' or 'SWIFT:'
     for line in lines:
         swift_match = re.search(r'SWIFT(?: Code)?[:\s-]*([A-Z0-9]+)', line, re.IGNORECASE)
         if swift_match:
             result["SWIFT Code"] = swift_match.group(1)
             break
-
+ 
     return result
-
+ 
 import io
-
+ 
 def process_pdfs(pdf_files: List) -> Tuple[pd.DataFrame, dict]:
+    import streamlit as st
     data = []
     logs = {}
-    timings = []
-
-    def process_single_pdf(pdf_file):
-        start = time.time()
+    progress_bar = st.progress(0, text="Processing PDFs...")
+    total = len(pdf_files)
+ 
+    for i, pdf_file in enumerate(pdf_files):
         with pdfplumber.open(pdf_file) as pdf:
             first_page = pdf.pages[0]
             text = first_page.extract_text()
         fields = extract_fields(text)
-        elapsed = time.time() - start
-        return pdf_file.name, fields, text, elapsed
-
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        results = list(executor.map(process_single_pdf, pdf_files))
-    for fname, fields, text, elapsed in results:
-        logs[fname] = text
+        logs[pdf_file.name] = text
         data.append(fields)
-        timings.append((fname, elapsed))
+        progress_bar.progress((i + 1) / total, text=f"Processed {i+1} of {total} PDFs")
     df = pd.DataFrame(data, columns=REQUIRED_FIELDS)
-    return df, logs, timings
-
-def show_oracle_tool():
-    st.header("Oracle Invoice PDF Extractor")
-    st.write("Upload one or more Oracle invoice PDFs to extract key fields and export to Excel.")
-    uploaded_files = st.file_uploader("Upload PDF files", type=["pdf"], accept_multiple_files=True)
-    if uploaded_files:
-        with st.spinner("Processing PDFs..."):
-            df, _, timings = process_pdfs(uploaded_files)
-            output = io.BytesIO()
-            df.to_excel(output, index=False)
-            output.seek(0)
-        st.download_button(
-            label="Download Excel",
-            data=output,
-            file_name="oracle_invoices.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-        st.subheader("PDF Processing Time Summary (seconds)")
-        for fname, elapsed in timings:
-            st.write(f"{fname}: {elapsed:.2f} seconds")
+    return df, logs
+ 

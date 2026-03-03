@@ -21,7 +21,7 @@ from extractors.insurance2  import process_grouped_customer_files
 from extractors.ibm import correct_descriptions, create_styled_excel, create_styled_excel_template2, extract_ibm_data_from_pdf, extract_last_page_text, get_extraction_debug
 from extractors.ibm_template2 import extract_ibm_template2_from_pdf
 from extractors.template_detector import detect_ibm_template
-from oracle_invoice import show_oracle_tool
+from oracle_invoice import process_pdfs, show_oracle_tool
 from oracle_invoice import show_oracle_tool
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
@@ -2230,7 +2230,21 @@ elif tool == "AR to EDD file":
         )
         
 elif tool == "🟧 Oracle Invoice Tool":
-    show_oracle_tool()
+    st.header("Oracle Invoice PDF Extractor")
+    st.write("Upload one or more Oracle invoice PDFs to extract key fields and export to Excel.")
+    uploaded_files = st.file_uploader("Upload PDF files", type=["pdf"], accept_multiple_files=True)
+    if uploaded_files:
+        with st.spinner("Processing PDFs..."):
+            df, _ = process_pdfs(uploaded_files)
+            output = io.BytesIO()
+            df.to_excel(output, index=False)
+            output.seek(0)
+        st.download_button(
+            label="Download Excel",
+            data=output,
+            file_name="oracle_invoices.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
     st.info("Currently, only the Google DNTS Extractor tool is available. More tools can be added based on your requirements.")
