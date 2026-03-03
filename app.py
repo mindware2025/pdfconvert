@@ -2228,22 +2228,19 @@ elif tool == "AR to EDD file":
           
         )
         
+
 elif tool == "🟧 Oracle Invoice Tool":
     st.header("Oracle Invoice PDF Extractor")
     st.write("Upload one or more Oracle invoice PDFs to extract key fields and export to Excel.")
-    uploaded_files = st.file_uploader("Upload PDF files", type=["pdf"], accept_multiple_files=True)
-    if uploaded_files:
-        with st.spinner("Processing PDFs..."):
-            df, _ = process_pdfs(uploaded_files)
-            output = io.BytesIO()
-            df.to_excel(output, index=False)
-            output.seek(0)
-        st.download_button(
-            label="Download Excel",
-            data=output,
-            file_name="oracle_invoices.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+
+    # IMPORTANT: give file_uploader a stable key
+    uploaded_files = st.file_uploader(
+        "Upload PDF files",
+        type=["pdf"],
+        accept_multiple_files=True,
+        key="oracle_pdf_uploader"
+    )
+
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
     st.info("Currently, only the Google DNTS Extractor tool is available. More tools can be added based on your requirements.")
