@@ -22,6 +22,7 @@ from extractors.google_dnts import extract_invoice_info, extract_table_from_text
 from extractors.insurance import process_insurance_excel
 from extractors.insurance2  import process_grouped_customer_files
 #from sales.mibb_quotation import create_mibb_excel, extract_mibb_header_from_pdf, extract_mibb_table_from_pdf
+from oracle_invoice import process_oracle_pdfs_cached
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 from ibm import extract_ibm_data_from_pdf, create_styled_excel, create_styled_excel_template2, correct_descriptions, extract_last_page_text
@@ -1018,7 +1019,8 @@ if team == "Finance":
         "🟦 Google DNTS Extractor",
         "🟩 Google Invoice Extractor",
         "📄 Claims Automation",
-        "🟨 AWS Invoice Tool"
+        "🟨 AWS Invoice Tool",
+        "🟧 Oracle Invoice Tool"
     ]
 elif team == "Operations":
     TOOL_OPTIONS = [
@@ -1804,6 +1806,36 @@ elif tool == "AR to EDD file":
                             
                         ),
         )
+elif tool == "🟧 Oracle Invoice Tool":
+    st.title("Oracle Invoice Tool")
+    st.write("Upload Oracle invoice PDF(s) and download the extracted data as Excel.")
+
+    uploaded_files = st.file_uploader(
+        "Choose Oracle invoice PDF(s)",
+        type=["pdf"],
+        accept_multiple_files=True,
+    )
+
+    if uploaded_files:
+        file_blobs = [(f.name, f.read()) for f in uploaded_files]
+        df, text_map = process_oracle_pdfs_cached(file_blobs)
+
+        if not df.empty:
+            excel_bytes = prepare_excel_bytes(df)
+            st.download_button(
+                label="⬇️ Download Extracted Oracle Invoice Data",
+                data=excel_bytes,
+                file_name="oracle_invoice_data.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+
+            with st.expander("Preview extracted data"):
+                st.dataframe(df)
+        else:
+            st.warning("No data extracted.")
+    else:
+        st.info("Please upload Oracle invoices.")
+
 elif tool == "IBM Quotation":
 
     st.header("🆕 IBM Excel to Excel + PDF to Excel (Combo)")
