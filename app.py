@@ -22,7 +22,8 @@ from extractors.google_dnts import extract_invoice_info, extract_table_from_text
 from extractors.insurance import process_insurance_excel
 from extractors.insurance2  import process_grouped_customer_files
 #from sales.mibb_quotation import create_mibb_excel, extract_mibb_header_from_pdf, extract_mibb_table_from_pdf
-from oracle_invoice import process_oracle_pdfs_cached
+
+from extractors.oracle import prepare_excel_bytes, process_oracle_pdfs_cached
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 from ibm import extract_ibm_data_from_pdf, create_styled_excel, create_styled_excel_template2, correct_descriptions, extract_last_page_text
