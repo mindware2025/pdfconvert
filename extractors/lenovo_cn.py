@@ -33,49 +33,48 @@ NARR_PREFIX = "LENOVO(PCG) SELLOUT REBATE RECEIPT / AGREEMENT # "
 MAIN_AC_D = "14301"   # when Dr/Cr = D
 MAIN_AC_C = "12741"   # when Dr/Cr = C
 
-def _read_pdf_text_first_two_pages(pdf_bytes: bytes) -> str:
+def _read_pdf_text_all_pages(pdf_bytes: bytes) -> str:
+    """
+    Lenovo CN totals can appear on later pages (e.g., page 3).
+    Read ALL pages to avoid missing 'Total of Products/Services'.
+    """
     with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
         out = []
-        for i in range(min(doc.page_count, 2)):
+        for i in range(doc.page_count):
             out.append(doc.load_page(i).get_text("text") or "")
         return "\n".join(out)
 
 def _normalize_date(d: str) -> str:
-    try:
-        return datetime.strptime(d.strip(), "%d-%b-%Y").strftime("%d/%m/%Y")
-    except Exception:
+    """
+    Convert dates like 12-FEB-2026 to dd/mm/yyyy.
+    """
+    for fmt in ("%d-%b-%Y", "%d-%b-%Y"):
         try:
-            return datetime.strptime(d.strip().upper(), "%d-%b-%Y").strftime("%d/%m/%Y")
+            return datetime.strptime(d.strip().upper(), fmt).strftime("%d/%m/%Y")
         except Exception:
-            return d
+            pass
+    return d  # return as-is if parse fails
 
 def _extract_fields(text: str) -> Dict[str, str]:
+    """
+    Pull: Credit No, Credit Date, Currency, Total Amount, Program/Agreement ID.
+    Be robust to '**', spacing, and page breaks.
+    """
     fields = {"credit_no": "", "credit_date": "", "currency": "", "total_amount": "", "program_id": ""}
 
+    # Compact whitespace but keep order
     compact = " ".join(text.split())
 
-    # Credit No / Credit Date
-    m = re.search(r"Credit\s*No\.?\s*:\s*([A-Z0-9/-]+)\s+Credit\s*Date\s*:\s*([0-9]{2}-[A-Za-z]{3}-[0-9]{4})",
-                  compact, re.IGNORECASE)
+    # --- Credit No / Credit Date ---
+    m = re.search(
+        r"Credit\s*No\.?\s*:\s*([A-Z0-9/-]+)\s+Credit\s*Date\s*:\s*([0-9]{2}-[A-Za-z]{3}-[0-9]{4})",
+        compact, re.IGNORECASE
+    )
     if m:
         fields["credit_no"] = m.group(1).strip()
         fields["credit_date"] = _normalize_date(m.group(2))
 
-    # Total (currency + amount)
-    m = re.search(r"Total\s*of\s*Products/Services.*?([A-Z]{3})\s*([0-9,]+\.\d{2})",
-                  compact, re.IGNORECASE)
-    if m:
-        fields["currency"] = m.group(1)
-        fields["total_amount"] = m.group(2).replace(",", "")
-    else:
-        # Secondary fallback: any XYZ 123.45 after word 'Total'
-        m = re.search(r"Total.*?([A-Z]{3})\s*([0-9,]+\.\d{2})",
-                      compact, re.IGNORECASE)
-        if m:
-            fields["currency"] = m.group(1)
-            fields["total_amount"] = m.group(2).replace(",", "")
-
-    # Program/Agreement
+    # --- Program/Agreement (Program ID or Claim ref ID) ---
     m = re.search(r"\bProgram\s*ID\s*:\s*(SM-[0-9-]+)", compact, re.IGNORECASE)
     if m:
         fields["program_id"] = m.group(1).strip()
@@ -84,15 +83,42 @@ def _extract_fields(text: str) -> Dict[str, str]:
         if m:
             fields["program_id"] = m.group(1).strip()
 
+    # --- Currency + Total ---
+    # Primary (handles: Total of Products/Services** USD 200.02, extra symbols/spaces)
+    m = re.search(
+        r"Total\s*of\s*Products/Services.*?([A-Z]{3})\s*([0-9,]+\.\d{2})",
+        compact, re.IGNORECASE
+    )
+    if m:
+        fields["currency"] = m.group(1).strip()
+        fields["total_amount"] = m.group(2).replace(",", "")
+    else:
+        # Secondary fallback: any 'Total ... CUR AMT'
+        m = re.search(
+            r"Total[^A-Za-z0-9]+.*?([A-Z]{3})\s*([0-9,]+\.\d{2})",
+            compact, re.IGNORECASE
+        )
+        if m:
+            fields["currency"] = m.group(1).strip()
+            fields["total_amount"] = m.group(2).replace(",", "")
+        else:
+            # Tertiary: 'Sub total 200.02' (no currency). Pair with any detected currency token if present.
+            m_sub = re.search(r"Sub\s*total\s*([0-9,]+\.\d{2})", compact, re.IGNORECASE)
+            if m_sub:
+                fields["total_amount"] = m_sub.group(1).replace(",", "")
+                # Try to find a currency token somewhere nearby/global (e.g., USD)
+                m_cur = re.search(r"\b([A-Z]{3})\b\s*[0-9,]+\.\d{2}", compact)
+                fields["currency"] = (m_cur.group(1) if m_cur else "USD")
+
     return fields
 
 def _build_two_rows(fields: Dict[str, str], doc_no: int, seq_no: int) -> List[List]:
     """
     Build the two ledger rows (D & C) in the exact header order.
-    - LC Amt mirrors FC Amt (USD base).
+    - LC Amt mirrors FC Amt.
     - All FLEX and TH_FLEX left blank; Party/Tax/Expense/DISC blank.
-    - 'Doc No' is provided and repeats for both D and C rows.
-    - 'Seq No' and 'Ref Seq No' use seq_no (you can change to per-line if required).
+    - 'Doc No' repeats for both D and C rows.
+    - 'Seq No' and 'Ref Seq No' use seq_no.
     """
     doc_dt = fields["credit_date"]
     doc_ref = fields["credit_no"]
@@ -114,12 +140,12 @@ def _build_two_rows(fields: Dict[str, str], doc_no: int, seq_no: int) -> List[Li
             "", "", "", "",  # Anly1, Anly2, Acty1, Acty2
             currency,        # Currency
             amt,             # FC Amt
-            "",             # LC Amt
+            "",             # LC Amt (mirror FC)
             drcr,            # Dr/Cr
             narration,       # Detail Narration
             narration,       # Header Narration
             "", "", "",      # Paym Mode, Chq Book Id, Chq No
-            "",          # Chq Dt
+            "",          # Chq Dt  (align with your sample)
             "",              # Payee Name
             doc_dt,          # Val Date
             doc_ref,         # Doc Ref
@@ -143,11 +169,19 @@ def process_lenovo_credit_pdfs(files: List[Tuple[str, bytes]]) -> pd.DataFrame:
     """
     all_rows: List[List] = []
     doc_no = 1     # increments per PDF
-    seq_no = 1     # you can also increment per PDF if you want 1,1 then 2,2 etc for Seq
+    seq_no = 1     # increments per PDF (mirrors Doc No)
 
     for name, blob in files:
-        text = _read_pdf_text_first_two_pages(blob)
+        text = _read_pdf_text_all_pages(blob)  # <-- read ALL pages
         fields = _extract_fields(text)
+
+        # Minimal guardrail: if amount still missing, try to salvage from any "<CUR> <amount>" pattern
+        if not fields["total_amount"]:
+            m_any = re.search(r"\b([A-Z]{3})\s*([0-9,]+\.\d{2})\b", " ".join(text.split()))
+            if m_any:
+                fields["currency"] = fields["currency"] or m_any.group(1)
+                fields["total_amount"] = m_any.group(2).replace(",", "")
+
         rows = _build_two_rows(fields, doc_no=doc_no, seq_no=seq_no)
         all_rows.extend(rows)
         doc_no += 1
