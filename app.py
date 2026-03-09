@@ -22,6 +22,7 @@ from extractors.ibm import correct_descriptions, create_styled_excel, create_sty
 from extractors.ibm_template2 import extract_ibm_template2_from_pdf
 from extractors.template_detector import detect_ibm_template
 from oracle_invoice import prepare_excel_bytes, process_oracle_pdfs_cached
+from extractors.lenovo_cn import process_lenovo_credit_pdfs as process_lenovo_cn, prepare_excel_bytes as prepare_lenovo_cn_excel, CN_HEADERS
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 load_dotenv()
@@ -848,7 +849,8 @@ if team == "Finance":
         "🟩 Google Invoice Extractor",
         "📄 Claims Automation",
         "🟨 AWS Invoice Tool",
-        "🟧 Oracle Invoice Tool"
+        "🟧 Oracle Invoice Tool",
+        "🟥 Lenovo Credit Note Tool" 
         
     ]
 elif team == "Operations":
@@ -2259,6 +2261,37 @@ elif tool == "🟧 Oracle Invoice Tool":
             st.warning("No data extracted.")
     else:
         st.info("Please upload Oracle invoices.")
+        
+elif tool == "🟥 Lenovo Credit Note Tool":
+    st.title("Lenovo Credit Note Tool")
+    st.write("Upload Lenovo credit note PDF(s) and download the CN upload Excel.")
+
+    uploaded_files = st.file_uploader(
+        "Choose Lenovo credit note PDF(s)",
+        type=["pdf"],
+        accept_multiple_files=True,
+        key="lenovo_cn_upload"
+    )
+
+    if uploaded_files:
+        file_blobs = [(f.name, f.read()) for f in uploaded_files]
+        df = process_lenovo_cn(file_blobs)
+
+        if not df.empty:
+            excel_bytes = prepare_lenovo_cn_excel(df)
+            st.download_button(
+                label="⬇️ Download Lenovo Credit Note Excel",
+                data=excel_bytes,
+                file_name="lenovo_credit_notes.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+
+            with st.expander("Preview extracted rows"):
+                st.dataframe(df, use_container_width=True)
+        else:
+            st.warning("No rows produced. Please check the PDF format.")
+    else:
+        st.info("Please upload Lenovo credit note PDFs to begin.")
 
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
