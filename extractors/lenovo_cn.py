@@ -62,12 +62,15 @@ def _extract_fields(text: str) -> Dict[str, str]:
         fields["credit_date"] = _normalize_date(m.group(2))
 
     # Total (currency + amount)
-    m = re.search(r"Total\s+of\s+Products/Services\s+([A-Z]{3})\s+([0-9,]+\.\d{2})", compact, re.IGNORECASE)
+    m = re.search(r"Total\s*of\s*Products/Services.*?([A-Z]{3})\s*([0-9,]+\.\d{2})",
+                  compact, re.IGNORECASE)
     if m:
         fields["currency"] = m.group(1)
         fields["total_amount"] = m.group(2).replace(",", "")
     else:
-        m = re.search(r"(?:Total|Summary)[:\s]+([A-Z]{3})\s+([0-9,]+\.\d{2})", compact, re.IGNORECASE)
+        # Secondary fallback: any XYZ 123.45 after word 'Total'
+        m = re.search(r"Total.*?([A-Z]{3})\s*([0-9,]+\.\d{2})",
+                      compact, re.IGNORECASE)
         if m:
             fields["currency"] = m.group(1)
             fields["total_amount"] = m.group(2).replace(",", "")
