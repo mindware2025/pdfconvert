@@ -116,7 +116,7 @@ def _build_two_rows(fields: Dict[str, str], doc_no: int, seq_no: int) -> List[Li
             narration,       # Detail Narration
             narration,       # Header Narration
             "", "", "",      # Paym Mode, Chq Book Id, Chq No
-            doc_dt,          # Chq Dt
+            "",          # Chq Dt
             "",              # Payee Name
             doc_dt,          # Val Date
             doc_ref,         # Doc Ref
