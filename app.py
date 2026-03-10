@@ -2272,26 +2272,32 @@ elif tool == "🟥 Lenovo Credit Note Tool":
         accept_multiple_files=True,
         key="lenovo_cn_upload"
     )
-
+    
     if uploaded_files:
         file_blobs = [(f.name, f.read()) for f in uploaded_files]
+    
+    
         df = process_lenovo_cn(file_blobs)
-
+    
         if not df.empty:
-            excel_bytes = prepare_lenovo_cn_excel(df)
+            # ✅ Use the correct Excel-prep function
+            excel_bytes = prepare_excel_bytes(df)
+    
+            # ✅ Filename already returns "lenovo_credit_notes - DD-MM-YYYY.xlsx"
             st.download_button(
                 label="⬇️ Download Lenovo Credit Note Excel",
-                data=excel_bytes,
+                data=excel_bytes,  # must be bytes-like
                 download_name=build_output_filename(),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
-
+    
             with st.expander("Preview extracted rows"):
                 st.dataframe(df, use_container_width=True)
         else:
             st.warning("No rows produced. Please check the PDF format.")
     else:
         st.info("Please upload Lenovo credit note PDFs to begin.")
+    
 
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
