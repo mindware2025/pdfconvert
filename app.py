@@ -22,7 +22,6 @@ from extractors.ibm import correct_descriptions, create_styled_excel, create_sty
 from extractors.ibm_template2 import extract_ibm_template2_from_pdf
 from extractors.template_detector import detect_ibm_template
 from oracle_invoice import prepare_excel_bytes, process_oracle_pdfs_cached
-from extractors.lenovo_cn import build_output_filename, process_lenovo_credit_pdfs as process_lenovo_cn, prepare_excel_bytes as prepare_lenovo_cn_excel, CN_HEADERS
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 load_dotenv()
@@ -2231,37 +2230,6 @@ elif tool == "AR to EDD file":
         )
         
 
-
-elif tool == "🟧 Oracle Invoice Tool":
-    st.title("Oracle Invoice Tool")
-    st.write("Upload Oracle invoice PDF(s) and download the extracted data as Excel.")
-
-    uploaded_files = st.file_uploader(
-        "Choose Oracle invoice PDF(s)",
-        type=["pdf"],
-        accept_multiple_files=True,
-    )
-
-    if uploaded_files:
-        file_blobs = [(f.name, f.read()) for f in uploaded_files]
-        df, text_map = process_oracle_pdfs_cached(file_blobs)
-
-        if not df.empty:
-            excel_bytes = prepare_excel_bytes(df)
-            st.download_button(
-                label="⬇️ Download Extracted Oracle Invoice Data",
-                data=excel_bytes,
-                file_name="oracle_invoice_data.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
-
-            with st.expander("Preview extracted data"):
-                st.dataframe(df)
-        else:
-            st.warning("No data extracted.")
-    else:
-        st.info("Please upload Oracle invoices.")
-        
 elif tool == "🟥 Lenovo Credit Note Tool":
     st.title("Lenovo Credit Note Tool")
     st.write("Upload Lenovo credit note PDF(s) and download the CN upload Excel.")
@@ -2272,32 +2240,41 @@ elif tool == "🟥 Lenovo Credit Note Tool":
         accept_multiple_files=True,
         key="lenovo_cn_upload"
     )
-    
+
     if uploaded_files:
         file_blobs = [(f.name, f.read()) for f in uploaded_files]
-    
-    
-        df = process_lenovo_cn(file_blobs)
-    
+
+        # ✅ Import the actual functions implemented in the extractor
+        from extractors.lenovo_cn import (
+            process_lenovo_credit_pdfs,   # <-- correct function name
+            prepare_excel_bytes,
+            build_output_filename,
+        )
+
+        # ✅ Use the correct function name
+        df = process_lenovo_credit_pdfs(file_blobs)
+
         if not df.empty:
-            # ✅ Use the correct Excel-prep function
+            # Build Excel (bytes)
             excel_bytes = prepare_excel_bytes(df)
-    
-            # ✅ Filename already returns "lenovo_credit_notes - DD-MM-YYYY.xlsx"
+
+            # (Optional) quick sanity check—remove once verified
+            # assert isinstance(excel_bytes, (bytes, bytearray)) and len(excel_bytes) > 0
+
             st.download_button(
                 label="⬇️ Download Lenovo Credit Note Excel",
-                data=excel_bytes,  # must be bytes-like
-                download_name=build_output_filename(),
+                data=excel_bytes,
+                file_name=build_output_filename(),   # ✅ Streamlit expects file_name, not download_name
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="lenovo_cn_download_btn",        # good practice: stable unique key
             )
-    
+
             with st.expander("Preview extracted rows"):
                 st.dataframe(df, use_container_width=True)
         else:
             st.warning("No rows produced. Please check the PDF format.")
     else:
         st.info("Please upload Lenovo credit note PDFs to begin.")
-    
 
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
