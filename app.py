@@ -22,7 +22,7 @@ from extractors.ibm import correct_descriptions, create_styled_excel, create_sty
 from extractors.ibm_template2 import extract_ibm_template2_from_pdf
 from extractors.template_detector import detect_ibm_template
 from oracle_invoice import prepare_excel_bytes, process_oracle_pdfs_cached
-from extractors.lenovo_cn import process_lenovo_credit_pdfs as process_lenovo_cn, prepare_excel_bytes as prepare_lenovo_cn_excel, CN_HEADERS
+from extractors.lenovo_cn import build_output_filename, process_lenovo_credit_pdfs as process_lenovo_cn, prepare_excel_bytes as prepare_lenovo_cn_excel, CN_HEADERS
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 load_dotenv()
@@ -2282,7 +2282,7 @@ elif tool == "🟥 Lenovo Credit Note Tool":
             st.download_button(
                 label="⬇️ Download Lenovo Credit Note Excel",
                 data=excel_bytes,
-                file_name="lenovo_credit_notes.xlsx",
+                download_name=build_output_filename(),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
 

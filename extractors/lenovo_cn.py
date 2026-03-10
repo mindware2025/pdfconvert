@@ -75,11 +75,13 @@ def _extract_fields(text: str) -> Dict[str, str]:
         fields["credit_date"] = _normalize_date(m.group(2))
 
     # --- Program/Agreement (Program ID or Claim ref ID) ---
+    # Program ID (unchanged)
     m = re.search(r"\bProgram\s*ID\s*:\s*(SM-[0-9-]+)", compact, re.IGNORECASE)
     if m:
         fields["program_id"] = m.group(1).strip()
     else:
-        m = re.search(r"Claim\s*ref\s*ID\s*:\s*(SM-[0-9-]+)", compact, re.IGNORECASE)
+        # Claim ref ID (NEW - accept letters, numbers, underscore, hyphen)
+        m = re.search(r"\bClaim\s*ref\s*ID\s*:\s*([A-Za-z0-9_-]+)", compact, re.IGNORECASE)
         if m:
             fields["program_id"] = m.group(1).strip()
 
@@ -191,8 +193,34 @@ def process_lenovo_credit_pdfs(files: List[Tuple[str, bytes]]) -> pd.DataFrame:
     return df
 
 def prepare_excel_bytes(df: pd.DataFrame) -> bytes:
+    # Convert MAIN A/C (Column F) & FC Amt (Column O) to numeric
+    # Column names: "Main A/C" and "FC Amt"
+    df["Main A/C"] = pd.to_numeric(df["Main A/C"], errors="coerce")
+    df["FC Amt"] = pd.to_numeric(df["FC Amt"], errors="coerce")
+
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         df.to_excel(writer, index=False)
+
+        # Optional: Apply Excel number formatting
+        ws = writer.sheets["Sheet1"]
+
+        # Main A/C column (F) - integer format
+        for cell in ws["F"][1:]:      # skip header row
+            cell.number_format = "0"
+
+        # FC Amt column (O) - numeric with 2 decimals
+        for cell in ws["O"][1:]:      # skip header row
+            cell.number_format = "#,##0.00"
+
     buf.seek(0)
     return buf.getvalue()
+
+
+def build_output_filename():
+    """
+    Returns the filename with today's date in DD-MM-YYYY format.
+    Example: lenovo_credit_notes - 10-03-2026.xlsx
+    """
+    today = datetime.now().strftime("%d-%m-%Y")
+    return f"lenovo_credit_notes - {today}.xlsx"
