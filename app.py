@@ -12,9 +12,9 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import PatternFill
 from openpyxl.utils import get_column_letter
 import gspread
-from google.oauth2.service_account import Credentials
-from budg.ui_new_bud2026 import render_new_bud_tool
-from budg.ui_old_tool import render_old_tool
+from budg.ui_old_tool import render_old_tool as render_old_tool_extern
+from budg.ui_new_bud2026 import render_new_bud_tool as render_new_bud_tool_external
+
 from extractors.barcodeper50 import barcode_tooll
 from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_multiple_aws_pdfs
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
@@ -1825,11 +1825,12 @@ elif tool == "💻 IBM Quotation":
 
 elif tool == "AR Backlog → 3 sheets":
     # Renders the classic AR pipeline (AR_Backlog, By_Customer, Invoice)
-    render_old_tool()
+    render_old_tool_extern()
 
 elif tool == "BUD2026 from By_Customer":
     # Single download: identifiers + Insurance (optional master) + AR composition + banner/header
-    render_new_bud_tool()
+    render_new_bud_tool_external()
+    
 
 
 elif tool == "📦 Barcode PDF Generator grouped":
