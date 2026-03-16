@@ -1189,7 +1189,7 @@ elif tool == "🧾 Cloud Invoice Tool":
         
         
 elif tool == "💻 IBM Quotation":
-    st.set_page_config(page_title="IBM Quotation Extractor", layout="wide")
+    #st.set_page_config(page_title="IBM Quotation Extractor", layout="wide")
 
     # ---------------------------
     # Static content
