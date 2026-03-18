@@ -81,20 +81,6 @@ def filter_headers_by_quarter(headers, selected_quarter):
         headers = remove_quarter_block(headers, q)
     return headers
 
-
-def filter_banner_anchors_by_headers(banner_anchors, headers):
-    """Keep only banner anchors whose anchor header still exists after header filtering."""
-    filtered = []
-    for title, anchor_header, occurrence in banner_anchors:
-        seen = 0
-        for header in headers:
-            if header == anchor_header:
-                seen += 1
-                if seen == occurrence:
-                    filtered.append((title, anchor_header, occurrence))
-                    break
-    return filtered
-
 # ============================
 # FULL HEADERS (IN ORDER)
 # ============================

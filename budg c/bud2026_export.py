@@ -37,16 +37,6 @@ def _write_formula_if_present(ws, headers, header_name, row_idx, formula, occ=1)
     ws.write_formula(row_idx, col_idx, formula)
 
 
-PERIOD_SPECS = [
-    ("Collections FC\n31-03-2026", "AR Provision FC at 31-03-2026"),
-    ("Collections FC\n30-06-2026", "AR Provision FC at 30-06-2026"),
-    ("Collections FC\n30-09-2026", "AR Provision FC at 30-09-2026"),
-    ("Collections FC\n31-12-2026", "AR Provision FC at 31-12-2026"),
-    ("Collections FC\n31-12-2027", "AR Provision FC at 31-12-2027"),
-    ("Collections FC\n31-12-2028", "AR Provision FC at 31-12-2028"),
-]
-
-
 def export_bud2026_ordered(
     df_rows,
     headers,
@@ -138,10 +128,6 @@ def export_bud2026_ordered(
     numeric_headers.update({h for h in headers if h == "Provision Effect"})
     numeric_headers.update({h for h in headers if str(h).startswith("AR Provision FC at ")})
 
-    visible_periods = [
-        spec for spec in PERIOD_SPECS if spec[0] in headers and spec[1] in headers
-    ]
-
     # Base column references
     h = safe_col(headers, "Main Ac")
     j = safe_col(headers, "Insurance")
@@ -154,6 +140,13 @@ def export_bud2026_ordered(
     q = safe_col(headers, "Aging >=151")
     r = safe_col(headers, "AR Balance")
     s = safe_col(headers, "AR Provision at 31-08-2025")
+
+    z = safe_col(headers, "Collections FC 31-03-2026")
+    ae = safe_col(headers, "Collections FC 30-06-2026")
+    aj = safe_col(headers, "Collections FC 30-09-2026")
+    ao = safe_col(headers, "Collections FC 31-12-2026")
+    at = safe_col(headers, "Collections FC 31-12-2027")
+    ay = safe_col(headers, "Collections FC 31-12-2028")
 
     for r_idx, row in enumerate(df.itertuples(index=False), start=data_start_row):
         excel_row = r_idx + 1
@@ -182,14 +175,13 @@ def export_bud2026_ordered(
             )
 
         u = safe_col(headers, "Provision without any collection")
-        first_collection = safe_col(headers, visible_periods[0][0]) if visible_periods else None
-        if all([u, r, first_collection]):
+        if all([u, r, z]):
             _write_formula_if_present(
                 ws,
                 headers,
                 "Provision after collection",
                 r_idx,
-                f"=IFERROR({u}{excel_row}-({u}{excel_row}/{r}{excel_row}*{first_collection}{excel_row}),0)",
+                f"=IFERROR({u}{excel_row}-({u}{excel_row}/{r}{excel_row}*{z}{excel_row}),0)",
             )
 
         v = safe_col(headers, "Provision after collection")
@@ -217,69 +209,129 @@ def export_bud2026_ordered(
             )
 
         x = safe_col(headers, "Difference in Provision")
-        prev_expected = None
-        prev_ar_provision = None
-        for occ, (collection_header, ar_header) in enumerate(visible_periods, start=1):
-            collection_col = safe_col(headers, collection_header)
-            expected_col = safe_col(headers, "Expected AR", occ)
-            effect_col = safe_col(headers, "Provision Effect", occ)
-            current_ar_col = safe_col(headers, ar_header)
+        ac = safe_col(headers, "AR Provision FC at 31-03-2026")
+        ah = safe_col(headers, "AR Provision FC at 30-06-2026")
+        am = safe_col(headers, "AR Provision FC at 30-09-2026")
+        ar = safe_col(headers, "AR Provision FC at 31-12-2026")
+        aw = safe_col(headers, "AR Provision FC at 31-12-2027")
 
-            if occ == 1:
-                if all([r, collection_col]):
-                    _write_formula_if_present(
-                        ws,
-                        headers,
-                        "Expected AR",
-                        r_idx,
-                        f"={r}{excel_row}-{collection_col}{excel_row}",
-                        occ=occ,
-                    )
-                if x:
-                    _write_formula_if_present(
-                        ws, headers, "Provision Effect", r_idx, f"={x}{excel_row}", occ=occ
-                    )
-                if all([s, effect_col]):
-                    _write_formula_if_present(
-                        ws,
-                        headers,
-                        ar_header,
-                        r_idx,
-                        f"={s}{excel_row}+{effect_col}{excel_row}",
-                    )
-            else:
-                if all([prev_expected, collection_col]):
-                    _write_formula_if_present(
-                        ws,
-                        headers,
-                        "Expected AR",
-                        r_idx,
-                        f"={prev_expected}{excel_row}-{collection_col}{excel_row}",
-                        occ=occ,
-                    )
-                if all([prev_expected, collection_col, prev_ar_provision]):
-                    _write_formula_if_present(
-                        ws,
-                        headers,
-                        "Provision Effect",
-                        r_idx,
-                        (
-                            f"=IF({prev_expected}{excel_row}>0,IFERROR(IF(({collection_col}{excel_row})>{prev_expected}{excel_row},"
-                            f"-{prev_ar_provision}{excel_row},((-{collection_col}{excel_row})/{prev_expected}{excel_row}*{prev_ar_provision}{excel_row})),0),0)"
-                        ),
-                        occ=occ,
-                    )
-                if all([prev_ar_provision, effect_col]):
-                    _write_formula_if_present(
-                        ws,
-                        headers,
-                        ar_header,
-                        r_idx,
-                        f"={prev_ar_provision}{excel_row}+{effect_col}{excel_row}",
-                    )
+        aa = safe_col(headers, "Expected AR", 1)
+        ab = safe_col(headers, "Provision Effect", 1)
+        af = safe_col(headers, "Expected AR", 2)
+        ag = safe_col(headers, "Provision Effect", 2)
+        ak = safe_col(headers, "Expected AR", 3)
+        al = safe_col(headers, "Provision Effect", 3)
+        ap = safe_col(headers, "Expected AR", 4)
+        aq = safe_col(headers, "Provision Effect", 4)
+        au = safe_col(headers, "Expected AR", 5)
+        av = safe_col(headers, "Provision Effect", 5)
+        az = safe_col(headers, "Expected AR", 6)
+        ba = safe_col(headers, "Provision Effect", 6)
+        bb = safe_col(headers, "AR Provision FC at 31-12-2028")
 
-            prev_expected = expected_col
-            prev_ar_provision = current_ar_col
+        if all([r, z]):
+            _write_formula_if_present(ws, headers, "Expected AR", r_idx, f"={r}{excel_row}-{z}{excel_row}", occ=1)
+        if x:
+            _write_formula_if_present(ws, headers, "Provision Effect", r_idx, f"={x}{excel_row}", occ=1)
+        if all([s, ab]):
+            _write_formula_if_present(
+                ws, headers, "AR Provision FC at 31-03-2026", r_idx, f"={s}{excel_row}+{ab}{excel_row}"
+            )
+
+        if all([aa, ae]):
+            _write_formula_if_present(ws, headers, "Expected AR", r_idx, f"={aa}{excel_row}-{ae}{excel_row}", occ=2)
+        if all([aa, ae, ac]):
+            _write_formula_if_present(
+                ws,
+                headers,
+                "Provision Effect",
+                r_idx,
+                (
+                    f"=IF({aa}{excel_row}>0,IFERROR(IF(({ae}{excel_row})>{aa}{excel_row},"
+                    f"-{ac}{excel_row},((-{ae}{excel_row})/{aa}{excel_row}*{ac}{excel_row})),0),0)"
+                ),
+                occ=2,
+            )
+        if all([ac, ag]):
+            _write_formula_if_present(
+                ws, headers, "AR Provision FC at 30-06-2026", r_idx, f"={ac}{excel_row}+{ag}{excel_row}"
+            )
+
+        if all([af, aj]):
+            _write_formula_if_present(ws, headers, "Expected AR", r_idx, f"={af}{excel_row}-{aj}{excel_row}", occ=3)
+        if all([ak, aj, ah, af]):
+            _write_formula_if_present(
+                ws,
+                headers,
+                "Provision Effect",
+                r_idx,
+                (
+                    f"=IF({ak}{excel_row}>0,IFERROR(IF(({aj}{excel_row})>{ak}{excel_row},"
+                    f"-{ah}{excel_row},((-{aj}{excel_row})/{af}{excel_row}*{ah}{excel_row})),0),0)"
+                ),
+                occ=3,
+            )
+        if all([ah, al]):
+            _write_formula_if_present(
+                ws, headers, "AR Provision FC at 30-09-2026", r_idx, f"={ah}{excel_row}+{al}{excel_row}"
+            )
+
+        if all([ak, ao]):
+            _write_formula_if_present(ws, headers, "Expected AR", r_idx, f"={ak}{excel_row}-{ao}{excel_row}", occ=4)
+        if all([ap, ao, am, ak]):
+            _write_formula_if_present(
+                ws,
+                headers,
+                "Provision Effect",
+                r_idx,
+                (
+                    f"=IF({ap}{excel_row}>0,IFERROR(IF(({ao}{excel_row})>{ap}{excel_row},"
+                    f"-{am}{excel_row},((-{ao}{excel_row})/{ak}{excel_row}*{am}{excel_row})),0),0)"
+                ),
+                occ=4,
+            )
+        if all([am, aq]):
+            _write_formula_if_present(
+                ws, headers, "AR Provision FC at 31-12-2026", r_idx, f"={am}{excel_row}+{aq}{excel_row}"
+            )
+
+        if all([ap, at]):
+            _write_formula_if_present(ws, headers, "Expected AR", r_idx, f"={ap}{excel_row}-{at}{excel_row}", occ=5)
+        if all([au, at, ar, ap]):
+            _write_formula_if_present(
+                ws,
+                headers,
+                "Provision Effect",
+                r_idx,
+                (
+                    f"=IF({au}{excel_row}>0,IFERROR(IF(({at}{excel_row})>{au}{excel_row},"
+                    f"-{ar}{excel_row},((-{at}{excel_row})/{ap}{excel_row}*{ar}{excel_row})),0),0)"
+                ),
+                occ=5,
+            )
+        if all([ar, av]):
+            _write_formula_if_present(
+                ws, headers, "AR Provision FC at 31-12-2027", r_idx, f"={ar}{excel_row}+{av}{excel_row}"
+            )
+
+        if all([au, ay]):
+            _write_formula_if_present(ws, headers, "Expected AR", r_idx, f"={au}{excel_row}-{ay}{excel_row}", occ=6)
+        if all([az, ay, aw, au]):
+            _write_formula_if_present(
+                ws,
+                headers,
+                "Provision Effect",
+                r_idx,
+                (
+                    f"=IF({az}{excel_row}>0,IFERROR(IF(({ay}{excel_row})>{az}{excel_row},"
+                    f"-{aw}{excel_row},((-{ay}{excel_row})/{au}{excel_row}*{aw}{excel_row})),0),0)"
+                ),
+                occ=6,
+            )
+        if all([aw, ba]):
+            _write_formula_if_present(
+                ws, headers, "AR Provision FC at 31-12-2028", r_idx, f"={aw}{excel_row}+{ba}{excel_row}"
+            )
 
     ws.set_row(header_row, 36)
     if merge_banner and banner_anchors:
