@@ -15,6 +15,7 @@ import gspread
 from budg.ui_old_tool import render_old_tool as render_old_tool_extern
 from budg.ui_new_bud2026 import render_new_bud_tool as render_new_bud_tool_external
 
+from dell import generate_dell_quote
 from extractors.barcodeper50 import barcode_tooll
 from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_multiple_aws_pdfs
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
@@ -873,6 +874,7 @@ elif team == "Credit":
 elif team == "Sales":
     TOOL_OPTIONS = [
         "💻 IBM Quotation",
+        "💻 Dell Quotation",
     ]
 else:
     TOOL_OPTIONS = ["-- Select a tool --"]
@@ -2289,6 +2291,59 @@ elif tool == "🟥 Lenovo Credit Note Tool":
             st.warning("No rows produced. Please check the PDF format.")
     else:
         st.info("Please upload Lenovo credit note PDFs to begin.")
+        
+elif tool == "💻 Dell Quotation":
+
+    st.title("💼 Dell Quotation Tool")
+    st.caption(
+        "Upload a Dell BOQ Excel or PDF and download a formatted Quotation (Quote + BOQ). "
+        "Quote Ref and Date are read from the file (E15/E18 for Excel; Quote number/Quote date for PDF)."
+    )
+
+    uploaded = st.file_uploader(
+        "Upload Dell BOQ Excel or PDF",
+        type=["xlsx", "xlsm", "xls", "pdf"],
+        accept_multiple_files=False,
+    )
+
+    if st.button("Generate Dell Quotation"):
+        if not uploaded:
+            st.warning("Please upload a Dell BOQ Excel file.")
+        else:
+            input_bytes = uploaded.read()
+
+            with st.spinner("Generating..."):
+                try:
+                    out_bytes = generate_dell_quote(
+                        input_excel_bytes=input_bytes,
+                    )
+                except Exception as e:
+                    msg = str(e)
+                    if "pypdf is required" in msg.lower() or "pypdf" in msg.lower():
+                        st.error(
+                            "PDF parsing requires the `pypdf` package. Please install it in the same Python environment running this app (e.g. `pip install pypdf`)."
+                        )
+                    else:
+                        st.error(f"Error: {e}")
+                else:
+                    st.download_button(
+                        "⬇️ Download Dell_Quotation.xlsx",
+                        data=out_bytes,
+                        file_name=f"Dell_Quotation_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+                    st.success("Done ✅")
+
+                    log_path = os.path.join(os.path.dirname(__file__), "dell_quote.log")
+                    if os.path.exists(log_path):
+                        with open(log_path, "rb") as f:
+                            log_bytes = f.read()
+                        st.download_button(
+                            "⬇️ Download log",
+                            data=log_bytes,
+                            file_name="dell_quote.log",
+                            mime="text/plain",
+                        )
 
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
