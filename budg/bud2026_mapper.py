@@ -83,7 +83,7 @@ def map_by_customer_to_bud2026(df_customer: pd.DataFrame, ins_df: pd.DataFrame =
         out["Insurance"] = ins_val.where(ins_val.notna(), "").astype(object)
 
     # ---------------- AR / Aging Columns ----------------
-    on_acc_src   = _first_present(work, ["On Account (Derived)", "On Account"])
+    on_acc_src   = _first_present(work, ["On Account (Derived)", "On account"])
     not_due_src  = _first_present(work, ["Not Due Amount", "Not Due (Derived)", "Not Due"])
     a1_30_src    = _first_present(work, ["Aging 1 to 30"])
     a31_60_src   = _first_present(work, ["Aging 31 to 60"])

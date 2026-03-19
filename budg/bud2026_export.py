@@ -170,11 +170,11 @@ def export_bud2026_ordered(
                 "Provision without any collection",
                 r_idx,
                 (
-                    f"=IF(IF({h}{excel_row}=12301,"
+                    f"=IF(IF(IFERROR(VALUE({h}{excel_row}),0)=12301,"
                     f"(({l}{excel_row}*3%)+({m}{excel_row}*((3%*25%)/2))+"
                     f"({n}{excel_row}*50%)+({o}{excel_row}*75%)+"
                     f"{p}{excel_row}+{q}{excel_row}+{k}{excel_row}),0)>0,"
-                    f"IF({h}{excel_row}=12301,"
+                    f"IF(IFERROR(VALUE({h}{excel_row}),0)=12301,"
                     f"(({l}{excel_row}*3%)+({m}{excel_row}*((3%*25%)/2))+"
                     f"({n}{excel_row}*50%)+({o}{excel_row}*75%)+"
                     f"{p}{excel_row}+{q}{excel_row}+{k}{excel_row}),0),0)"

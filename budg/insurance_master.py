@@ -20,6 +20,7 @@ _REQUIRED_COLS = {
     "Default Pay Term",
 }
 
+
 def _sanitize_cols(cols):
     """Trim, replace NBSP with space; keep original case."""
     fixed = []
@@ -30,6 +31,7 @@ def _sanitize_cols(cols):
         s = str(c).replace("\u00A0", " ").strip()
         fixed.append(s)
     return fixed
+
 
 def load_insurance_master(xlsx_or_filelike) -> pd.DataFrame:
     """
@@ -73,8 +75,10 @@ def load_insurance_master(xlsx_or_filelike) -> pd.DataFrame:
 
     # Keep a small lookup footprint
     out_cols = ["Customer Code", "Main Account", "Insurance Limit"]
-    if "Effective From" in df.columns: out_cols.append("Effective From")
-    if "Effective To" in df.columns:   out_cols.append("Effective To")
+    if "Effective From" in df.columns:
+        out_cols.append("Effective From")
+    if "Effective To" in df.columns:
+        out_cols.append("Effective To")
 
     # Normalize Insurance Limit (numeric if possible)
     df["Insurance Limit"] = pd.to_numeric(df["Insurance Limit"], errors="coerce")
