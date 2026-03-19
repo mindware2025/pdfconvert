@@ -59,7 +59,7 @@ def load_insurance_master(xlsx_or_filelike) -> pd.DataFrame:
     # Parse dates for sorting/tie-break (coerce errors -> NaT)
     for dc in ["Effective From", "Effective To", "Created Date"]:
         if dc in df.columns:
-            df[dc] = pd.to_datetime(df[dc], errors="coerce")
+            df[dc] = pd.to_datetime(df[dc], errors="coerce", dayfirst=True)
 
     # Sort by latest Effective From, then latest Created Date
     sort_cols = []
