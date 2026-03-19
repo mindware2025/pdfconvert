@@ -345,6 +345,35 @@ def _extract_quote_metadata(ws):
     return out
 
 
+def _extract_excel_consolidation_fee(ws) -> float:
+    """Find 'Consolidation Fee:' in Excel and read the value from the next column."""
+    logger = _get_logger()
+
+    for row in ws.iter_rows():
+        for cell in row:
+            value = cell.value
+            if not isinstance(value, str):
+                continue
+            if "consolidation fee" not in value.strip().lower():
+                continue
+
+            next_col = cell.column + 1
+            next_value = ws.cell(cell.row, next_col).value if next_col <= ws.max_column else None
+            parsed = _parse_money(next_value)
+            consolidation_fee = parsed or 0.0
+            logger.debug(
+                "Excel consolidation fee found at row=%s col=%s, next_col_value=%s, parsed=%s",
+                cell.row,
+                cell.column,
+                next_value,
+                consolidation_fee,
+            )
+            return consolidation_fee
+
+    logger.debug("Excel consolidation fee not found; defaulting to 0.0")
+    return 0.0
+
+
 def _extract_pdf_lines(pdf_bytes: bytes) -> List[str]:
     """Extract a cleaned line list from PDF using pdfplumber (best-effort).
 
@@ -1045,13 +1074,7 @@ def generate_dell_quote(
 
         item_descs_order = [it[0] for it in items]
         
-        for row in src_ws.iter_rows(values_only=True):
-            for cell in row:
-                if isinstance(cell, str) and "consolidation fee" in cell.lower():
-                    idx = row.index(cell)
-                    val = row[idx + 1] if idx + 1 < len(row) else 0
-                    consolidation_fee = _parse_money(val) or 0.0
-                    break
+        consolidation_fee = _extract_excel_consolidation_fee(src_ws)
         
             
     
