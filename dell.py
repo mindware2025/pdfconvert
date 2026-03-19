@@ -385,6 +385,11 @@ def _extract_excel_consolidation_fee(ws) -> float:
     return 0.0
 
 
+def _is_config_section_row(module: str, description: str, sku: str, tax: str) -> bool:
+    """Rows like 'Components', 'Software', 'Service' act as section headers in Product Details."""
+    return bool(module and not description and not sku and not tax)
+
+
 def _extract_pdf_lines(pdf_bytes: bytes) -> List[str]:
     """Extract a cleaned line list from PDF using pdfplumber (best-effort).
 
@@ -916,11 +921,17 @@ def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str]]:
             current_heading = f"Item {current_item}"
 
         # Scan rows until table ends
+        blank_streak = 0
         while data_row <= ws.max_row:
             row_text_all = _row_text(ws, data_row, 1, max_col)
 
             if not row_text_all:
-                break
+                blank_streak += 1
+                if blank_streak >= 2:
+                    break
+                data_row += 1
+                continue
+            blank_streak = 0
             if _is_table_stop(row_text_all):
                 data_row += 1
                 continue
@@ -1012,6 +1023,7 @@ def generate_dell_quote(
         items, quote_meta, config_rows, quote_ref_text, date_text, consolidation_fee = _extract_pdf_quote_data(input_excel_bytes)
         logger.info("Parsed PDF quote: %d items, quote_ref=%s, date=%s", len(items), quote_ref_text, date_text)
         _log_items("PDF items", items)
+        item_descs_order = [it[0] for it in items]
     else:
         src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
         src_ws = src_wb.active
@@ -1280,6 +1292,13 @@ def generate_dell_quote(
 
     r2 = 1
     title_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+    section_fill = PatternFill(start_color="E2F0D9", end_color="E2F0D9", fill_type="solid")
+    thin_gray = Border(
+        left=Side(style="thin", color="DDDDDD"),
+        right=Side(style="thin", color="DDDDDD"),
+        top=Side(style="thin", color="DDDDDD"),
+        bottom=Side(style="thin", color="DDDDDD"),
+    )
 
     def write_table_header(row_index: int):
         ws2[f"A{row_index}"] = "Item #"
@@ -1309,42 +1328,63 @@ def generate_dell_quote(
         ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
         r2 += 1
     else:
-        current_item = None
-        current_heading = None
-        for (item, heading, module, dsc, sku, tax) in config_rows:
-            # Insert a product heading section whenever the item number changes
-            if item and item != current_item:
-                # Item row (e.g. "Item 1")
-                ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=5)
-                ws2[f"A{r2}"] = f"Item {item}"
-                ws2[f"A{r2}"].font = Font(bold=True, color="1F497D")
-                ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
+        config_rows_by_item: Dict[str, List[Tuple[str, str, str, str, str, str]]] = {}
+        for row in config_rows:
+            config_rows_by_item.setdefault(row[0], []).append(row)
+
+        total_items = max(len(item_descs_order), len(config_rows_by_item))
+        for idx in range(1, total_items + 1):
+            item_key = str(idx)
+            rows_for_item = config_rows_by_item.get(item_key, [])
+            fallback_heading = item_descs_order[idx - 1] if idx - 1 < len(item_descs_order) else f"Item {idx}"
+            extracted_heading = rows_for_item[0][1] if rows_for_item and rows_for_item[0][1] else ""
+            item_heading = fallback_heading if extracted_heading in ("", f"Item {idx}") else extracted_heading
+
+            ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=5)
+            ws2[f"A{r2}"] = f"Item {idx}"
+            ws2[f"A{r2}"].font = Font(bold=True, color="1F497D")
+            ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
+            r2 += 1
+
+            ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=5)
+            ws2[f"A{r2}"] = item_heading
+            ws2[f"A{r2}"].font = Font(italic=True, color="1F497D")
+            ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
+            r2 += 1
+
+            if not rows_for_item:
+                ws2.merge_cells(start_row=r2, start_column=2, end_row=r2, end_column=5)
+                ws2[f"B{r2}"] = "(No configuration details found for this item)"
+                ws2[f"B{r2}"].font = Font(italic=True, color="7F7F7F")
+                ws2[f"B{r2}"].alignment = Alignment(horizontal="left", vertical="center")
+                for col in ("A", "B", "C", "D", "E"):
+                    ws2[f"{col}{r2}"].border = thin_gray
+                r2 += 1
+                continue
+
+            for (_, _, module, dsc, sku, tax) in rows_for_item:
+                if _is_config_section_row(module, dsc, sku, tax):
+                    ws2[f"A{r2}"] = ""
+                    ws2.merge_cells(start_row=r2, start_column=2, end_row=r2, end_column=5)
+                    ws2[f"B{r2}"] = module
+                    ws2[f"B{r2}"].font = Font(bold=True, color="1F1F1F")
+                    ws2[f"B{r2}"].fill = section_fill
+                    ws2[f"B{r2}"].alignment = Alignment(horizontal="left", vertical="center")
+                    for col in ("A", "B", "C", "D", "E"):
+                        ws2[f"{col}{r2}"].border = thin_gray
+                    r2 += 1
+                    continue
+
+                ws2[f"A{r2}"] = ""
+                ws2[f"B{r2}"] = module
+                ws2[f"C{r2}"] = dsc
+                ws2[f"D{r2}"] = sku
+                ws2[f"E{r2}"] = tax
+                for col in ("A", "B", "C", "D", "E"):
+                    ws2[f"{col}{r2}"].alignment = Alignment(vertical="top", wrap_text=True)
+                    ws2[f"{col}{r2}"].border = thin_gray
                 r2 += 1
 
-                # Heading row (e.g. "1. PowerEdge ...")
-                if heading:
-                    ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=5)
-                    ws2[f"A{r2}"] = heading
-                    ws2[f"A{r2}"].font = Font(italic=True, color="1F497D")
-                    ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
-                    r2 += 1
-
-                current_item = item
-                current_heading = heading
-
-            ws2[f"A{r2}"] = ""
-            ws2[f"B{r2}"] = module
-            ws2[f"C{r2}"] = dsc
-            ws2[f"D{r2}"] = sku
-            ws2[f"E{r2}"] = tax
-            for col in ("A", "B", "C", "D", "E"):
-                ws2[f"{col}{r2}"].alignment = Alignment(vertical="top", wrap_text=True)
-                ws2[f"{col}{r2}"].border = Border(
-                    left=Side(style="thin", color="DDDDDD"),
-                    right=Side(style="thin", color="DDDDDD"),
-                    top=Side(style="thin", color="DDDDDD"),
-                    bottom=Side(style="thin", color="DDDDDD"),
-                )
             r2 += 1
             
 
