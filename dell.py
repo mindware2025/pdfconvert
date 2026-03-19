@@ -409,15 +409,73 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
     }
     quote_ref_text = ""
     date_text = ""
+    consolidation_fee = 0.0
 
     pending_keys = []
     prev_label = None
+    pdf_label_aliases = {
+        "authorized partner": "reseller",
+    }
 
     MONTHS = r"(January|February|March|April|May|June|July|August|September|October|November|December)"
     DATE_RX = re.compile(rf"{MONTHS}\s+\d{{1,2}},\s+\d{{4}}")
 
     def extract_dates(s: str):
         return [m.group(0) for m in DATE_RX.finditer(s)]
+
+    def _normalize_pdf_label(label: str) -> str:
+        normalized = label.strip().lower().rstrip(":")
+        mapped = pdf_label_aliases.get(normalized, normalized)
+        if mapped != normalized:
+            logger.debug("PDF metadata label alias: '%s' -> '%s'", normalized, mapped)
+        return mapped
+
+    def _extract_pdf_reseller(lines: List[str]) -> str:
+        stop_markers = (
+            "billing information",
+            "shipping information",
+            "quote summary",
+            "product details",
+        )
+
+        for idx, line in enumerate(lines):
+            lower_line = line.lower()
+            if "authorized partner" not in lower_line:
+                continue
+
+            collected: List[str] = []
+
+            same_line_match = re.search(r"authorized partner\s*:\s*(.+)$", line, re.IGNORECASE)
+            if same_line_match and same_line_match.group(1).strip():
+                collected.append(same_line_match.group(1).strip())
+
+            next_idx = idx + 1
+            while next_idx < len(lines):
+                candidate = lines[next_idx].strip()
+                candidate_lower = candidate.lower()
+                if not candidate:
+                    break
+                if any(marker in candidate_lower for marker in stop_markers):
+                    break
+                collected.append(candidate)
+                next_idx += 1
+
+            if not collected:
+                return ""
+
+            reseller_text = " ".join(collected)
+            reseller_text = re.sub(r"\s+", " ", reseller_text).strip()
+
+            if "page name" in lower_line:
+                uppercase_start = re.search(r"\b[A-Z]{2,}(?:\s+[A-Z]{2,})+", reseller_text)
+                if uppercase_start:
+                    reseller_text = reseller_text[uppercase_start.start():].strip()
+
+            reseller_text = re.sub(r"\s*-\s*Authorized Partner\+?$", "", reseller_text, flags=re.IGNORECASE).strip()
+            reseller_text = reseller_text.rstrip("+").strip()
+            return reseller_text
+
+        return ""
 
     for line in lines:
         stripped = line.strip()
@@ -455,12 +513,15 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
                     m = re.search(r"\b\d{6,}\b", val)
                     if m:
                             quote_ref_text = m.group(0)
+                            logger.debug("PDF metadata multiline: quote number=%s", quote_ref_text)
                 elif key == "quote date":
                     if DATE_RX.search(line_val):
                         val = DATE_RX.search(line_val).group(0)
                     date_text = val
+                    logger.debug("PDF metadata multiline: quote date=%s", date_text)
                 elif key in metadata:
                     metadata[key] = val
+                    logger.debug("PDF metadata multiline: %s=%s", key, val)
 
             pending_keys = []
             continue
@@ -472,15 +533,18 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
                 m = re.search(r"\b\d{6,}\b", stripped)
                 if m:
                     quote_ref_text = m.group(0)
+                    logger.debug("PDF metadata next-line: quote number=%s", quote_ref_text)
         
             elif prev_label == "quote date":
                 if DATE_RX.search(stripped):
                     date_text = DATE_RX.search(stripped).group(0)
                 else:
                     date_text = stripped
+                logger.debug("PDF metadata next-line: quote date=%s", date_text)
         
             elif prev_label in metadata:
                 metadata[prev_label] = stripped
+                logger.debug("PDF metadata next-line: %s=%s", prev_label, stripped)
         
             prev_label = None
             continue
@@ -488,30 +552,37 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
         # ---------------- KEY:VALUE ON SAME LINE ----------------
         if ":" in stripped:
             parts = [p.strip() for p in re.split(r"\s*:\s*", stripped) if p.strip()]
-            normalized = [p.lower() for p in parts]
+            normalized = [_normalize_pdf_label(p) for p in parts]
 
             if stripped.endswith(":"):
-                if normalized[0] in ("quote number", "quote date", "company name", "customer name", "customer number"):
-                    pending_keys.append(normalized[0])
+                for key in normalized:
+                    if key in ("quote number", "quote date", "company name", "customer name", "customer number", "reseller"):
+                        pending_keys.append(key)
+                        logger.debug("PDF metadata pending label: %s", key)
                 continue
 
             for i in range(0, len(parts), 2):
-                key = parts[i].lower()
+                key = normalized[i]
                 val = parts[i+1] if i+1 < len(parts) else ""
 
                 if key == "quote number":
                     quote_ref_text = val
+                    logger.debug("PDF metadata same-line: quote number=%s", quote_ref_text)
                 elif key == "quote date":
                     m = DATE_RX.search(val)
                     date_text = m.group(0) if m else val
+                    logger.debug("PDF metadata same-line: quote date=%s", date_text)
                 elif key in metadata:
                     metadata[key] = val
+                    logger.debug("PDF metadata same-line: %s=%s", key, val)
 
             continue
 
         # ---------------- LABEL-ONLY LINE ----------------
-        if lower in ("quote number", "quote date", "company name", "customer name", "customer number"):
-            prev_label = lower
+        normalized_lower = _normalize_pdf_label(lower)
+        if normalized_lower in ("quote number", "quote date", "company name", "customer name", "customer number", "reseller"):
+            prev_label = normalized_lower
+            logger.debug("PDF metadata label-only line detected: %s", normalized_lower)
             continue
 
     # FINAL FALLBACK: scan for date if still empty
@@ -520,7 +591,43 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
             m = DATE_RX.search(l)
             if m:
                 date_text = m.group(0)
+                logger.debug("PDF metadata fallback date=%s", date_text)
                 break
+
+    reseller_from_layout = _extract_pdf_reseller(lines)
+    if reseller_from_layout:
+        metadata["reseller"] = reseller_from_layout
+        logger.debug("PDF reseller layout extraction=%s", reseller_from_layout)
+
+    # Extract consolidation fee when present; otherwise keep the zero fallback.
+    for i, line in enumerate(lines):
+        low = line.lower().strip()
+        if "consolidation fee" not in low:
+            continue
+
+        same_line_match = re.search(r"consolidation fee[:\s]*([$€£]?\s*[\d,]+(?:\.\d+)?)", line, re.IGNORECASE)
+        if same_line_match:
+            consolidation_fee = _parse_money(same_line_match.group(1)) or 0.0
+            logger.debug("PDF consolidation fee same-line=%s", consolidation_fee)
+            break
+
+        if i + 1 < len(lines):
+            next_line_value = _parse_money(lines[i + 1])
+            if next_line_value is not None:
+                consolidation_fee = next_line_value
+                logger.debug("PDF consolidation fee next-line=%s", consolidation_fee)
+                break
+
+    logger.debug(
+        "PDF metadata summary: quote_ref=%s, date=%s, reseller=%s, company=%s, customer=%s, customer_number=%s, consolidation_fee=%s",
+        quote_ref_text,
+        date_text,
+        metadata.get("reseller", ""),
+        metadata.get("company name", ""),
+        metadata.get("customer name", ""),
+        metadata.get("customer number", ""),
+        consolidation_fee,
+    )
 
     # ---------------------- ITEMS (FULL 13+ extraction) ----------------------
     def _try_parse_item(line: str):
@@ -689,7 +796,7 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
     config_rows = collapse(config_rows)
     logger.debug("PDF CONFIG ROWS = %d", len(config_rows))
 
-    return items, metadata, config_rows, quote_ref_text, date_text
+    return items, metadata, config_rows, quote_ref_text, date_text, consolidation_fee
 
 def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str]]:
     """
@@ -854,11 +961,15 @@ def generate_dell_quote(
         )
     except Exception as e:
         logger.error("Failed to base64-log uploaded file: %s", e)
+
+    # Missing consolidation fee should be treated as zero for both Excel and PDF uploads.
+    consolidation_fee = 0.0
+
     # ---- Load source ----
     is_pdf = input_excel_bytes.lstrip().startswith(b"%PDF")
 
     if is_pdf:
-        items, quote_meta, config_rows, quote_ref_text, date_text = _extract_pdf_quote_data(input_excel_bytes)
+        items, quote_meta, config_rows, quote_ref_text, date_text, consolidation_fee = _extract_pdf_quote_data(input_excel_bytes)
         logger.info("Parsed PDF quote: %d items, quote_ref=%s, date=%s", len(items), quote_ref_text, date_text)
         _log_items("PDF items", items)
     else:
@@ -934,7 +1045,6 @@ def generate_dell_quote(
 
         item_descs_order = [it[0] for it in items]
         
-        consolidation_fee = 0.0
         for row in src_ws.iter_rows(values_only=True):
             for cell in row:
                 if isinstance(cell, str) and "consolidation fee" in cell.lower():
