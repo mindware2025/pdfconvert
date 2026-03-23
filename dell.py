@@ -44,8 +44,10 @@ def _log_items(prefix: str, items: list, max_items: int = 20):
 
 try:
     from PIL import Image as PILImage
+    from PIL import ImageChops
 except Exception:
     PILImage = None
+    ImageChops = None
 
 
 # ================= Helpers =================
@@ -114,25 +116,85 @@ def _is_price_or_qty_line(text: str) -> bool:
     return False
 
 
-def _add_logo(ws, logo_bytes: Optional[bytes], anchor="A1"):
-    """
-    Add logo from uploaded bytes or fallback to local 'image.png'.
-    Anchor is inside the merged area A1:B4; merging prevents row-1 stretching issues.
-    """
-    if logo_bytes and PILImage is not None:
+def _trim_logo_image(pil_img):
+    """Trim transparent/blank padding so logos render at a useful visible size."""
+    if PILImage is None:
+        return pil_img
+
+    img = pil_img.convert("RGBA")
+
+    # Prefer alpha-based trimming for transparent logos.
+    alpha = img.getchannel("A")
+    bbox = alpha.getbbox()
+    if bbox:
+        img = img.crop(bbox)
+
+    # Also trim white padding when present.
+    if ImageChops is not None:
+        bg = PILImage.new("RGBA", img.size, (255, 255, 255, 0))
+        diff = ImageChops.difference(img, bg)
+        bbox = diff.getbbox()
+        if bbox:
+            img = img.crop(bbox)
+
+    return img
+
+
+def _pil_to_xl_image(pil_img):
+    """Convert a Pillow image into an openpyxl image safely."""
+    buf = BytesIO()
+    pil_img.save(buf, format="PNG")
+    buf.seek(0)
+    return XLImage(buf)
+
+
+def _add_logo(ws, logo_bytes: Optional[bytes], anchor="A1", width: int = 180, height: int = 60):
+    """Add logo from uploaded bytes or fallback to local 'dell.png'."""
+    if PILImage is not None:
+        if logo_bytes:
+            try:
+                pil_img = _trim_logo_image(PILImage.open(BytesIO(logo_bytes)))
+                img = _pil_to_xl_image(pil_img)
+                img.width = width
+                img.height = height
+                ws.add_image(img, anchor)
+                return
+            except Exception:
+                pass
         try:
-            pil_img = PILImage.open(BytesIO(logo_bytes))
-            img = XLImage(pil_img)
-            img.width = 180
-            img.height = 60
+            pil_img = _trim_logo_image(PILImage.open("dell.png"))
+            img = _pil_to_xl_image(pil_img)
+            img.width = width
+            img.height = height
             ws.add_image(img, anchor)
             return
         except Exception:
             pass
     try:
-        img = XLImage("image.png")
-        img.width = 180
-        img.height = 60
+        img = XLImage("dell.png")
+        img.width = width
+        img.height = height
+        ws.add_image(img, anchor)
+    except Exception:
+        pass
+
+
+def _add_static_logo(ws, image_path: str, anchor="A1", width: int = 120, height: int = 60):
+    """Add a local logo file when present."""
+    if PILImage is not None:
+        try:
+            pil_img = _trim_logo_image(PILImage.open(image_path))
+            img = _pil_to_xl_image(pil_img)
+            img.width = width
+            img.height = height
+            ws.add_image(img, anchor)
+            return
+        except Exception:
+            pass
+    try:
+        img = XLImage(image_path)
+        img.width = width
+        img.height = height
         ws.add_image(img, anchor)
     except Exception:
         pass
@@ -866,10 +928,6 @@ def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str]]:
     r = anchor + 1
     max_col = min(ws.max_column, 40)
 
-    current_item = ""
-    current_heading = ""
-    item_counter = 0
-
     def _clean_heading_text(text: str) -> str:
         # remove trailing price fragments like "4 $200.00 $800.00"
         return re.sub(r"\s+\d+(\.\d+)?\s+\$?[\d,\.]+\s+\$?[\d,\.]+$", "", text).strip()
@@ -884,45 +942,56 @@ def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str]]:
             or "ship to" in low
         )
 
-    # Detect module header positions
-    def _find_header(row_idx: int) -> Optional[Tuple[int, dict]]:
-        return _find_config_table_header(ws, row_idx, search_rows=20)
+    def _extract_item_heading(row_idx: int) -> Optional[Tuple[str, str]]:
+        item_marker = _cell_to_text(ws.cell(row_idx, 1).value)
+        if not re.match(r"^\d+\.$", item_marker):
+            return None
 
-    # ----------------------
-    # Main scanning loop
-    # ----------------------
+        heading = _cell_to_text(ws.cell(row_idx, 2).value)
+        if not heading:
+            heading = _row_text(ws, row_idx, 1, max_col)
+
+        return item_marker.rstrip("."), _clean_heading_text(heading)
+
+    def _find_next_item_row(start_row: int) -> Optional[int]:
+        for row_idx in range(start_row, ws.max_row + 1):
+            if _extract_item_heading(row_idx):
+                return row_idx
+        return None
+
     while r <= ws.max_row:
-        txt = _row_text(ws, r, 1, max_col)
-
-        # Detect new item heading (e.g. "1. Dell Latitude 5520")
-        m = re.match(r"^\s*(\d+)\.", txt)
-        if m:
-            current_item = m.group(1)
-            current_heading = _clean_heading_text(txt)
+        item_info = _extract_item_heading(r)
+        if not item_info:
             r += 1
             continue
 
-        header_info = _find_header(r)
+        current_item, current_heading = item_info
+        next_item_row = _find_next_item_row(r + 1)
+        search_end = (next_item_row - 1) if next_item_row is not None else ws.max_row
+
+        header_info = None
+        scan_row = r + 1
+        while scan_row <= search_end:
+            maybe_header = _find_config_table_header(ws, scan_row, search_rows=0)
+            if maybe_header:
+                header_info = maybe_header
+                break
+            scan_row += 1
+
+        # Some items (for example accessories) have no configuration table.
         if not header_info:
-            r += 1
+            r = next_item_row if next_item_row is not None else ws.max_row + 1
             continue
 
         header_row, colmap = header_info
         data_row = header_row + 1
 
         # Skip empty rows after header
-        while data_row <= ws.max_row and not _row_text(ws, data_row, 1, max_col):
+        while data_row <= search_end and not _row_text(ws, data_row, 1, max_col):
             data_row += 1
 
-        # If no item heading was detected, synthesize one
-        if not current_item:
-            item_counter += 1
-            current_item = str(item_counter)
-            current_heading = f"Item {current_item}"
-
-        # Scan rows until table ends
         blank_streak = 0
-        while data_row <= ws.max_row:
+        while data_row <= search_end:
             row_text_all = _row_text(ws, data_row, 1, max_col)
 
             if not row_text_all:
@@ -932,18 +1001,11 @@ def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str]]:
                 data_row += 1
                 continue
             blank_streak = 0
+
             if _is_table_stop(row_text_all):
                 data_row += 1
                 continue
 
-            # Detect accidental new headings inside table
-            m2 = re.match(r"^\s*(\d+)\.", row_text_all)
-            if m2:
-                current_item = m2.group(1)
-                current_heading = _clean_heading_text(row_text_all)
-                break
-
-            # Extract cells
             mod = _cell_to_text(ws.cell(data_row, colmap.get("module", 0)).value)
             desc = _cell_to_text(ws.cell(data_row, colmap.get("description", 0)).value)
             sku = _cell_to_text(ws.cell(data_row, colmap.get("sku", 0)).value)
@@ -955,7 +1017,7 @@ def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str]]:
             rows.append((current_item, current_heading, mod, desc, sku, tax))
             data_row += 1
 
-        r = data_row + 1
+        r = next_item_row if next_item_row is not None else ws.max_row + 1
 
     # -----------------------
     # MERGE FRAGMENTED ROWS
@@ -984,6 +1046,7 @@ def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str]]:
 def generate_dell_quote(
     input_excel_bytes: bytes,
     logo_bytes: Optional[bytes] = None,
+    margin_percent: float = 0.0,
 ) -> bytes:
     """
     Generate a 2-sheet workbook from either:
@@ -1098,6 +1161,9 @@ def generate_dell_quote(
         item_descs_order = [it[0] for it in items]
         
         consolidation_fee = _extract_excel_consolidation_fee(src_ws)
+
+    # Use today's date on the generated quote instead of the source file date.
+    date_text = datetime.now().strftime("%d/%m/%Y")
         
             
     
@@ -1111,49 +1177,55 @@ def generate_dell_quote(
     
     
     # ---- Step 2: Write Consolidation Fee and Factor ----
-    # Cell H2 → Consolidation Fee
-    ws["H2"] = consolidation_fee
-    ws["H2"].font = Font(bold=True, color="1F497D")
-    ws["H2"].alignment = Alignment(horizontal="center", vertical="center")
+    # Cell I2 stores the consolidation fee used by the item formulas.
+    ws["I2"] = consolidation_fee
+    ws["I2"].font = Font(bold=True, color="1F497D")
+    ws["I2"].alignment = Alignment(horizontal="center", vertical="center")
     
-    # Cell H3 stays empty.
-    ws["H3"].value = ""
-    ws["H3"].font = Font(bold=True, color="1F497D")
-    ws["H3"].alignment = Alignment(horizontal="center", vertical="center")
+    # Cell I3 stays empty.
+    ws["I3"].value = ""
+    ws["I3"].font = Font(bold=True, color="1F497D")
+    ws["I3"].alignment = Alignment(horizontal="center", vertical="center")
+
+    # Cell J2 stores the factor derived from consolidation fee / original total.
+    ws["J2"].font = Font(bold=True, color="1F497D")
+    ws["J2"].alignment = Alignment(horizontal="center", vertical="center")
     
     
-    # Column widths (A..H; merge A+B for logo)
-    widths = {"A": 12, "B": 42, "C": 12, "D": 16, "E": 18, "G": 18, "H": 30}
+    # Column widths for visible quote columns, metadata, and helper pricing columns.
+    widths = {"A": 14, "B": 14, "C": 14, "D": 14, "E": 14, "F": 14, "G": 14, "H": 14, "I": 16, "J": 14}
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
 
-    # Header rows height (1..5)
-    for rr in range(1, 6):
+    # Header rows height
+    for rr in range(1, 3):
+        ws.row_dimensions[rr].height = 28
+    ws.row_dimensions[3].height = 12
+    for rr in range(5, 9):
         ws.row_dimensions[rr].height = 20
 
-    # ===== HEADER: merge A1:B4 and add logo =====
-    ws.merge_cells("A1:B4")
-    _add_logo(ws, logo_bytes, anchor="A1")
+    # ===== HEADER: use the full banner logo across A:H =====
+    ws.merge_cells("A1:H2")
+    _add_logo(ws, logo_bytes, anchor="A1", width=780, height=52)
 
-    # ===== Address block in D..F (merge per row) =====
-    ws.merge_cells("D1:F1")
-    ws.merge_cells("D2:F2")
-    ws.merge_cells("D3:F3")
-    ws["D1"] = "P O Box 55609, Dubai, UAE"
-    ws["D2"] = "Tel :  +9714 4500600    Fax : +9714 4500678"
-    ws["D3"] = "Website :  www.mindware.ae"
-    for cell in ("D1", "D2", "D3"):
+    ws.merge_cells("A5:D5")
+    ws.merge_cells("A6:D6")
+    ws.merge_cells("A7:D7")
+    ws["A5"] = "P O Box 55609, Dubai, UAE"
+    ws["A6"] = "Tel :  +9714 4500600    Fax : +9714 4500678"
+    ws["A7"] = "Website :  www.mindware.ae"
+    for cell in ("A5", "A6", "A7"):
         ws[cell].font = Font(bold=True, size=11, color="1F497D")
         ws[cell].alignment = Alignment(horizontal="left", vertical="center")
 
     # ===== META =====
-    ws["C7"] = "Quote Ref"
-    ws["C7"].font = Font(bold=True, color="1F497D")
-    ws["D7"] = quote_ref_text
-
-    ws["C8"] = "Date"
+    ws["C8"] = "Quote Ref"
     ws["C8"].font = Font(bold=True, color="1F497D")
-    ws["D8"] = date_text
+    ws["D8"] = quote_ref_text
+
+    ws["C9"] = "Date"
+    ws["C9"].font = Font(bold=True, color="1F497D")
+    ws["D9"] = date_text
 
     # ---- Quote metadata (Company Name / Customer Name / Customer Number / End User / Reseller)
     meta_rows = [
@@ -1164,22 +1236,21 @@ def generate_dell_quote(
         ("Reseller:", quote_meta.get("reseller", "")),
     ]
 
-    for idx, (label, value) in enumerate(meta_rows, start=4):
+    for idx, (label, value) in enumerate(meta_rows, start=5):
         ws[f"G{idx}"] = label
         ws[f"G{idx}"].font = Font(bold=True)
         ws[f"H{idx}"] = value
         ws[f"H{idx}"].alignment = Alignment(wrap_text=True, vertical="center")
 
     # ===== TABLE HEADER at row 8; data from row 9 =====
-    header_row = 9
-    ws["A9"] = "Sr. No."
-    ws["B9"] = "Description"
-    ws["C9"] = "Qty"
-    ws["D9"] = "Unit Price"
-    ws["E9"] = "Total Price"
-    ws["F9"] = "Adj/Unit"
-    ws["G9"] = "Final Unit Price"
-
+    header_row = 10
+    ws["A10"] = "Sr. No."
+    ws["B10"] = "Description"
+    ws["C10"] = "Qty"
+    ws["D10"] = "Unit Price"
+    ws["E10"] = "Total Price"
+    ws["I10"] = "Original Unit Price"
+    ws["J10"] = "Margin"
     header_fill = PatternFill(start_color="9BBB59", end_color="9BBB59", fill_type="solid")
     header_font = Font(bold=True, color="000000")
     border_thin = Border(
@@ -1189,7 +1260,7 @@ def generate_dell_quote(
         bottom=Side(style="thin", color="000000"),
     )
 
-    for addr in ("A9", "B9", "C9", "D9", "E9", "F9", "G9"):
+    for addr in ("A10", "B10", "C10", "D10", "E10", "I10", "J10"):
         ws[addr].fill = header_fill
         ws[addr].font = header_font
         ws[addr].alignment = Alignment(horizontal="center", vertical="center")
@@ -1200,6 +1271,7 @@ def generate_dell_quote(
     row_ptr = header_row + 1
     sr_no = 1
     currency_fmt = '"$"#,##0.00'
+    margin_fmt = '0.00\\%'
     yellow = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
     total_cells = []
 
@@ -1208,24 +1280,24 @@ def generate_dell_quote(
         ws[f"B{row_ptr}"] = desc_text
         ws[f"C{row_ptr}"] = qty_val
     
-        # Original Unit Price
-        ws[f"D{row_ptr}"].value = unit_val
+        # Helper columns keep the original unit price and per-unit adjustment.
+        ws[f"I{row_ptr}"].value = unit_val
+        ws[f"I{row_ptr}"].number_format = currency_fmt
+
+        # Column J stores the editable margin percentage for each line item.
+        ws[f"J{row_ptr}"].value = margin_percent
+        ws[f"J{row_ptr}"].number_format = margin_fmt
+    
+        # ---- Unit Price (D) shows the adjusted unit price
+        ws[f"D{row_ptr}"].value = f"=ROUND((((I{row_ptr}*$J$2)+I{row_ptr})/(1-J{row_ptr}/100)),2)"
         ws[f"D{row_ptr}"].number_format = currency_fmt
     
-        # ---- Adj/Unit (F) uses the consolidation fee stored in H2 directly
-        ws[f"F{row_ptr}"].value = f"=IF(C{row_ptr}>0,$H$2/C{row_ptr},0)"
-        ws[f"F{row_ptr}"].number_format = currency_fmt
-    
-        # ---- Final Unit Price (G) = Unit Price + Adj/Unit
-        ws[f"G{row_ptr}"].value = f"=D{row_ptr}+F{row_ptr}"
-        ws[f"G{row_ptr}"].number_format = currency_fmt
-    
-        # ---- Total Price (E) = Qty * Final Unit Price
-        ws[f"E{row_ptr}"].value = f"=C{row_ptr}*G{row_ptr}"
+        # ---- Total Price (E) = Qty * adjusted unit price
+        ws[f"E{row_ptr}"].value = f"=C{row_ptr}*D{row_ptr}"
         ws[f"E{row_ptr}"].number_format = currency_fmt
     
         # Styling
-        for addr in (f"A{row_ptr}", f"B{row_ptr}", f"C{row_ptr}", f"D{row_ptr}", f"E{row_ptr}", f"F{row_ptr}", f"G{row_ptr}"):
+        for addr in (f"A{row_ptr}", f"B{row_ptr}", f"C{row_ptr}", f"D{row_ptr}", f"E{row_ptr}", f"I{row_ptr}", f"J{row_ptr}"):
             ws[addr].fill = yellow
             ws[addr].border = border_thin
             ws[addr].alignment = Alignment(horizontal="center", vertical="center")
@@ -1234,6 +1306,13 @@ def generate_dell_quote(
         total_cells.append(f"E{row_ptr}")
         sr_no += 1
         row_ptr += 1
+
+    first_data_row = header_row + 1
+    last_data_row = row_ptr - 1
+    if last_data_row >= first_data_row:
+        ws["J2"] = f"=IFERROR($I$2/SUMPRODUCT($C${first_data_row}:$C${last_data_row},$I${first_data_row}:$I${last_data_row}),0)"
+    else:
+        ws["J2"] = 0
 
     # ===== TOTAL ROW =====
     ws.merge_cells(start_row=row_ptr, start_column=2, end_row=row_ptr, end_column=4)
@@ -1276,7 +1355,7 @@ def generate_dell_quote(
         ws.cell(footer_row, 2).alignment = Alignment(wrap_text=True, vertical="top")
         footer_row += 1
 
-    ws.freeze_panes = "A9"
+    ws.freeze_panes = "A10"
 
     # ===== Sheet 2: Configuration =====
     if not is_pdf:
