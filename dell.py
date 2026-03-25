@@ -150,7 +150,7 @@ def _pil_to_xl_image(pil_img):
 
 def _get_local_logo_path() -> Optional[str]:
     """Return the first available local logo path."""
-    for path in ("image.png", "dell.png"):
+    for path in ( "dell.png"):
         if os.path.exists(path):
             return path
     return None
