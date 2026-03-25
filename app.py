@@ -2316,6 +2316,13 @@ elif tool == "💻 Dell Quotation":
         help="This fills the Margin column in the quote so you can still adjust specific line items later in Excel.",
     )
 
+    currency_code = st.radio(
+        "Currency",
+        options=["USD", "QAR"],
+        horizontal=True,
+        help="QAR uses the fixed rate 1 USD = 3.64 QAR.",
+    )
+
     if st.button("Generate Dell Quotation"):
         if not uploaded:
             st.warning("Please upload a Dell BOQ Excel file.")
@@ -2327,6 +2334,7 @@ elif tool == "💻 Dell Quotation":
                     out_bytes = generate_dell_quote(
                         input_excel_bytes=input_bytes,
                         margin_percent=margin_percent,
+                        currency_code=currency_code,
                     )
                 except Exception as e:
                     msg = str(e)
@@ -2356,7 +2364,6 @@ elif tool == "💻 Dell Quotation":
                             file_name="dell_quote.log",
                             mime="text/plain",
                         )
-
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
     st.info("Currently, only the Google DNTS Extractor tool is available. More tools can be added based on your requirements.")

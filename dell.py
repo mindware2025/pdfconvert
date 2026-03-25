@@ -148,8 +148,16 @@ def _pil_to_xl_image(pil_img):
     return XLImage(buf)
 
 
+def _get_local_logo_path() -> Optional[str]:
+    """Return the first available local logo path."""
+    for path in ("image.png", "dell.png"):
+        if os.path.exists(path):
+            return path
+    return None
+
+
 def _add_logo(ws, logo_bytes: Optional[bytes], anchor="A1", width: int = 180, height: int = 60):
-    """Add logo from uploaded bytes or fallback to local 'dell.png'."""
+    """Add logo from uploaded bytes or fallback to a local logo file."""
     if PILImage is not None:
         if logo_bytes:
             try:
@@ -161,22 +169,26 @@ def _add_logo(ws, logo_bytes: Optional[bytes], anchor="A1", width: int = 180, he
                 return
             except Exception:
                 pass
+        local_logo = _get_local_logo_path()
+        if local_logo:
+            try:
+                pil_img = _trim_logo_image(PILImage.open(local_logo))
+                img = _pil_to_xl_image(pil_img)
+                img.width = width
+                img.height = height
+                ws.add_image(img, anchor)
+                return
+            except Exception:
+                pass
+    local_logo = _get_local_logo_path()
+    if local_logo:
         try:
-            pil_img = _trim_logo_image(PILImage.open("dell.png"))
-            img = _pil_to_xl_image(pil_img)
+            img = XLImage(local_logo)
             img.width = width
             img.height = height
             ws.add_image(img, anchor)
-            return
         except Exception:
             pass
-    try:
-        img = XLImage("dell.png")
-        img.width = width
-        img.height = height
-        ws.add_image(img, anchor)
-    except Exception:
-        pass
 
 
 def _add_static_logo(ws, image_path: str, anchor="A1", width: int = 120, height: int = 60):
@@ -1047,6 +1059,7 @@ def generate_dell_quote(
     input_excel_bytes: bytes,
     logo_bytes: Optional[bytes] = None,
     margin_percent: float = 0.0,
+    currency_code: str = "USD",
 ) -> bytes:
     """
     Generate a 2-sheet workbook from either:
@@ -1075,6 +1088,9 @@ def generate_dell_quote(
         )
     except Exception as e:
         logger.error("Failed to base64-log uploaded file: %s", e)
+
+    currency_code = (currency_code or "USD").upper()
+    conversion_rate = 3.64 if currency_code == "QAR" else 1.0
 
     # Missing consolidation fee should be treated as zero for both Excel and PDF uploads.
     consolidation_fee = 0.0
@@ -1164,6 +1180,18 @@ def generate_dell_quote(
 
     # Use today's date on the generated quote instead of the source file date.
     date_text = datetime.now().strftime("%d/%m/%Y")
+
+    if conversion_rate != 1.0:
+        items = [
+            (
+                desc_text,
+                qty_val,
+                (unit_val or 0.0) * conversion_rate,
+                (subtotal_val * conversion_rate) if subtotal_val is not None else None,
+            )
+            for (desc_text, qty_val, unit_val, subtotal_val) in items
+        ]
+        consolidation_fee *= conversion_rate
         
             
     
@@ -1211,9 +1239,14 @@ def generate_dell_quote(
     ws.merge_cells("A5:D5")
     ws.merge_cells("A6:D6")
     ws.merge_cells("A7:D7")
-    ws["A5"] = "P O Box 55609, Dubai, UAE"
-    ws["A6"] = "Tel :  +9714 4500600    Fax : +9714 4500678"
-    ws["A7"] = "Website :  www.mindware.ae"
+    if currency_code == "QAR":
+        ws["A5"] = "Mindware SA, PO Box 22421, D-Ring Road"
+        ws["A6"] = "Next to Doha bank, Doha, Qatar"
+        ws["A7"] = "Tel : +974 44405000    Website : www.midisglobal.com"
+    else:
+        ws["A5"] = "P O Box 55609, Dubai, UAE"
+        ws["A6"] = "Tel :  +9714 4500600    Fax : +9714 4500678"
+        ws["A7"] = "Website :  www.mindware.ae"
     for cell in ("A5", "A6", "A7"):
         ws[cell].font = Font(bold=True, size=11, color="1F497D")
         ws[cell].alignment = Alignment(horizontal="left", vertical="center")
@@ -1270,7 +1303,7 @@ def generate_dell_quote(
     # ===== DATA ROWS (start at 9) =====
     row_ptr = header_row + 1
     sr_no = 1
-    currency_fmt = '"$"#,##0.00'
+    currency_fmt = '"$"#,##0.00' if currency_code == "USD" else '"QAR" #,##0.00'
     margin_fmt = '0.00\\%'
     yellow = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
     total_cells = []
@@ -1339,7 +1372,7 @@ def generate_dell_quote(
         'These prices do not include installation of any kind',
         'Change in Qty or partial shipment is not acceptable',
         'For all B2B orders complete end customer details should be mentioned on the PO',
-        'PO Should be addressed to Mindware FZ LLC and should be in USD',
+        f'PO Should be addressed to Mindware FZ LLC and should be in {currency_code}',
         'Orders once placed with Dell cannot be cancelled',
         '',
         'And as an important note – All items are not proposed with any Professional Services to cater for installation.',
