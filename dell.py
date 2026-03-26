@@ -150,7 +150,7 @@ def _pil_to_xl_image(pil_img):
 
 def _get_local_logo_path() -> Optional[str]:
     """Return the first available local logo path."""
-    for path in ( "dell.png",):
+    for path in ("image.png", "dell.png"):
         if os.path.exists(path):
             return path
     return None
@@ -356,7 +356,12 @@ def _find_config_table_header(ws, start_row: int, search_rows: int = 30) -> Opti
                 labels['module'] = c
             if 'description' in name and 'description' not in labels:
                 labels['description'] = c
-            if name.strip() in ('sku', 'part', 'part #', 'part#') and 'sku' not in labels:
+            normalized_name = re.sub(r"\s+", " ", name.strip())
+            if (
+                normalized_name in ('sku', 'part', 'part #', 'part#', 'part number', 'part no', 'part no.', 'dell part number')
+                or ('sku' in normalized_name)
+                or ('part' in normalized_name and 'number' in normalized_name)
+            ) and 'sku' not in labels:
                 labels['sku'] = c
             if 'tax' in name and 'type' in name and 'tax' not in labels:
                 labels['tax'] = c
@@ -1053,6 +1058,32 @@ def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str]]:
         i += 1
 
     return cleaned
+
+
+def _extract_product_detail_headings(ws) -> Dict[str, str]:
+    """Extract item heading lines from Product Details for Excel uploads."""
+    anchor = _find_product_details_anchor(ws)
+    if not anchor:
+        return {}
+
+    headings: Dict[str, str] = {}
+    r = anchor + 1
+    max_col = min(ws.max_column, 40)
+
+    def _clean_heading_text(text: str) -> str:
+        return re.sub(r"\s+\d+(\.\d+)?\s+\$?[\d,\.]+\s+\$?[\d,\.]+$", "", text).strip()
+
+    while r <= ws.max_row:
+        item_marker = _cell_to_text(ws.cell(r, 1).value)
+        if re.match(r"^\d+\.$", item_marker):
+            item_no = item_marker.rstrip(".")
+            heading = _cell_to_text(ws.cell(r, 2).value)
+            if not heading:
+                heading = _row_text(ws, r, 1, max_col)
+            headings[item_no] = _clean_heading_text(heading)
+        r += 1
+
+    return headings
 # ================= Main =================
 
 def generate_dell_quote(
@@ -1175,6 +1206,8 @@ def generate_dell_quote(
                 r += 1
 
         item_descs_order = [it[0] for it in items]
+        config_rows = _extract_all_config_rows(src_ws)
+        item_headings_by_item = _extract_product_detail_headings(src_ws)
         
         consolidation_fee = _extract_excel_consolidation_fee(src_ws)
 
@@ -1197,6 +1230,30 @@ def generate_dell_quote(
     
 
 
+    def _extract_part_number_from_description(text: str) -> str:
+        text = _cell_to_text(text)
+        if not text:
+            return ""
+
+        matches = re.findall(r"\(([^()]+)\)", text)
+        for candidate in reversed(matches):
+            normalized = candidate.strip()
+            normalized = normalized.replace("–", "-").replace("—", "-").replace("−", "-")
+            normalized = re.sub(r"\s*-\s*", "-", normalized)
+            normalized = re.sub(r"\s+", " ", normalized).strip()
+
+            if re.fullmatch(r"\d{3}-[A-Z0-9]{4,5}", normalized, re.I):
+                return normalized
+        return ""
+
+    include_part_number = not is_pdf
+    part_numbers_by_item: Dict[str, str] = {}
+    item_headings_by_item = item_headings_by_item if include_part_number else {}
+    if include_part_number:
+        for item_no, _heading, _module, _desc, sku, _tax in config_rows:
+            if sku and item_no not in part_numbers_by_item:
+                part_numbers_by_item[item_no] = sku
+
     # ---- Build output workbook ----
     wb = Workbook()
     ws = wb.active
@@ -1204,24 +1261,29 @@ def generate_dell_quote(
     ws.sheet_view.showGridLines = False
     
     
-    # ---- Step 2: Write Consolidation Fee and Factor ----
-    # Cell I2 stores the consolidation fee used by the item formulas.
-    ws["I2"] = consolidation_fee
-    ws["I2"].font = Font(bold=True, color="1F497D")
-    ws["I2"].alignment = Alignment(horizontal="center", vertical="center")
-    
-    # Cell I3 stays empty.
-    ws["I3"].value = ""
-    ws["I3"].font = Font(bold=True, color="1F497D")
-    ws["I3"].alignment = Alignment(horizontal="center", vertical="center")
+    helper_unit_col = "J" if include_part_number else "I"
+    helper_margin_col = "K" if include_part_number else "J"
+    desc_col = "C" if include_part_number else "B"
+    qty_col = "D" if include_part_number else "C"
+    unit_price_col = "E" if include_part_number else "D"
+    total_price_col = "F" if include_part_number else "E"
 
-    # Cell J2 stores the factor derived from consolidation fee / original total.
-    ws["J2"].font = Font(bold=True, color="1F497D")
-    ws["J2"].alignment = Alignment(horizontal="center", vertical="center")
+    # ---- Step 2: Write Consolidation Fee and Factor ----
+    # The helper columns store the consolidation fee and per-line margin inputs.
+    ws[f"{helper_unit_col}2"] = consolidation_fee
+    ws[f"{helper_unit_col}2"].font = Font(bold=True, color="1F497D")
+    ws[f"{helper_unit_col}2"].alignment = Alignment(horizontal="center", vertical="center")
+    
+    ws[f"{helper_unit_col}3"].value = ""
+    ws[f"{helper_unit_col}3"].font = Font(bold=True, color="1F497D")
+    ws[f"{helper_unit_col}3"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws[f"{helper_margin_col}2"].font = Font(bold=True, color="1F497D")
+    ws[f"{helper_margin_col}2"].alignment = Alignment(horizontal="center", vertical="center")
     
     
     # Column widths for visible quote columns, metadata, and helper pricing columns.
-    widths = {"A": 14, "B": 14, "C": 14, "D": 14, "E": 14, "F": 14, "G": 14, "H": 14, "I": 16, "J": 14}
+    widths = {"A": 14, "B": 20, "C": 14, "D": 14, "E": 14, "F": 14, "G": 14, "H": 14, "I": 14, "J": 16, "K": 14}
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
 
@@ -1278,12 +1340,14 @@ def generate_dell_quote(
     # ===== TABLE HEADER at row 8; data from row 9 =====
     header_row = 10
     ws["A10"] = "Sr. No."
-    ws["B10"] = "Description"
-    ws["C10"] = "Qty"
-    ws["D10"] = "Unit Price"
-    ws["E10"] = "Total Price"
-    ws["I10"] = "Original Unit Price"
-    ws["J10"] = "Margin"
+    if include_part_number:
+        ws["B10"] = "Part Number"
+    ws[f"{desc_col}10"] = "Description"
+    ws[f"{qty_col}10"] = "Qty"
+    ws[f"{unit_price_col}10"] = "Unit Price"
+    ws[f"{total_price_col}10"] = "Total Price"
+    ws[f"{helper_unit_col}10"] = "Original Unit Price"
+    ws[f"{helper_margin_col}10"] = "Margin"
     header_fill = PatternFill(start_color="9BBB59", end_color="9BBB59", fill_type="solid")
     header_font = Font(bold=True, color="000000")
     border_thin = Border(
@@ -1293,7 +1357,10 @@ def generate_dell_quote(
         bottom=Side(style="thin", color="000000"),
     )
 
-    for addr in ("A10", "B10", "C10", "D10", "E10", "I10", "J10"):
+    header_cells = ["A10", f"{desc_col}10", f"{qty_col}10", f"{unit_price_col}10", f"{total_price_col}10", f"{helper_unit_col}10", f"{helper_margin_col}10"]
+    if include_part_number:
+        header_cells.insert(1, "B10")
+    for addr in header_cells:
         ws[addr].fill = header_fill
         ws[addr].font = header_font
         ws[addr].alignment = Alignment(horizontal="center", vertical="center")
@@ -1310,54 +1377,75 @@ def generate_dell_quote(
 
     for (desc_text, qty_val, unit_val, subtotal_val) in items:
         ws[f"A{row_ptr}"] = sr_no
-        ws[f"B{row_ptr}"] = desc_text
-        ws[f"C{row_ptr}"] = qty_val
+        if include_part_number:
+            part_number_from_config = part_numbers_by_item.get(str(sr_no), "")
+            part_number_from_heading = _extract_part_number_from_description(item_headings_by_item.get(str(sr_no), ""))
+            part_number = part_number_from_heading or part_number_from_config
+            ws[f"B{row_ptr}"] = part_number
+            logger.debug(
+                "Part number for item %s resolved to '%s' (heading='%s', config='%s', pricing_description='%s')",
+                sr_no,
+                part_number,
+                item_headings_by_item.get(str(sr_no), ""),
+                part_number_from_config,
+                desc_text,
+            )
+        ws[f"{desc_col}{row_ptr}"] = desc_text
+        ws[f"{qty_col}{row_ptr}"] = qty_val
     
         # Helper columns keep the original unit price and per-unit adjustment.
-        ws[f"I{row_ptr}"].value = unit_val
-        ws[f"I{row_ptr}"].number_format = currency_fmt
+        ws[f"{helper_unit_col}{row_ptr}"].value = unit_val
+        ws[f"{helper_unit_col}{row_ptr}"].number_format = currency_fmt
 
-        # Column J stores the editable margin percentage for each line item.
-        ws[f"J{row_ptr}"].value = margin_percent
-        ws[f"J{row_ptr}"].number_format = margin_fmt
+        # The margin helper column stays editable for each line item.
+        ws[f"{helper_margin_col}{row_ptr}"].value = margin_percent
+        ws[f"{helper_margin_col}{row_ptr}"].number_format = margin_fmt
     
-        # ---- Unit Price (D) shows the adjusted unit price
-        ws[f"D{row_ptr}"].value = f"=ROUND((((I{row_ptr}*$J$2)+I{row_ptr})/(1-J{row_ptr}/100)),2)"
-        ws[f"D{row_ptr}"].number_format = currency_fmt
+        # ---- Unit Price shows the adjusted unit price
+        ws[f"{unit_price_col}{row_ptr}"].value = f"=ROUND(((({helper_unit_col}{row_ptr}*${helper_margin_col}$2)+{helper_unit_col}{row_ptr})/(1-{helper_margin_col}{row_ptr}/100)),2)"
+        ws[f"{unit_price_col}{row_ptr}"].number_format = currency_fmt
     
-        # ---- Total Price (E) = Qty * adjusted unit price
-        ws[f"E{row_ptr}"].value = f"=C{row_ptr}*D{row_ptr}"
-        ws[f"E{row_ptr}"].number_format = currency_fmt
+        # ---- Total Price = Qty * adjusted unit price
+        ws[f"{total_price_col}{row_ptr}"].value = f"={qty_col}{row_ptr}*{unit_price_col}{row_ptr}"
+        ws[f"{total_price_col}{row_ptr}"].number_format = currency_fmt
     
         # Styling
-        for addr in (f"A{row_ptr}", f"B{row_ptr}", f"C{row_ptr}", f"D{row_ptr}", f"E{row_ptr}", f"I{row_ptr}", f"J{row_ptr}"):
+        data_cells = [f"A{row_ptr}", f"{desc_col}{row_ptr}", f"{qty_col}{row_ptr}", f"{unit_price_col}{row_ptr}", f"{total_price_col}{row_ptr}", f"{helper_unit_col}{row_ptr}", f"{helper_margin_col}{row_ptr}"]
+        if include_part_number:
+            data_cells.insert(1, f"B{row_ptr}")
+        for addr in data_cells:
             ws[addr].fill = yellow
             ws[addr].border = border_thin
             ws[addr].alignment = Alignment(horizontal="center", vertical="center")
-        ws[f"B{row_ptr}"].alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        ws[f"{desc_col}{row_ptr}"].alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
     
-        total_cells.append(f"E{row_ptr}")
+        total_cells.append(f"{total_price_col}{row_ptr}")
         sr_no += 1
         row_ptr += 1
 
     first_data_row = header_row + 1
     last_data_row = row_ptr - 1
     if last_data_row >= first_data_row:
-        ws["J2"] = f"=IFERROR($I$2/SUMPRODUCT($C${first_data_row}:$C${last_data_row},$I${first_data_row}:$I${last_data_row}),0)"
+        ws[f"{helper_margin_col}2"] = f"=IFERROR(${helper_unit_col}$2/SUMPRODUCT(${qty_col}${first_data_row}:${qty_col}${last_data_row},${helper_unit_col}${first_data_row}:${helper_unit_col}${last_data_row}),0)"
     else:
-        ws["J2"] = 0
+        ws[f"{helper_margin_col}2"] = 0
 
     # ===== TOTAL ROW =====
-    ws.merge_cells(start_row=row_ptr, start_column=2, end_row=row_ptr, end_column=4)
-    ws[f"B{row_ptr}"] = "Total price"
-    ws[f"B{row_ptr}"].alignment = Alignment(horizontal="right", vertical="center")
-    ws[f"B{row_ptr}"].font = Font(bold=True, color="1F497D")
+    total_label_col = "C" if include_part_number else "B"
+    total_value_col = total_price_col
+    if include_part_number:
+        ws.merge_cells(start_row=row_ptr, start_column=3, end_row=row_ptr, end_column=5)
+    else:
+        ws.merge_cells(start_row=row_ptr, start_column=2, end_row=row_ptr, end_column=4)
+    ws[f"{total_label_col}{row_ptr}"] = "Total price"
+    ws[f"{total_label_col}{row_ptr}"].alignment = Alignment(horizontal="right", vertical="center")
+    ws[f"{total_label_col}{row_ptr}"].font = Font(bold=True, color="1F497D")
 
-    ws[f"E{row_ptr}"] = f"=SUM({','.join(total_cells)})" if total_cells else 0
-    ws[f"E{row_ptr}"].number_format = currency_fmt
-    ws[f"E{row_ptr}"].font = Font(bold=True, color="1F497D")
-    ws[f"E{row_ptr}"].alignment = Alignment(horizontal="center", vertical="center")
-    ws[f"E{row_ptr}"].border = border_thin
+    ws[f"{total_value_col}{row_ptr}"] = f"=SUM({','.join(total_cells)})" if total_cells else 0
+    ws[f"{total_value_col}{row_ptr}"].number_format = currency_fmt
+    ws[f"{total_value_col}{row_ptr}"].font = Font(bold=True, color="1F497D")
+    ws[f"{total_value_col}{row_ptr}"].alignment = Alignment(horizontal="center", vertical="center")
+    ws[f"{total_value_col}{row_ptr}"].border = border_thin
 
     # Footer notes
     notes = [
@@ -1391,9 +1479,6 @@ def generate_dell_quote(
     ws.freeze_panes = "A10"
 
     # ===== Sheet 2: Configuration =====
-    if not is_pdf:
-        config_rows = _extract_all_config_rows(src_ws)
-
     ws2 = wb.create_sheet("Configuration")
     ws2.sheet_view.showGridLines = False
     ws2.column_dimensions["A"].width = 22  # Item #
