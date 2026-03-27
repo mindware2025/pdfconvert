@@ -922,13 +922,13 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
 
     return items, metadata, config_rows, quote_ref_text, date_text, consolidation_fee
 
-def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str]]:
+def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str, str]]:
     """
     FINAL CLEAN VERSION (Excel upload only)
     Extracts ALL configuration rows under Product Details from Excel files.
 
     Output rows have the structure:
-      (item_number, item_heading, module, description, sku, tax_type)
+      (item_number, item_heading, module, description, sku, tax_type, qty)
 
     • Preserves original Excel order
     • Skips totals / shipping / price lines
@@ -941,7 +941,7 @@ def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str]]:
     if not anchor:
         return []
 
-    rows: List[Tuple[str, str, str, str, str, str]] = []
+    rows: List[Tuple[str, str, str, str, str, str, str]] = []
     r = anchor + 1
     max_col = min(ws.max_column, 40)
 
@@ -1027,11 +1027,12 @@ def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str]]:
             desc = _cell_to_text(ws.cell(data_row, colmap.get("description", 0)).value)
             sku = _cell_to_text(ws.cell(data_row, colmap.get("sku", 0)).value)
             tax = _cell_to_text(ws.cell(data_row, colmap.get("tax", 0)).value)
+            qty = _cell_to_text(ws.cell(data_row, colmap.get("qty", 0)).value)
 
-            if not any([mod, desc, sku, tax]):
+            if not any([mod, desc, sku, tax, qty]):
                 break
 
-            rows.append((current_item, current_heading, mod, desc, sku, tax))
+            rows.append((current_item, current_heading, mod, desc, sku, tax, qty))
             data_row += 1
 
         r = next_item_row if next_item_row is not None else ws.max_row + 1
@@ -1042,19 +1043,19 @@ def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str]]:
     cleaned = []
     i = 0
     while i < len(rows):
-        item, head, mod, desc, sku, tax = rows[i]
+        item, head, mod, desc, sku, tax, qty = rows[i]
         mod, desc = mod.strip(), desc.strip()
 
         # CASE: 2-line module label (common in Dell exports)
         if i + 1 < len(rows):
-            ni, nh, nmod, ndesc, nsku, ntax = rows[i + 1]
+            ni, nh, nmod, ndesc, nsku, ntax, nqty = rows[i + 1]
             if ni == item and nh == head:
                 if desc == "" and ndesc == "" and ":" not in mod and ":" not in nmod:
                     # join "Smart" + "Dock SD25TB5"
                     mod = f"{mod} {nmod}".strip()
                     i += 1
 
-        cleaned.append((item, head, mod, desc, sku, tax))
+        cleaned.append((item, head, mod, desc, sku, tax, qty))
         i += 1
 
     return cleaned
@@ -1250,7 +1251,11 @@ def generate_dell_quote(
     part_numbers_by_item: Dict[str, str] = {}
     item_headings_by_item = item_headings_by_item if include_part_number else {}
     if include_part_number:
-        for item_no, _heading, _module, _desc, sku, _tax in config_rows:
+        for row_data in config_rows:
+            if len(row_data) >= 7:
+                item_no, _heading, _module, _desc, sku, _tax, _qty = row_data
+            else:
+                item_no, _heading, _module, _desc, sku, _tax = row_data
             if sku and item_no not in part_numbers_by_item:
                 part_numbers_by_item[item_no] = sku
 
@@ -1486,6 +1491,7 @@ def generate_dell_quote(
     ws2.column_dimensions["C"].width = 100  # Description
     ws2.column_dimensions["D"].width = 20  # SKU
     ws2.column_dimensions["E"].width = 14  # Tax Type
+    ws2.column_dimensions["F"].width = 10  # Qty
 
     r2 = 1
     title_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
@@ -1503,7 +1509,8 @@ def generate_dell_quote(
         ws2[f"C{row_index}"] = "Description"
         ws2[f"D{row_index}"] = "SKU"
         ws2[f"E{row_index}"] = "Tax Type"
-        for addr in (f"A{row_index}", f"B{row_index}", f"C{row_index}", f"D{row_index}", f"E{row_index}"):
+        ws2[f"F{row_index}"] = "Qty"
+        for addr in (f"A{row_index}", f"B{row_index}", f"C{row_index}", f"D{row_index}", f"E{row_index}", f"F{row_index}"):
             ws2[addr].font = Font(bold=True)
             ws2[addr].fill = title_fill
             ws2[addr].alignment = Alignment(horizontal="center", vertical="center")
@@ -1520,12 +1527,12 @@ def generate_dell_quote(
     r2 += 1
 
     if not config_rows:
-        ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=5)
+        ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=6)
         ws2[f"A{r2}"] = "(No configuration details found)"
         ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
         r2 += 1
     else:
-        config_rows_by_item: Dict[str, List[Tuple[str, str, str, str, str, str]]] = {}
+        config_rows_by_item: Dict[str, List[tuple]] = {}
         for row in config_rows:
             config_rows_by_item.setdefault(row[0], []).append(row)
 
@@ -1537,37 +1544,42 @@ def generate_dell_quote(
             extracted_heading = rows_for_item[0][1] if rows_for_item and rows_for_item[0][1] else ""
             item_heading = fallback_heading if extracted_heading in ("", f"Item {idx}") else extracted_heading
 
-            ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=5)
+            ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=6)
             ws2[f"A{r2}"] = f"Item {idx}"
             ws2[f"A{r2}"].font = Font(bold=True, color="1F497D")
             ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
             r2 += 1
 
-            ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=5)
+            ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=6)
             ws2[f"A{r2}"] = item_heading
             ws2[f"A{r2}"].font = Font(italic=True, color="1F497D")
             ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
             r2 += 1
 
             if not rows_for_item:
-                ws2.merge_cells(start_row=r2, start_column=2, end_row=r2, end_column=5)
+                ws2.merge_cells(start_row=r2, start_column=2, end_row=r2, end_column=6)
                 ws2[f"B{r2}"] = "(No configuration details found for this item)"
                 ws2[f"B{r2}"].font = Font(italic=True, color="7F7F7F")
                 ws2[f"B{r2}"].alignment = Alignment(horizontal="left", vertical="center")
-                for col in ("A", "B", "C", "D", "E"):
+                for col in ("A", "B", "C", "D", "E", "F"):
                     ws2[f"{col}{r2}"].border = thin_gray
                 r2 += 1
                 continue
 
-            for (_, _, module, dsc, sku, tax) in rows_for_item:
+            for row_data in rows_for_item:
+                if len(row_data) >= 7:
+                    _, _, module, dsc, sku, tax, qty = row_data
+                else:
+                    _, _, module, dsc, sku, tax = row_data
+                    qty = ""
                 if _is_config_section_row(module, dsc, sku, tax):
                     ws2[f"A{r2}"] = ""
-                    ws2.merge_cells(start_row=r2, start_column=2, end_row=r2, end_column=5)
+                    ws2.merge_cells(start_row=r2, start_column=2, end_row=r2, end_column=6)
                     ws2[f"B{r2}"] = module
                     ws2[f"B{r2}"].font = Font(bold=True, color="1F1F1F")
                     ws2[f"B{r2}"].fill = section_fill
                     ws2[f"B{r2}"].alignment = Alignment(horizontal="left", vertical="center")
-                    for col in ("A", "B", "C", "D", "E"):
+                    for col in ("A", "B", "C", "D", "E", "F"):
                         ws2[f"{col}{r2}"].border = thin_gray
                     r2 += 1
                     continue
@@ -1577,7 +1589,8 @@ def generate_dell_quote(
                 ws2[f"C{r2}"] = dsc
                 ws2[f"D{r2}"] = sku
                 ws2[f"E{r2}"] = tax
-                for col in ("A", "B", "C", "D", "E"):
+                ws2[f"F{r2}"] = qty
+                for col in ("A", "B", "C", "D", "E", "F"):
                     ws2[f"{col}{r2}"].alignment = Alignment(vertical="top", wrap_text=True)
                     ws2[f"{col}{r2}"].border = thin_gray
                 r2 += 1
