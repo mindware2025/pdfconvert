@@ -976,13 +976,16 @@ def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str, str
                 return row_idx
         return None
 
+    item_counter = 0
     while r <= ws.max_row:
         item_info = _extract_item_heading(r)
         if not item_info:
             r += 1
             continue
 
-        current_item, current_heading = item_info
+        _source_item_number, current_heading = item_info
+        item_counter += 1
+        current_item = str(item_counter)
         next_item_row = _find_next_item_row(r + 1)
         search_end = (next_item_row - 1) if next_item_row is not None else ws.max_row
 
@@ -1074,10 +1077,12 @@ def _extract_product_detail_headings(ws) -> Dict[str, str]:
     def _clean_heading_text(text: str) -> str:
         return re.sub(r"\s+\d+(\.\d+)?\s+\$?[\d,\.]+\s+\$?[\d,\.]+$", "", text).strip()
 
+    item_counter = 0
     while r <= ws.max_row:
         item_marker = _cell_to_text(ws.cell(r, 1).value)
         if re.match(r"^\d+\.$", item_marker):
-            item_no = item_marker.rstrip(".")
+            item_counter += 1
+            item_no = str(item_counter)
             heading = _cell_to_text(ws.cell(r, 2).value)
             if not heading:
                 heading = _row_text(ws, r, 1, max_col)
@@ -1085,6 +1090,26 @@ def _extract_product_detail_headings(ws) -> Dict[str, str]:
         r += 1
 
     return headings
+
+
+def _extract_product_detail_display_numbers(ws) -> Dict[str, str]:
+    """Map internal sequential item ids to the source-visible item numbers from Product Details."""
+    anchor = _find_product_details_anchor(ws)
+    if not anchor:
+        return {}
+
+    display_numbers: Dict[str, str] = {}
+    r = anchor + 1
+    item_counter = 0
+
+    while r <= ws.max_row:
+        item_marker = _cell_to_text(ws.cell(r, 1).value)
+        if re.match(r"^\d+\.$", item_marker):
+            item_counter += 1
+            display_numbers[str(item_counter)] = item_marker.rstrip(".")
+        r += 1
+
+    return display_numbers
 # ================= Main =================
 
 def generate_dell_quote(
@@ -1126,6 +1151,7 @@ def generate_dell_quote(
 
     # Missing consolidation fee should be treated as zero for both Excel and PDF uploads.
     consolidation_fee = 0.0
+    item_display_numbers_by_item: Dict[str, str] = {}
 
     # ---- Load source ----
     is_pdf = input_excel_bytes.lstrip().startswith(b"%PDF")
@@ -1209,6 +1235,7 @@ def generate_dell_quote(
         item_descs_order = [it[0] for it in items]
         config_rows = _extract_all_config_rows(src_ws)
         item_headings_by_item = _extract_product_detail_headings(src_ws)
+        item_display_numbers_by_item = _extract_product_detail_display_numbers(src_ws)
         
         consolidation_fee = _extract_excel_consolidation_fee(src_ws)
 
@@ -1243,13 +1270,15 @@ def generate_dell_quote(
             normalized = re.sub(r"\s*-\s*", "-", normalized)
             normalized = re.sub(r"\s+", " ", normalized).strip()
 
-            if re.fullmatch(r"\d{3}-[A-Z0-9]{4,5}", normalized, re.I):
+            # Dell files use multiple part number formats, including 210-XXXX and AD123456.
+            if re.fullmatch(r"(?:\d{3}-[A-Z0-9]{4,5}|[A-Z]{2}\d{6,})", normalized, re.I):
                 return normalized
         return ""
 
     include_part_number = not is_pdf
     part_numbers_by_item: Dict[str, str] = {}
     item_headings_by_item = item_headings_by_item if include_part_number else {}
+    item_display_numbers_by_item = item_display_numbers_by_item if include_part_number else {}
     if include_part_number:
         for row_data in config_rows:
             if len(row_data) >= 7:
@@ -1536,16 +1565,25 @@ def generate_dell_quote(
         for row in config_rows:
             config_rows_by_item.setdefault(row[0], []).append(row)
 
-        total_items = max(len(item_descs_order), len(config_rows_by_item))
+        total_items = max(
+            len(item_descs_order),
+            len(config_rows_by_item),
+            len(item_headings_by_item) if include_part_number else 0,
+        )
         for idx in range(1, total_items + 1):
             item_key = str(idx)
             rows_for_item = config_rows_by_item.get(item_key, [])
-            fallback_heading = item_descs_order[idx - 1] if idx - 1 < len(item_descs_order) else f"Item {idx}"
+            display_item_no = item_display_numbers_by_item.get(item_key, str(idx))
+            fallback_heading = item_headings_by_item.get(item_key, "")
+            if not fallback_heading and idx - 1 < len(item_descs_order):
+                fallback_heading = item_descs_order[idx - 1]
+            if not fallback_heading:
+                fallback_heading = f"Item {idx}"
             extracted_heading = rows_for_item[0][1] if rows_for_item and rows_for_item[0][1] else ""
             item_heading = fallback_heading if extracted_heading in ("", f"Item {idx}") else extracted_heading
 
             ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=6)
-            ws2[f"A{r2}"] = f"Item {idx}"
+            ws2[f"A{r2}"] = f"Item {display_item_no}"
             ws2[f"A{r2}"].font = Font(bold=True, color="1F497D")
             ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
             r2 += 1
