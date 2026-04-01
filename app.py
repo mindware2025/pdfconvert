@@ -271,7 +271,6 @@ def show_login():  # <-- right-side login
     with right:
         
         st.markdown('<div class="mw-title">Mindbot</div>', unsafe_allow_html=True)
-        st.markdown('<div class="mw-ramadan">🌙 Ramadan Kareem • Blessed Ramadan</div>', unsafe_allow_html=True)
         st.markdown('<div class="mw-subtitle">Powered Productivity Tools</div>', unsafe_allow_html=True)
 
         with st.form("login_form", clear_on_submit=False):
@@ -1021,7 +1020,8 @@ if team == "Finance":
         "🟩 Google Invoice Extractor",
         "📄 Claims Automation",
         "🟨 AWS Invoice Tool",
-        "🟧 Oracle Invoice Tool"
+        "🟧 Oracle Invoice Tool",
+        "🟥 Lenovo Credit Note Tool",
     ]
 elif team == "Operations":
     TOOL_OPTIONS = [
@@ -1897,6 +1897,51 @@ elif tool == "IBM Quotation":
                 )
 
 
+elif tool == "🟥 Lenovo Credit Note Tool":
+    st.title("Lenovo Credit Note Tool")
+    st.write("Upload Lenovo credit note PDF(s) and download the CN upload Excel.")
+
+    uploaded_files = st.file_uploader(
+        "Choose Lenovo credit note PDF(s)",
+        type=["pdf"],
+        accept_multiple_files=True,
+        key="lenovo_cn_upload"
+    )
+
+    if uploaded_files:
+        file_blobs = [(f.name, f.read()) for f in uploaded_files]
+
+        # ✅ Import the actual functions implemented in the extractor
+        from extractors.lenovo_cn import (
+            process_lenovo_credit_pdfs,   # <-- correct function name
+            prepare_excel_bytes,
+            build_output_filename,
+        )
+
+        # ✅ Use the correct function name
+        df = process_lenovo_credit_pdfs(file_blobs)
+
+        if not df.empty:
+            # Build Excel (bytes)
+            excel_bytes = prepare_excel_bytes(df)
+
+            # (Optional) quick sanity check—remove once verified
+            # assert isinstance(excel_bytes, (bytes, bytearray)) and len(excel_bytes) > 0
+
+            st.download_button(
+                label="⬇️ Download Lenovo Credit Note Excel",
+                data=excel_bytes,
+                file_name=build_output_filename(),   # ✅ Streamlit expects file_name, not download_name
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="lenovo_cn_download_btn",        # good practice: stable unique key
+            )
+
+            with st.expander("Preview extracted rows"):
+                st.dataframe(df, use_container_width=True)
+        else:
+            st.warning("No rows produced. Please check the PDF format.")
+    else:
+        st.info("Please upload Lenovo credit note PDFs to begin.")
 
 st.markdown("""
 <footer style='text-align:center; margin-top:3rem; color:#1a73e8; font-size:20px; font-weight:bold; font-family: Google Sans, sans-serif;'>
