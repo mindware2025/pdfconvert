@@ -2292,11 +2292,6 @@ elif tool == "🟥 Lenovo Credit Note Tool":
                     key="lenovo_ksa_download_btn",
                 )
 
-                tab1, tab2 = st.tabs(["CNTS_HEADER", "CNTS_ITEM"])
-                with tab1:
-                    st.dataframe(header_df, use_container_width=True)
-                with tab2:
-                    st.dataframe(item_df, use_container_width=True)
             else:
                 st.warning("No rows produced. Check the KSA PDF format.")
 
