@@ -24,6 +24,7 @@ from extractors.insurance2  import process_grouped_customer_files
 from extractors.ibm import correct_descriptions, create_styled_excel, create_styled_excel_template2, extract_ibm_data_from_pdf, extract_last_page_text, get_extraction_debug
 from extractors.ibm_template2 import extract_ibm_template2_from_pdf
 from extractors.template_detector import detect_ibm_template
+from lenovo_cn import build_ksa_output_filename, build_output_filename, prepare_ksa_excel_bytes, process_lenovo_credit_pdfs, process_lenovo_ksa_pdfs
 from oracle_invoice import prepare_excel_bytes, process_oracle_pdfs_cached
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
@@ -2245,52 +2246,74 @@ elif tool == "AR to EDD file":
           
         )
         
-
 elif tool == "🟥 Lenovo Credit Note Tool":
+
     st.title("Lenovo Credit Note Tool")
-    st.write("Upload Lenovo credit note PDF(s) and download the CN upload Excel.")
+    st.write("Upload Lenovo credit note PDF(s) and download the matching Excel output.")
+
+    country = st.selectbox(
+        "Country",
+        options=["UAE", "KSA"],
+        index=0,
+        help="Choose the Lenovo template you are processing.",
+    )
 
     uploaded_files = st.file_uploader(
         "Choose Lenovo credit note PDF(s)",
         type=["pdf"],
         accept_multiple_files=True,
-        key="lenovo_cn_upload"
+        key="lenovo_cn_upload",
     )
 
     if uploaded_files:
         file_blobs = [(f.name, f.read()) for f in uploaded_files]
 
-        # ✅ Import the actual functions implemented in the extractor
-        from extractors.lenovo_cn import (
-            process_lenovo_credit_pdfs,   # <-- correct function name
-            prepare_excel_bytes,
-            build_output_filename,
-        )
+      
 
-        # ✅ Use the correct function name
-        df = process_lenovo_credit_pdfs(file_blobs)
 
-        if not df.empty:
-            # Build Excel (bytes)
-            excel_bytes = prepare_excel_bytes(df)
+        if country == "KSA":
+            header_df, item_df = process_lenovo_ksa_pdfs(file_blobs)
 
-            # (Optional) quick sanity check—remove once verified
-            # assert isinstance(excel_bytes, (bytes, bytearray)) and len(excel_bytes) > 0
+            if not header_df.empty and not item_df.empty:
+                excel_bytes = prepare_ksa_excel_bytes(header_df, item_df)
 
-            st.download_button(
-                label="⬇️ Download Lenovo Credit Note Excel",
-                data=excel_bytes,
-                file_name=build_output_filename(),   # ✅ Streamlit expects file_name, not download_name
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="lenovo_cn_download_btn",        # good practice: stable unique key
-            )
+                st.download_button(
+                    label="Download Lenovo KSA Excel",
+                    data=excel_bytes,
+                    file_name=build_ksa_output_filename(),
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="lenovo_ksa_download_btn",
+                )
 
-            with st.expander("Preview extracted rows"):
-                st.dataframe(df, use_container_width=True)
-        else:
-            st.warning("No rows produced. Please check the PDF format.")
+                tab1, tab2 = st.tabs(["CNTS_HEADER", "CNTS_ITEM"])
+                with tab1:
+                    st.dataframe(header_df, use_container_width=True)
+                with tab2:
+                    st.dataframe(item_df, use_container_width=True)
+            else:
+                st.warning("No rows produced. Check the KSA PDF format.")
+
+        else:  # UAE
+            df = process_lenovo_credit_pdfs(file_blobs)
+
+            if not df.empty:
+                excel_bytes = prepare_excel_bytes(df)
+
+                st.download_button(
+                    label="Download Lenovo UAE Excel",
+                    data=excel_bytes,
+                    file_name=build_output_filename(),
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="lenovo_uae_download_btn",
+                )
+
+                with st.expander("Preview extracted rows"):
+                    st.dataframe(df, use_container_width=True)
+            else:
+                st.warning("No rows produced. Check the PDF format.")
+
     else:
-        st.info("Please upload Lenovo credit note PDFs to begin.")
+        st.info("Upload Lenovo credit note PDFs to begin.")
         
 elif tool == "💻 Dell Quotation":
 
