@@ -47,6 +47,11 @@ from extractors.dell_invoice import (
 )
 from oauth2client.service_account import ServiceAccountCredentials
 from extractors.cloud_invoice import create_srcl_file, create_summary_sheet, build_cloud_invoice_df, map_invoice_numbers
+from freight_forwarder_processor import (
+    JVConfig,
+    create_excel_file as create_freight_forwarder_excel_file,
+    process_freight_forwarder_pdfs,
+)
 from claims_automation import (
     build_output_rows_from_source1,
     write_output_excel,
@@ -836,6 +841,8 @@ def extractor_workflow(
             st.warning("No table data found in the uploaded PDF.")
     else:
         st.info(f"Please upload a {extractor_name} PDF file to get started.")
+
+
 # ----------- Tool Selector UI -----------
 
 if env == "test":
@@ -860,7 +867,8 @@ if team == "Finance":
         "📄 Claims Automation",
         "🟨 AWS Invoice Tool",
         "🟧 Oracle Invoice Tool",
-        "🟥 Lenovo Credit Note Tool" 
+        "🟥 Lenovo Credit Note Tool",
+        "🚚 Freight Forwarder JV Tool"
         
     ]
 elif team == "Operations":
@@ -925,6 +933,32 @@ elif tool == "🟩 Google Invoice Extractor":
         table_columns=GOOGLE_INVOICE_COLS,
         file_name_template="{invoice_num}-{file_date}.xlsx"
     )
+
+elif tool == "🚚 Freight Forwarder JV Tool":
+    st.title("Freight Forwarder JV Tool")
+    st.write("Upload freight forwarder PDF invoices and download the JV upload file.")
+
+    uploaded_files = st.file_uploader(
+        "Choose Freight Forwarder PDF(s)",
+        type=["pdf"],
+        accept_multiple_files=True,
+        key="freight_forwarder_upload",
+    )
+
+    if uploaded_files:
+            output_df, _, errors = process_freight_forwarder_pdfs(uploaded_files, JVConfig())
+
+            if errors:
+                st.error("\n".join(errors))
+
+            if not output_df.empty:
+                output_excel = create_freight_forwarder_excel_file(output_df)
+                st.download_button(
+                    label="⬇️ Download Freight Forwarder JV file",
+                    data=output_excel.getvalue(),
+                    file_name=f"JV_UPLOAD_TEMPLATE_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
     
 elif tool == "📄 Claims Automation":
     st.title("Claims Automation")

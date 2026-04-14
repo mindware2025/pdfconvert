@@ -16,3 +16,4 @@ google-auth-httplib2
 pdf417
 docx
 xlsxwriter 
+PyPDF2
