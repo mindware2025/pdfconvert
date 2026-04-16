@@ -16,6 +16,7 @@ from budg.ui_old_tool import render_old_tool as render_old_tool_extern
 from budg.ui_new_bud2026 import render_new_bud_tool as render_new_bud_tool_external
 
 from dell import generate_dell_quote
+from dell_extended_services import generate_dell_extended_services_quote
 from extractors.barcodeper50 import barcode_tooll
 from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_multiple_aws_pdfs
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
@@ -33,6 +34,7 @@ from extractors.lenovo_cn import (
     process_lenovo_credit_pdfs,
     process_lenovo_ksa_pdfs,
 )
+from quotetemplate import detect_dell_template
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 load_dotenv()
@@ -2353,12 +2355,8 @@ elif tool == "🟥 Lenovo Credit Note Tool":
         
 elif tool == "💻 Dell Quotation":
     st.set_page_config(page_title="Dell Quotation Tool", layout="wide")
-    
+
     st.title("💼 Dell Quotation Tool")
-    st.caption(
-        "Upload a Dell BOQ Excel or PDF and download a formatted Quotation (Quote + BOQ). "
-        "Quote Ref and Date are read from the file (E15/E18 for Excel; Quote number/Quote date for PDF)."
-    )
 
     uploaded = st.file_uploader(
         "Upload Dell BOQ Excel or PDF",
@@ -2372,57 +2370,57 @@ elif tool == "💻 Dell Quotation":
         max_value=100.0,
         value=0.0,
         step=0.5,
-        help="This fills the Margin column in the quote so you can still adjust specific line items later in Excel.",
     )
 
     currency_code = st.radio(
         "Currency",
-        options=["USD", "QAR", "AED"],
+        ["USD", "QAR", "AED"],
         horizontal=True,
-        help="QAR uses the fixed rate 1 USD = 3.64 QAR. AED uses the fixed rate 1 USD = 3.6725 AED.",
     )
 
     if st.button("Generate Dell Quotation"):
         if not uploaded:
-            st.warning("Please upload a Dell BOQ Excel file.")
+            st.warning("Please upload a file.")
         else:
             input_bytes = uploaded.read()
+            output_name = "Dell_Quotation.xlsx"
 
             with st.spinner("Generating..."):
                 try:
-                    out_bytes = generate_dell_quote(
-                        input_excel_bytes=input_bytes,
-                        margin_percent=margin_percent,
-                        currency_code=currency_code,
-                    )
-                except Exception as e:
-                    msg = str(e)
-                    if "pypdf is required" in msg.lower() or "pypdf" in msg.lower():
-                        st.error(
-                            "PDF parsing requires the `pypdf` package. Please install it in the same Python environment running this app (e.g. `pip install pypdf`)."
+                    template_type = detect_dell_template(input_bytes)
+
+                    if template_type == "extended_services":
+                        out_bytes = generate_dell_extended_services_quote(
+                            input_excel_bytes=input_bytes,
+                            margin_percent=margin_percent,
                         )
+                        output_name = "Dell_Extended_Services_Quotation.xlsx"
                     else:
-                        st.error(f"Error: {e}")
-                else:
-                    st.download_button(
-                        "⬇️ Download Dell_Quotation.xlsx",
-                        data=out_bytes,
-                        file_name=f"Dell_Quotation_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    )
-                    st.success("Done ✅")
-
-                    log_path = os.path.join(os.path.dirname(__file__), "dell_quote.log")
-                    if os.path.exists(log_path):
-                        with open(log_path, "rb") as f:
-                            log_bytes = f.read()
-
-                        st.download_button(
-                            "⬇️ Download log",
-                            data=log_bytes,
-                            file_name="dell_quote.log",
-                            mime="text/plain",
+                        out_bytes = generate_dell_quote(
+                            input_excel_bytes=input_bytes,
+                            margin_percent=margin_percent,
+                            currency_code=currency_code,
                         )
+                        output_name = (
+                            f"Dell_Quotation_"
+                            f"{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+                        )
+
+                except Exception as e:
+                    st.error(f"Generation failed: {e}")
+                    st.stop()
+
+                st.download_button(
+                    label="⬇️ Download quotation",
+                    data=out_bytes,
+                    file_name=output_name,
+                    mime=(
+                        "application/vnd.openxmlformats-"
+                        "officedocument.spreadsheetml.sheet"
+                    ),
+                )
+
+                st.success("Done ✅")
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
     st.info("Currently, only the Google DNTS Extractor tool is available. More tools can be added based on your requirements.")
