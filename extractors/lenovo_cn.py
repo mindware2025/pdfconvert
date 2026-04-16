@@ -337,17 +337,16 @@ def _extract_credit_fields(text: str) -> Dict[str, str]:
     return fields
 
 
-def _build_ksa_rows(doc_no: int, total_amount: str, credit_no: str) -> Tuple[Dict[str, str], Dict[str, str]]:
+def _build_ksa_rows(doc_no: int, total_amount: str, credit_no: str, credit_date: str) -> Tuple[Dict[str, str], Dict[str, str]]:
     """
-    Build the KSA header and item rows for one PDF.
+    Build the KSA header and item rows for one PDF, using credit_date for Supplier Ref Date and header date.
     """
-    today = datetime.now().strftime("%d/%m/%Y")
     rate_value = float(total_amount) if total_amount else 0.0
     rate = int(rate_value) if rate_value.is_integer() else rate_value
 
     header_row = {
         "S.No": doc_no,
-        "Date - (dd/MM/yyyy)": today,
+        "Date - (dd/MM/yyyy)": datetime.now().strftime("%d/%m/%Y"),
         "Supp_Code": KSA_SUPP_CODE,
         "Curr_Code": KSA_CURR_CODE,
         "Form_Code": KSA_FORM_CODE,
@@ -355,7 +354,7 @@ def _build_ksa_rows(doc_no: int, total_amount: str, credit_no: str) -> Tuple[Dic
         "Location_Code": KSA_LOCATION_CODE,
         "Remarks": f"Booking of Lenovo CN# {credit_no}".strip(),
         "Supplier Ref": credit_no,
-        "Supplier Ref Date": today,
+        "Supplier Ref Date": credit_date,
     }
 
     item_row = {
@@ -397,6 +396,7 @@ def process_lenovo_ksa_pdfs(files: List[Tuple[str, bytes]]) -> Tuple[pd.DataFram
             doc_no=doc_no,
             total_amount=fields["total_amount"],
             credit_no=fields["credit_no"],
+            credit_date=fields["credit_date"],
         )
         header_rows.append(header_row)
         item_rows.append(item_row)
