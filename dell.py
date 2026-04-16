@@ -155,7 +155,33 @@ def _get_local_logo_path() -> Optional[str]:
             return path
     return None
 
+def _extract_metadata_excel_fallback(ws):
+    """
+    Fallback for WEB / PDF-style Dell quotes saved as Excel.
+    Finds 'Quote No' and 'Quoted On' by scanning labels instead of fixed cells.
+    """
+    quote_ref = ""
+    quote_date = ""
 
+    for row in ws.iter_rows(min_row=1, max_row=80, max_col=10):
+        row_values = [_cell_to_text(c.value) for c in row if c.value]
+        row_text = " ".join(row_values).lower()
+
+        # ---- Quote Number ----
+        if "quote no" in row_text or "quote number" in row_text:
+            for cell in row:
+                m = re.search(r"\b\d{6,}(?:\.\d+)?\b", str(cell.value))
+                if m:
+                    quote_ref = m.group(0)
+
+        # ---- Quote Date ----
+        if "quoted on" in row_text or "quote date" in row_text:
+            for cell in row:
+                m = re.search(r"\d{2}/\d{2}/\d{4}", str(cell.value))
+                if m:
+                    quote_date = m.group(0)
+
+    return quote_ref, quote_date
 def _add_logo(ws, logo_bytes: Optional[bytes], anchor="A1", width: int = 180, height: int = 60):
     """Add logo from uploaded bytes or fallback to a local logo file."""
     if PILImage is not None:
@@ -462,6 +488,120 @@ def _extract_excel_consolidation_fee(ws) -> float:
 
     logger.debug("Excel consolidation fee not found; defaulting to 0.0")
     return 0.0
+
+
+def _extract_excel_shipping_fee(ws) -> float:
+    """Find 'Shipping:' in Excel and read the first non-empty cell to its right."""
+    logger = _get_logger()
+
+    for row in ws.iter_rows():
+        for cell in row:
+            value = cell.value
+            if not isinstance(value, str):
+                continue
+            label = value.strip().lower()
+            if not re.fullmatch(r"shipping(?:\s+(?:charge|charges|cost))?\s*:?", label):
+                continue
+
+            for next_col in range(cell.column + 1, ws.max_column + 1):
+                next_value = ws.cell(cell.row, next_col).value
+                if next_value in (None, ""):
+                    continue
+
+                parsed = _parse_money(next_value)
+                shipping_fee = parsed or 0.0
+                logger.debug(
+                    "Excel shipping fee found at row=%s col=%s, value_col=%s, raw_value=%s, parsed=%s",
+                    cell.row,
+                    cell.column,
+                    next_col,
+                    next_value,
+                    shipping_fee,
+                )
+                return shipping_fee
+
+            logger.debug(
+                "Excel shipping label found at row=%s col=%s, but no value exists to the right",
+                cell.row,
+                cell.column,
+            )
+            return 0.0
+
+    logger.debug("Excel shipping fee not found; defaulting to 0.0")
+    return 0.0
+
+
+def _extract_excel_service_fields(ws) -> Dict[str, Dict[str, str]]:
+    """Extract Service Tag / Start Date / End Date per item from Product Details (Excel).
+
+    Some UAE (AED) templates don't include a configuration table; instead they list:
+      - Service Tag:
+      - Service Start Date:
+      - Service End Date:
+    with values typically on the next row in the same column (or occasionally to the right).
+
+    Returns a mapping: internal_item_no -> {"service_tag": str, "service_start_date": str, "service_end_date": str}
+    """
+    anchor = _find_product_details_anchor(ws)
+    if not anchor:
+        return {}
+
+    logger = _get_logger()
+    max_col = min(ws.max_column, 40)
+
+    def _is_item_marker(row_idx: int) -> bool:
+        item_marker = _cell_to_text(ws.cell(row_idx, 1).value)
+        return bool(re.match(r"^\d+\.$", item_marker))
+
+    def _find_next_item_row(start_row: int) -> Optional[int]:
+        for row_idx in range(start_row, ws.max_row + 1):
+            if _is_item_marker(row_idx):
+                return row_idx
+        return None
+
+    out: Dict[str, Dict[str, str]] = {}
+    item_counter = 0
+    r = anchor + 1
+    while r <= ws.max_row:
+        if not _is_item_marker(r):
+            r += 1
+            continue
+
+        item_counter += 1
+        item_key = str(item_counter)
+        next_item_row = _find_next_item_row(r + 1)
+        search_end = (next_item_row - 1) if next_item_row is not None else ws.max_row
+
+        fields = {"service_tag": "", "service_start_date": "", "service_end_date": ""}
+
+        for rr in range(r + 1, min(search_end + 1, ws.max_row + 1)):
+            for cc in range(1, max_col + 1):
+                raw = _cell_to_text(ws.cell(rr, cc).value)
+                if not raw:
+                    continue
+                key = _normalize_text(raw)
+                if key not in ("servicetag", "servicestartdate", "serviceenddate"):
+                    continue
+
+                # Prefer value directly below; fall back to cell to the right.
+                value = _cell_to_text(ws.cell(rr + 1, cc).value) if rr + 1 <= ws.max_row else ""
+                if not value and cc + 1 <= max_col:
+                    value = _cell_to_text(ws.cell(rr, cc + 1).value)
+
+                if key == "servicetag" and value:
+                    fields["service_tag"] = value
+                elif key == "servicestartdate" and value:
+                    fields["service_start_date"] = value
+                elif key == "serviceenddate" and value:
+                    fields["service_end_date"] = value
+
+        if any(fields.values()):
+            out[item_key] = fields
+            logger.info("Excel service fields extracted for item=%s: %s", item_key, fields)
+
+        r = next_item_row if next_item_row is not None else ws.max_row + 1
+
+    return out
 
 
 def _is_config_section_row(module: str, description: str, sku: str, tax: str) -> bool:
@@ -1112,6 +1252,19 @@ def _extract_product_detail_display_numbers(ws) -> Dict[str, str]:
     return display_numbers
 # ================= Main =================
 
+CURRENCY_CONVERSION_RATES = {
+    # Input files are in USD; convert to selected output currency using fixed rates.
+    "USD": 1.0,
+    "QAR": 3.64,
+    "AED": 3.6725,
+}
+
+CURRENCY_NUMBER_FORMATS = {
+    "USD": '"$"#,##0.00',
+    "QAR": '"QAR" #,##0.00',
+    "AED": '"AED" #,##0.00',
+}
+
 def generate_dell_quote(
     input_excel_bytes: bytes,
     logo_bytes: Optional[bytes] = None,
@@ -1147,11 +1300,12 @@ def generate_dell_quote(
         logger.error("Failed to base64-log uploaded file: %s", e)
 
     currency_code = (currency_code or "USD").upper()
-    conversion_rate = 3.64 if currency_code == "QAR" else 1.0
+    conversion_rate = CURRENCY_CONVERSION_RATES.get(currency_code, 1.0)
 
     # Missing consolidation fee should be treated as zero for both Excel and PDF uploads.
     consolidation_fee = 0.0
     item_display_numbers_by_item: Dict[str, str] = {}
+    service_fields_by_item: Dict[str, Dict[str, str]] = {}
 
     # ---- Load source ----
     is_pdf = input_excel_bytes.lstrip().startswith(b"%PDF")
@@ -1168,7 +1322,30 @@ def generate_dell_quote(
 
         # ---- Extract metadata (STRICT E15/E18) ----
         quote_ref_text, date_text = _extract_metadata_strict(src_ws)
-        logger.info("Extracted metadata from Excel: quote_ref=%s, date=%s", quote_ref_text, date_text)
+        logger.info(
+            "Extracted metadata (strict): quote_ref=%s, date=%s",
+            quote_ref_text,
+            date_text,
+        )
+        
+        # ---- FALLBACK for web/PDF-style Excel quotes ----
+        if (
+            not quote_ref_text
+            or "$" in quote_ref_text
+            or not re.search(r"\d{6,}", quote_ref_text)
+        ):
+            fb_ref, fb_date = _extract_metadata_excel_fallback(src_ws)
+            if fb_ref:
+                quote_ref_text = fb_ref
+            if fb_date:
+                date_text = fb_date
+        
+            logger.info(
+                "Fallback Excel metadata applied: quote_ref=%s, date=%s",
+                quote_ref_text,
+                date_text,
+            )
+        
         quote_meta = _extract_quote_metadata(src_ws)
 
         # ---- Extract items (Pricing Summary layout first; else generic) ----
@@ -1203,9 +1380,7 @@ def generate_dell_quote(
 
         item_descs_order = [it[0] for it in items]
 
-        # ---- Extract metadata (STRICT E15/E18) ----
-        quote_ref_text, date_text = _extract_metadata_strict(src_ws)
-        quote_meta = _extract_quote_metadata(src_ws)
+  
 
         # ---- Extract items (Pricing Summary layout first; else generic) ----
         items_ps = _try_extract_items_from_pricing_summary(src_ws)
@@ -1238,6 +1413,18 @@ def generate_dell_quote(
         item_display_numbers_by_item = _extract_product_detail_display_numbers(src_ws)
         
         consolidation_fee = _extract_excel_consolidation_fee(src_ws)
+        if currency_code == "AED":
+            shipping_fee = _extract_excel_shipping_fee(src_ws)
+            if shipping_fee:
+                logger.info(
+                    "AED: adding Excel shipping fee to consolidation fee (shipping=%s, consolidation_before=%s)",
+                    shipping_fee,
+                    consolidation_fee,
+                )
+            consolidation_fee += shipping_fee
+            # If this template doesn't have a config table, we may still have service fields in Product Details.
+            if not config_rows:
+                service_fields_by_item = _extract_excel_service_fields(src_ws)
 
     # Use today's date on the generated quote instead of the source file date.
     date_text = datetime.now().strftime("%d/%m/%Y")
@@ -1356,14 +1543,20 @@ def generate_dell_quote(
     ws["C9"].font = Font(bold=True, color="1F497D")
     ws["D9"] = date_text
 
-    # ---- Quote metadata (Company Name / Customer Name / Customer Number / End User / Reseller)
-    meta_rows = [
-        ("Company Name:", quote_meta.get("company name", "")),
-        ("Customer Name:", quote_meta.get("customer name", "")),
-        ("Customer Number:", quote_meta.get("customer number", "")),
-        ("End User:", quote_meta.get("end user", "")),
-        ("Reseller:", quote_meta.get("reseller", "")),
-    ]
+    # ---- Quote metadata (varies by country/template)
+    if currency_code == "AED":
+        meta_rows = [
+            ("End User:", quote_meta.get("end user", "")),
+            ("Reseller:", quote_meta.get("reseller", "")),
+        ]
+    else:
+        meta_rows = [
+            ("Company Name:", quote_meta.get("company name", "")),
+            ("Customer Name:", quote_meta.get("customer name", "")),
+            ("Customer Number:", quote_meta.get("customer number", "")),
+            ("End User:", quote_meta.get("end user", "")),
+            ("Reseller:", quote_meta.get("reseller", "")),
+        ]
 
     for idx, (label, value) in enumerate(meta_rows, start=5):
         ws[f"G{idx}"] = label
@@ -1404,7 +1597,7 @@ def generate_dell_quote(
     # ===== DATA ROWS (start at 9) =====
     row_ptr = header_row + 1
     sr_no = 1
-    currency_fmt = '"$"#,##0.00' if currency_code == "USD" else '"QAR" #,##0.00'
+    currency_fmt = CURRENCY_NUMBER_FORMATS.get(currency_code, f'"{currency_code}" #,##0.00')
     margin_fmt = '0.00\\%'
     yellow = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
     total_cells = []
@@ -1482,27 +1675,46 @@ def generate_dell_quote(
     ws[f"{total_value_col}{row_ptr}"].border = border_thin
 
     # Footer notes
-    notes = [
-        'Incoterms:',
-        '',
-        'Payment Terms:',
-        '',
-        'Quote validity:',
-        '',
-        'Estimated Delivery Time from the date of booking:',
-        '',
-        'These prices do not include installation of any kind',
-        'Change in Qty or partial shipment is not acceptable',
-        'For all B2B orders complete end customer details should be mentioned on the PO',
-        f'PO Should be addressed to Mindware FZ LLC and should be in {currency_code}',
-        'Orders once placed with Dell cannot be cancelled',
-        '',
-        'And as an important note – All items are not proposed with any Professional Services to cater for installation.',
-        '',
-        'Please note that these prices are granted for this QTY and deal & Dell cannot guarantee same prices if QTY is reduced , it will also have to be one shot order.',
-        '',
-        'Kindly also ensure to review the proposal specifications from your end and ensure that they match the requirements exactly as per the End User.',
-    ]
+    if currency_code == "AED":
+        notes = [
+            "Ø  Payment terms will be as per our finance approval.",
+            "Ø  These prices are till DDP Dubai.",
+            "Ø  Hardware will take 4-12 weeks delivery time from the date of Booking.",
+            "Ø  These prices do not include Mindware installation of any kind.",
+            "Ø  Change in Qty or partial shipment is not acceptable.",
+            "Ø  PO Should be addressed to Mindware Technology Trading LLC and should be in AED.",
+            "Ø  For all B2B orders complete end customer details should be mentioned on the PO.",
+            "Ø  Orders once placed with Dell cannot be cancelled.",
+            "Ø  Kindly also ensure to review the proposal specifications from your end and ensure that they match the requirements exactly as per the End User.",
+            "Ø  Partial deliveries shall be acceptable",
+            "Ø  For UAE DDP orders, the PO should be addressed to Mindware Technology Trading LLC and for Ex-Jablal Ali orders, it should be addressed to Mindware FZ.",
+            "Ø  Please ensure that the PO includes the name of the end-user.",
+            "Ø  Please ensure that the PO includes the Incoterms (DDP or Ex-Works Jabal Ali).",
+            "Ø  Due to global market fluctuations, all prices are subject to change without prior notice, and lead times may also be affected. All quotations are non-binding and remain subject to final validation and confirmation by Dell.",
+            "Ø  As the geopolitical situation in the Middle East continues to evolve, it has introduced significant instability to international shipping routes. These unforeseen and extraordinary circumstances, which remain entirely beyond our control, constitute a Force Majeure event. We are formally notifying you of the resulting impact on our current and future shipments.",
+        ]
+    else:
+        notes = [
+            "Incoterms:",
+            "",
+            "Payment Terms:",
+            "",
+            "Quote validity:",
+            "",
+            "Estimated Delivery Time from the date of booking:",
+            "",
+            "These prices do not include installation of any kind",
+            "Change in Qty or partial shipment is not acceptable",
+            "For all B2B orders complete end customer details should be mentioned on the PO",
+            f"PO Should be addressed to Mindware FZ LLC and should be in {currency_code}",
+            "Orders once placed with Dell cannot be cancelled",
+            "",
+            "And as an important note – All items are not proposed with any Professional Services to cater for installation.",
+            "",
+            "Please note that these prices are granted for this QTY and deal & Dell cannot guarantee same prices if QTY is reduced , it will also have to be one shot order.",
+            "",
+            "Kindly also ensure to review the proposal specifications from your end and ensure that they match the requirements exactly as per the End User.",
+        ]
     footer_row = max(row_ptr + 2, 22)
     for line in notes:
         ws.merge_cells(start_row=footer_row, start_column=2, end_row=footer_row, end_column=6)
@@ -1515,12 +1727,23 @@ def generate_dell_quote(
     # ===== Sheet 2: Configuration =====
     ws2 = wb.create_sheet("Configuration")
     ws2.sheet_view.showGridLines = False
-    ws2.column_dimensions["A"].width = 22  # Item #
-    ws2.column_dimensions["B"].width = 70  # Module
-    ws2.column_dimensions["C"].width = 100  # Description
-    ws2.column_dimensions["D"].width = 20  # SKU
-    ws2.column_dimensions["E"].width = 14  # Tax Type
-    ws2.column_dimensions["F"].width = 10  # Qty
+
+    use_service_layout = bool(service_fields_by_item) and (currency_code == "AED") and (not is_pdf) and (not config_rows)
+    if use_service_layout:
+        ws2.column_dimensions["A"].width = 14  # Item #
+        ws2.column_dimensions["B"].width = 18  # Module
+        ws2.column_dimensions["C"].width = 80  # Description
+        ws2.column_dimensions["D"].width = 18  # Service Tag
+        ws2.column_dimensions["E"].width = 18  # Service Start Date
+        ws2.column_dimensions["F"].width = 18  # Service End Date
+        ws2.column_dimensions["G"].width = 10  # Qty
+    else:
+        ws2.column_dimensions["A"].width = 22  # Item #
+        ws2.column_dimensions["B"].width = 70  # Module
+        ws2.column_dimensions["C"].width = 100  # Description
+        ws2.column_dimensions["D"].width = 20  # SKU
+        ws2.column_dimensions["E"].width = 14  # Tax Type
+        ws2.column_dimensions["F"].width = 10  # Qty
 
     r2 = 1
     title_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
@@ -1533,13 +1756,29 @@ def generate_dell_quote(
     )
 
     def write_table_header(row_index: int):
-        ws2[f"A{row_index}"] = "Item #"
-        ws2[f"B{row_index}"] = "Module"
-        ws2[f"C{row_index}"] = "Description"
-        ws2[f"D{row_index}"] = "SKU"
-        ws2[f"E{row_index}"] = "Tax Type"
-        ws2[f"F{row_index}"] = "Qty"
-        for addr in (f"A{row_index}", f"B{row_index}", f"C{row_index}", f"D{row_index}", f"E{row_index}", f"F{row_index}"):
+        if use_service_layout:
+            headers = [
+                ("A", "Item #"),
+                ("B", "Module"),
+                ("C", "Description"),
+                ("D", "Service Tag:"),
+                ("E", "Service Start Date:"),
+                ("F", "Service End Date:"),
+                ("G", "Qty"),
+            ]
+        else:
+            headers = [
+                ("A", "Item #"),
+                ("B", "Module"),
+                ("C", "Description"),
+                ("D", "SKU"),
+                ("E", "Tax Type"),
+                ("F", "Qty"),
+            ]
+
+        for col, label in headers:
+            addr = f"{col}{row_index}"
+            ws2[addr] = label
             ws2[addr].font = Font(bold=True)
             ws2[addr].fill = title_fill
             ws2[addr].alignment = Alignment(horizontal="center", vertical="center")
@@ -1555,7 +1794,45 @@ def generate_dell_quote(
     write_table_header(r2)
     r2 += 1
 
-    if not config_rows:
+    if use_service_layout:
+        qty_by_item: Dict[str, str] = {}
+        for idx, it in enumerate(items, start=1):
+            try:
+                qty_by_item[str(idx)] = str(int(it[1]))
+            except Exception:
+                qty_by_item[str(idx)] = _cell_to_text(it[1])
+
+        total_items = max(
+            len(item_descs_order),
+            len(service_fields_by_item),
+            len(item_headings_by_item) if include_part_number else 0,
+        )
+        if total_items == 0:
+            ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=7)
+            ws2[f"A{r2}"] = "(No service details found)"
+            ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
+            r2 += 1
+        else:
+            for idx in range(1, total_items + 1):
+                item_key = str(idx)
+                display_item_no = item_display_numbers_by_item.get(item_key, str(idx))
+                heading = item_headings_by_item.get(item_key, "")
+                if not heading and idx - 1 < len(item_descs_order):
+                    heading = item_descs_order[idx - 1]
+                details = service_fields_by_item.get(item_key, {})
+                ws2[f"A{r2}"] = display_item_no
+                ws2[f"B{r2}"] = ""
+                ws2[f"C{r2}"] = heading
+                ws2[f"D{r2}"] = details.get("service_tag", "")
+                ws2[f"E{r2}"] = details.get("service_start_date", "")
+                ws2[f"F{r2}"] = details.get("service_end_date", "")
+                ws2[f"G{r2}"] = qty_by_item.get(item_key, "")
+
+                for col in ("A", "B", "C", "D", "E", "F", "G"):
+                    ws2[f"{col}{r2}"].border = thin_gray
+                    ws2[f"{col}{r2}"].alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+                r2 += 1
+    elif not config_rows:
         ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=6)
         ws2[f"A{r2}"] = "(No configuration details found)"
         ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")

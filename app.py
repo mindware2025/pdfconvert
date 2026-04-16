@@ -2352,8 +2352,8 @@ elif tool == "🟥 Lenovo Credit Note Tool":
         st.info("Upload Lenovo credit note PDFs to begin.")
         
 elif tool == "💻 Dell Quotation":
-
     st.set_page_config(page_title="Dell Quotation Tool", layout="wide")
+    
     st.title("💼 Dell Quotation Tool")
     st.caption(
         "Upload a Dell BOQ Excel or PDF and download a formatted Quotation (Quote + BOQ). "
@@ -2377,9 +2377,9 @@ elif tool == "💻 Dell Quotation":
 
     currency_code = st.radio(
         "Currency",
-        options=["USD", "QAR"],
+        options=["USD", "QAR", "AED"],
         horizontal=True,
-        help="QAR uses the fixed rate 1 USD = 3.64 QAR.",
+        help="QAR uses the fixed rate 1 USD = 3.64 QAR. AED uses the fixed rate 1 USD = 3.6725 AED.",
     )
 
     if st.button("Generate Dell Quotation"):
