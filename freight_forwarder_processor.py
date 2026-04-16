@@ -67,7 +67,7 @@ class JVConfig:
     expense_code: str = ""
     discount_code: str = ""
     narration_suffix: str = ""
-    due_days: int = 60
+    due_days: int = 30
 
 
 def _extract_text(file_obj: BinaryIO) -> str:
@@ -162,13 +162,17 @@ def extract_invoice_data(file_name: str, file_bytes: bytes) -> tuple[dict, list[
     currency = ""
     amount = Decimal("0.00")
     if total_match:
-        if total_match.lastindex == 2 and total_match.group(1).isalpha():
-            if len(total_match.group(1)) == 3 and total_match.group(1).isupper():
-                currency = total_match.group(2).upper()
-                amount = _parse_amount(total_match.group(1))
-        if not currency:
-            amount = _parse_amount(total_match.group(1))
-            currency = total_match.group(2).upper()
+        group_1 = total_match.group(1).strip()
+        group_2 = total_match.group(2).strip()
+        try:
+            if re.fullmatch(r"[A-Z]{3}", group_1):
+                currency = group_1.upper()
+                amount = _parse_amount(group_2)
+            else:
+                amount = _parse_amount(group_1)
+                currency = group_2.upper()
+        except (InvalidOperation, ValueError):
+            errors.append(f"{file_name}: could not parse invoice total amount.")
     else:
         errors.append(f"{file_name}: could not find invoice total and currency.")
 
@@ -191,8 +195,7 @@ def extract_invoice_data(file_name: str, file_bytes: bytes) -> tuple[dict, list[
 
 
 def build_jv_rows(invoice_data: dict, doc_no: int, config: JVConfig) -> list[dict]:
-    today = datetime.today().date()
-    doc_date = today
+    doc_date = invoice_data.get("invoice_date")
     due_date = doc_date + timedelta(days=config.due_days) if doc_date else None
     narration = _build_narration(
         invoice_data["invoice_no"],
@@ -200,7 +203,7 @@ def build_jv_rows(invoice_data: dict, doc_no: int, config: JVConfig) -> list[dic
         invoice_data["hawb_no"],
         config.narration_suffix,
     )
-    amount = _format_amount(invoice_data["amount"])
+    amount = invoice_data["amount"]
     base_row = {header: "" for header in OUTPUT_HEADERS}
     base_row.update(
         {
