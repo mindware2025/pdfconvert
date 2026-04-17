@@ -155,24 +155,68 @@ def _get_local_logo_path() -> Optional[str]:
             return path
     return None
 
+def _extract_all_excel_quote_refs(ws, max_rows: int = 80):
+    """Return all quote reference values found in the worksheet."""
+    refs = []
+    max_row = min(ws.max_row, max_rows)
+    max_col = min(ws.max_column, 10)
+
+    for r in range(1, max_row + 1):
+        row_texts = [_cell_to_text(ws.cell(r, c).value).strip() for c in range(1, max_col + 1)]
+        for idx, cell_text in enumerate(row_texts, start=1):
+            low = cell_text.lower()
+            if not low:
+                continue
+
+            if low.startswith("quote") and "quoted on" not in low:
+                # Quote label may include the quote number in the same cell.
+                match = re.search(r"\b\d{6,}[A-Za-z0-9\-]*\b", cell_text)
+                if match:
+                    refs.append(match.group(0))
+                    continue
+
+                # Or the quote number may be in the next non-empty cell.
+                for next_text in row_texts[idx:]:
+                    if not next_text:
+                        continue
+                    match = re.search(r"\b\d{6,}[A-Za-z0-9\-]*\b", next_text)
+                    if match:
+                        refs.append(match.group(0))
+                        break
+                continue
+
+            if any(token in low for token in ("quote no", "quote number", "quote ref")):
+                match = re.search(r"\b\d{6,}[A-Za-z0-9\-]*\b", cell_text)
+                if match:
+                    refs.append(match.group(0))
+                    continue
+                for next_text in row_texts[idx:]:
+                    if not next_text:
+                        continue
+                    match = re.search(r"\b\d{6,}[A-Za-z0-9\-]*\b", next_text)
+                    if match:
+                        refs.append(match.group(0))
+                        break
+
+    unique_refs = []
+    for ref in refs:
+        normalized_ref = str(ref).strip()
+        if normalized_ref and normalized_ref not in unique_refs:
+            unique_refs.append(normalized_ref)
+    return unique_refs
+
+
 def _extract_metadata_excel_fallback(ws):
     """
     Fallback for WEB / PDF-style Dell quotes saved as Excel.
     Finds 'Quote No' and 'Quoted On' by scanning labels instead of fixed cells.
     """
-    quote_ref = ""
+    quote_refs = _extract_all_excel_quote_refs(ws)
     quote_date = ""
 
     for row in ws.iter_rows(min_row=1, max_row=80, max_col=10):
         row_values = [_cell_to_text(c.value) for c in row if c.value]
         row_text = " ".join(row_values).lower()
-
-        # ---- Quote Number ----
-        if "quote no" in row_text or "quote number" in row_text:
-            for cell in row:
-                m = re.search(r"\b\d{6,}(?:\.\d+)?\b", str(cell.value))
-                if m:
-                    quote_ref = m.group(0)
 
         # ---- Quote Date ----
         if "quoted on" in row_text or "quote date" in row_text:
@@ -181,6 +225,7 @@ def _extract_metadata_excel_fallback(ws):
                 if m:
                     quote_date = m.group(0)
 
+    quote_ref = ", ".join(quote_refs)
     return quote_ref, quote_date
 def _add_logo(ws, logo_bytes: Optional[bytes], anchor="A1", width: int = 180, height: int = 60):
     """Add logo from uploaded bytes or fallback to a local logo file."""
@@ -251,6 +296,16 @@ def _extract_metadata_strict(ws):
         quote_date = raw_date.strftime("%d/%m/%Y")
     else:
         quote_date = "" if raw_date is None else str(raw_date).strip()
+
+    quote_refs = _extract_all_excel_quote_refs(ws)
+    if quote_refs:
+        unique_refs = []
+        if quote_ref:
+            unique_refs.append(quote_ref)
+        for ref in quote_refs:
+            if ref not in unique_refs:
+                unique_refs.append(ref)
+        quote_ref = ", ".join(unique_refs)
 
     logger.debug("_extract_metadata_strict: quote_ref=%s, quote_date=%s", quote_ref, quote_date)
     return quote_ref, quote_date
@@ -450,41 +505,218 @@ def _extract_quote_metadata(ws):
     return out
 
 
+def _normalize_sheet_name(name: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", (name or "").lower().strip())
+
+
+def _is_configuration_sheet_name(name: str) -> bool:
+    normalized = _normalize_sheet_name(name)
+    return normalized in ("configuration", "config", "configsheet", "configurationsheet")
+
+
+def _find_configuration_sheet(wb):
+    for sheet_name in wb.sheetnames:
+        if _is_configuration_sheet_name(sheet_name):
+            return wb[sheet_name]
+    return None
+
+
+def _extract_config_rows_from_configuration_sheet(ws) -> List[Tuple[str, str, str, str, str, str, str]]:
+    header_info = _find_config_table_header(ws, 1, search_rows=50)
+    if not header_info:
+        return []
+
+    header_row, colmap = header_info
+    item_col = None
+    for c in range(1, ws.max_column + 1):
+        header_text = _cell_to_text(ws.cell(header_row, c).value).lower()
+        if header_text in (
+            "item", "item#", "item #", "item no", "item number", "sr. no.", "sr no", "srno", "sr"
+        ):
+            item_col = c
+            break
+
+    rows = []
+    current_item = "1"
+    for r in range(header_row + 1, ws.max_row + 1):
+        row_text = _row_text(ws, r, 1, ws.max_column)
+        if not row_text:
+            continue
+
+        if item_col:
+            item_value = _cell_to_text(ws.cell(r, item_col).value).strip()
+            if item_value:
+                current_item = item_value.rstrip(".")
+
+        module = _cell_to_text(ws.cell(r, colmap.get("module", 0)).value)
+        description = _cell_to_text(ws.cell(r, colmap.get("description", 0)).value)
+        sku = _cell_to_text(ws.cell(r, colmap.get("sku", 0)).value)
+        tax = _cell_to_text(ws.cell(r, colmap.get("tax", 0)).value)
+        qty = _cell_to_text(ws.cell(r, colmap.get("qty", 0)).value)
+
+        if not any([module, description, sku, tax, qty]):
+            continue
+
+        rows.append((current_item, "", module, description, sku, tax, qty))
+
+    return rows
+
+
+def _find_grouped_config_header(ws):
+    for r in range(1, min(ws.max_row, 20) + 1):
+        row_text = [(_cell_to_text(ws.cell(r, c).value).lower()) for c in range(1, ws.max_column + 1)]
+        if "config" in row_text and "unit selling price" in row_text and "total selling price" in row_text:
+            columns = {}
+            for c in range(1, ws.max_column + 1):
+                name = _cell_to_text(ws.cell(r, c).value).strip().lower()
+                if "description" in name and "description" not in columns:
+                    columns["description"] = c
+                if "sku" in name and "sku" not in columns:
+                    columns["sku"] = c
+                if name in ("q-ty", "qty", "quantity") and "qty" not in columns:
+                    columns["qty"] = c
+                if "unit selling price" in name and "unit" not in columns:
+                    columns["unit"] = c
+                if "total selling price" in name and "total" not in columns:
+                    columns["total"] = c
+            if "description" in columns and "sku" in columns:
+                return r, columns
+    return None
+
+
+def _is_grouped_config_template(ws) -> bool:
+    return _find_grouped_config_header(ws) is not None
+
+
+def _extract_grouped_template_metadata(ws):
+    quote_refs = _extract_all_excel_quote_refs(ws, max_rows=200)
+    quote_ref = ", ".join(quote_refs)
+    date_text = ""
+    for r in range(1, min(ws.max_row, 200) + 1):
+        first = _cell_to_text(ws.cell(r, 1).value).strip().lower()
+        if first.startswith("date"):
+            value = ws.cell(r, 2).value
+            if isinstance(value, datetime):
+                date_text = value.strftime("%d/%m/%Y")
+            else:
+                date_text = _cell_to_text(value)
+    return quote_ref, date_text
+
+
+def _is_grouped_template_summary_row(ws, row_idx, cols):
+    row_text = _row_text(ws, row_idx, 1, ws.max_column).lower()
+    if not row_text:
+        return False
+
+    if first := _cell_to_text(ws.cell(row_idx, 1).value).strip().lower():
+        if first.startswith("quote") or first.startswith("name"):
+            return True
+
+    if "consolidation fee" in row_text:
+        sku_value = _cell_to_text(ws.cell(row_idx, cols.get("sku", 0)).value)
+        if not sku_value:
+            return True
+        return False
+
+    if "total" in row_text and "total selling price" not in row_text:
+        return True
+
+    return False
+
+
+def _extract_grouped_template_items_and_config(ws):
+    header_info = _find_grouped_config_header(ws)
+    if not header_info:
+        return [], []
+
+    header_row, cols = header_info
+    items = []
+    config_rows = []
+    current_item = None
+    blank_streak = 0
+
+    for r in range(header_row + 1, ws.max_row + 1):
+        row_text = _row_text(ws, r, 1, ws.max_column)
+        if not row_text:
+            blank_streak += 1
+            if blank_streak >= 4:
+                break
+            continue
+        blank_streak = 0
+
+        if _is_grouped_template_summary_row(ws, r, cols):
+            continue
+
+        first_cell = _cell_to_text(ws.cell(r, 1).value).strip()
+        desc = _cell_to_text(ws.cell(r, cols["description"]).value)
+        sku = _cell_to_text(ws.cell(r, cols["sku"]).value)
+        qty_raw = _cell_to_text(ws.cell(r, cols.get("qty", 0)).value)
+        qty_val = 0
+        if qty_raw:
+            try:
+                qty_val = int(qty_raw)
+            except Exception:
+                qty_val = int(_parse_money(qty_raw) or 0)
+
+        unit_price = _parse_money(ws.cell(r, cols.get("unit", 0)).value) or 0.0
+        total_price = _parse_money(ws.cell(r, cols.get("total", 0)).value) or 0.0
+
+        if first_cell.lower().startswith("quote"):
+            continue
+
+        if first_cell:
+            # Top-level item row
+            if desc:
+                items.append((desc, qty_val, unit_price, total_price))
+                current_item = str(len(items))
+            continue
+
+        # Grouped config row belongs to the last top-level item.
+        if current_item and desc:
+            config_rows.append((current_item, "", "", desc, sku, "", qty_raw))
+
+    return items, config_rows
+
+
 def _extract_excel_consolidation_fee(ws) -> float:
-    """Find 'Consolidation Fee:' in Excel and read the first non-empty cell to its right."""
+    """Find 'Consolidation Fee' rows in Excel and return the most relevant numeric amount."""
     logger = _get_logger()
+    best_fee = None
 
     for row in ws.iter_rows():
         for cell in row:
             value = cell.value
             if not isinstance(value, str):
                 continue
-            if "consolidation fee" not in value.strip().lower():
+            label = value.strip().lower()
+            if "consolidation fee" not in label:
+                continue
+            if "total" in label and "consolidation fee" in label:
                 continue
 
-            for next_col in range(cell.column + 1, ws.max_column + 1):
+            row_fee = None
+            for next_col in range(ws.max_column, cell.column, -1):
                 next_value = ws.cell(cell.row, next_col).value
                 if next_value in (None, ""):
                     continue
-
                 parsed = _parse_money(next_value)
-                consolidation_fee = parsed or 0.0
+                if parsed is not None:
+                    row_fee = parsed
+                    break
+
+            if row_fee is not None:
+                best_fee = row_fee
                 logger.debug(
-                    "Excel consolidation fee found at row=%s col=%s, value_col=%s, raw_value=%s, parsed=%s",
+                    "Excel consolidation fee candidate found at row=%s col=%s, value_col=%s, raw_value=%s, parsed=%s",
                     cell.row,
                     cell.column,
                     next_col,
                     next_value,
-                    consolidation_fee,
+                    row_fee,
                 )
-                return consolidation_fee
 
-            logger.debug(
-                "Excel consolidation fee label found at row=%s col=%s, but no value exists to the right",
-                cell.row,
-                cell.column,
-            )
-            return 0.0
+    if best_fee is not None:
+        return best_fee
 
     logger.debug("Excel consolidation fee not found; defaulting to 0.0")
     return 0.0
@@ -1318,6 +1550,9 @@ def generate_dell_quote(
     else:
         src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
         src_ws = src_wb.active
+        src_config_ws = _find_configuration_sheet(src_wb)
+        if src_config_ws is not None:
+            logger.info("Detected separate configuration sheet: %s", src_config_ws.title)
         logger.info("Parsed Excel quote (sheets=%d, active=%s)", len(src_wb.sheetnames), src_ws.title)
 
         # ---- Extract metadata (STRICT E15/E18) ----
@@ -1348,83 +1583,74 @@ def generate_dell_quote(
         
         quote_meta = _extract_quote_metadata(src_ws)
 
-        # ---- Extract items (Pricing Summary layout first; else generic) ----
-        items_ps = _try_extract_items_from_pricing_summary(src_ws)
-        if items_ps:
-            items = items_ps
-            logger.info("Found %d items via Pricing Summary extraction", len(items))
-            _log_items("Pricing summary items", items)
+        if _is_grouped_config_template(src_ws):
+            logger.info("Detected grouped config Excel template")
+            quote_ref_text, date_text = _extract_grouped_template_metadata(src_ws)
+            items, grouped_config_rows = _extract_grouped_template_items_and_config(src_ws)
+            if src_config_ws is not None:
+                config_rows = _extract_config_rows_from_configuration_sheet(src_config_ws)
+                logger.info("Used separate configuration sheet for grouped template: %d config rows", len(config_rows))
+            else:
+                config_rows = grouped_config_rows
+            item_descs_order = [it[0] for it in items]
+            item_headings_by_item = {str(i + 1): items[i][0] for i in range(len(items))}
+            item_display_numbers_by_item = {str(i + 1): f"Option {i + 1}" for i in range(len(items))}
+            consolidation_fee = _extract_excel_consolidation_fee(src_ws)
+            logger.info("Grouped template items extracted: %d items, %d config rows", len(items), len(config_rows))
         else:
-            first_data_row, desc_col, qty_col, unit_col = _find_header_row_strict_or_detect(src_ws)
-            logger.info("Using generic item extraction starting at row %d (desc_col=%d, qty_col=%d, unit_col=%d)", first_data_row, desc_col, qty_col, unit_col)
-            items = []
-            r = first_data_row
-            while r <= src_ws.max_row:
-                desc = src_ws.cell(r, desc_col).value
-                qty  = src_ws.cell(r, qty_col).value
-                unit = src_ws.cell(r, unit_col).value
+            # ---- Extract items (Pricing Summary layout first; else generic) ----
+            items_ps = _try_extract_items_from_pricing_summary(src_ws)
+            if items_ps:
+                items = items_ps
+                logger.info("Found %d items via Pricing Summary extraction", len(items))
+                _log_items("Pricing summary items", items)
+            else:
+                first_data_row, desc_col, qty_col, unit_col = _find_header_row_strict_or_detect(src_ws)
+                logger.info("Using generic item extraction starting at row %d (desc_col=%d, qty_col=%d, unit_col=%d)", first_data_row, desc_col, qty_col, unit_col)
+                items = []
+                r = first_data_row
+                while r <= src_ws.max_row:
+                    desc = src_ws.cell(r, desc_col).value
+                    qty  = src_ws.cell(r, qty_col).value
+                    unit = src_ws.cell(r, unit_col).value
 
-                desc_text = _cell_to_text(desc)
-                if not desc_text or desc_text.lower().startswith("total"):
-                    break
-                try:
-                    qty_val = int(qty) if qty not in (None, "") else 0
-                except Exception:
-                    qty_val = int(_parse_money(qty) or 0)
-                unit_val = _parse_money(unit) or 0.0
-                if qty_val > 0:
-                    items.append((desc_text, qty_val, unit_val, None))
-                r += 1
-            logger.info("Extracted %d items via generic table parsing", len(items))
-            _log_items("Parsed table items", items)
+                    desc_text = _cell_to_text(desc)
+                    if not desc_text or desc_text.lower().startswith("total"):
+                        break
+                    try:
+                        qty_val = int(qty) if qty not in (None, "") else 0
+                    except Exception:
+                        qty_val = int(_parse_money(qty) or 0)
+                    unit_val = _parse_money(unit) or 0.0
+                    if qty_val > 0:
+                        items.append((desc_text, qty_val, unit_val, None))
+                    r += 1
+                logger.info("Extracted %d items via generic table parsing", len(items))
+                _log_items("Parsed table items", items)
 
-        item_descs_order = [it[0] for it in items]
-
-  
-
-        # ---- Extract items (Pricing Summary layout first; else generic) ----
-        items_ps = _try_extract_items_from_pricing_summary(src_ws)
-        if items_ps:
-            items = items_ps
-        else:
-            first_data_row, desc_col, qty_col, unit_col = _find_header_row_strict_or_detect(src_ws)
-            items = []
-            r = first_data_row
-            while r <= src_ws.max_row:
-                desc = src_ws.cell(r, desc_col).value
-                qty  = src_ws.cell(r, qty_col).value
-                unit = src_ws.cell(r, unit_col).value
-
-                desc_text = _cell_to_text(desc)
-                if not desc_text or desc_text.lower().startswith("total"):
-                    break
-                try:
-                    qty_val = int(qty) if qty not in (None, "") else 0
-                except Exception:
-                    qty_val = int(_parse_money(qty) or 0)
-                unit_val = _parse_money(unit) or 0.0
-                if qty_val > 0:
-                    items.append((desc_text, qty_val, unit_val, None))
-                r += 1
-
-        item_descs_order = [it[0] for it in items]
-        config_rows = _extract_all_config_rows(src_ws)
-        item_headings_by_item = _extract_product_detail_headings(src_ws)
-        item_display_numbers_by_item = _extract_product_detail_display_numbers(src_ws)
-        
-        consolidation_fee = _extract_excel_consolidation_fee(src_ws)
-        if currency_code == "AED":
-            shipping_fee = _extract_excel_shipping_fee(src_ws)
-            if shipping_fee:
-                logger.info(
-                    "AED: adding Excel shipping fee to consolidation fee (shipping=%s, consolidation_before=%s)",
-                    shipping_fee,
-                    consolidation_fee,
-                )
-            consolidation_fee += shipping_fee
-            # If this template doesn't have a config table, we may still have service fields in Product Details.
-            if not config_rows:
-                service_fields_by_item = _extract_excel_service_fields(src_ws)
+            item_descs_order = [it[0] for it in items]
+            if src_config_ws is not None:
+                config_rows = _extract_config_rows_from_configuration_sheet(src_config_ws)
+                item_headings_by_item = _extract_product_detail_headings(src_config_ws) or _extract_product_detail_headings(src_ws)
+                item_display_numbers_by_item = _extract_product_detail_display_numbers(src_config_ws) or _extract_product_detail_display_numbers(src_ws)
+                logger.info("Using separate configuration sheet for product detail extraction: %d config rows", len(config_rows))
+            else:
+                config_rows = _extract_all_config_rows(src_ws)
+                item_headings_by_item = _extract_product_detail_headings(src_ws)
+                item_display_numbers_by_item = _extract_product_detail_display_numbers(src_ws)
+            consolidation_fee = _extract_excel_consolidation_fee(src_ws)
+            if currency_code == "AED":
+                shipping_fee = _extract_excel_shipping_fee(src_ws)
+                if shipping_fee:
+                    logger.info(
+                        "AED: adding Excel shipping fee to consolidation fee (shipping=%s, consolidation_before=%s)",
+                        shipping_fee,
+                        consolidation_fee,
+                    )
+                consolidation_fee += shipping_fee
+                # If this template doesn't have a config table, we may still have service fields in Product Details.
+                if not config_rows:
+                    service_fields_by_item = _extract_excel_service_fields(src_ws)
 
     # Use today's date on the generated quote instead of the source file date.
     date_text = datetime.now().strftime("%d/%m/%Y")
