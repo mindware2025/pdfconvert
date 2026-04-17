@@ -7,7 +7,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.drawing.image import Image as XLImage
 
-AED_RATE = 3.6725
+AED_RATE = 3.68
 
 
 # ---------------- Helpers ----------------

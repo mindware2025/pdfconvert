@@ -1256,7 +1256,7 @@ CURRENCY_CONVERSION_RATES = {
     # Input files are in USD; convert to selected output currency using fixed rates.
     "USD": 1.0,
     "QAR": 3.64,
-    "AED": 3.6725,
+    "AED": 3.68,
 }
 
 CURRENCY_NUMBER_FORMATS = {
