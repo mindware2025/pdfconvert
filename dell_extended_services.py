@@ -106,9 +106,44 @@ def _extract_metadata(ws) -> Dict[str, str]:
                     break
 
         if "end user -" in row_text:
-            meta["end_user"] = row_text.split("end user -", 1)[1].strip()
+            for idx, cell_text in enumerate(row_lower):
+                if "end user -" in cell_text:
+                    next_row = r + 1
+                    while next_row <= min(ws.max_row, r + 8):
+                        line_parts = [_text(ws.cell(next_row, c).value) for c in range(1, 11)]
+                        line_parts = [part for part in line_parts if part]
+                        if not line_parts:
+                            break
+                        joined_line = " ".join(line_parts).strip()
+                        joined_line_lower = joined_line.lower()
+                        if any(marker in joined_line_lower for marker in ("dell extended services details", "customer information", "terms of sale")):
+                            break
+                        meta["end_user"] = joined_line
+                        break
+                    break
+            break
 
     return meta
+
+
+def _aed_footer_notes() -> List[str]:
+    return [
+        "Ø  Payment terms will be as per our finance approval.",
+        "Ø  These prices are till DDP Dubai.",
+        "Ø  Hardware will take 4-12 weeks delivery time from the date of Booking.",
+        "Ø  These prices do not include Mindware installation of any kind.",
+        "Ø  Change in Qty or partial shipment is not acceptable.",
+        "Ø  PO Should be addressed to Mindware Technology Trading LLC and should be in AED.",
+        "Ø  For all B2B orders complete end customer details should be mentioned on the PO.",
+        "Ø  Orders once placed with Dell cannot be cancelled.",
+        "Ø  Kindly also ensure to review the proposal specifications from your end and ensure that they match the requirements exactly as per the End User.",
+        "Ø  Partial deliveries shall be acceptable",
+        "Ø  For UAE DDP orders, the PO should be addressed to Mindware Technology Trading LLC and for Ex-Jablal Ali orders, it should be addressed to Mindware FZ.",
+        "Ø  Please ensure that the PO includes the name of the end-user.",
+        "Ø  Please ensure that the PO includes the Incoterms (DDP or Ex-Works Jabal Ali).",
+        "Ø  Due to global market fluctuations, all prices are subject to change without prior notice, and lead times may also be affected. All quotations are non-binding and remain subject to final validation and confirmation by Dell.",
+        "Ø  As the geopolitical situation in the Middle East continues to evolve, it has introduced significant instability to international shipping routes. These unforeseen and extraordinary circumstances, which remain entirely beyond our control, constitute a Force Majeure event. We are formally notifying you of the resulting impact on our current and future shipments.",
+    ]
 
 
 # ---------------- Table ----------------
@@ -193,6 +228,7 @@ def generate_dell_extended_services_quote(
 
     meta = _extract_metadata(src_ws)
     rows = _extract_extended_services_rows(src_ws)
+    footer_notes = _aed_footer_notes()
 
     wb = Workbook()
     ws = wb.active
@@ -305,6 +341,19 @@ def generate_dell_extended_services_quote(
         margin_cell.border = border_thin
         margin_cell.alignment = Alignment(horizontal="center", vertical="center")
         r += 1
+
+    notes_title_row = r + 2
+    ws.merge_cells(start_row=notes_title_row, start_column=2, end_row=notes_title_row, end_column=18)
+    ws.cell(notes_title_row, 2).value = "Terms and Conditions"
+    ws.cell(notes_title_row, 2).font = Font(bold=True)
+
+    notes_body_row = notes_title_row + 1
+    ws.merge_cells(start_row=notes_body_row, start_column=2, end_row=notes_body_row, end_column=18)
+    body_cell = ws.cell(notes_body_row, 2)
+    body_cell.value = "\n".join(footer_notes)
+    body_cell.alignment = Alignment(wrap_text=True, vertical="top")
+    body_cell.border = border_thin
+    ws.row_dimensions[notes_body_row].height = max(180, min(520, len(footer_notes) * 22))
 
     out = BytesIO()
     wb.save(out)
