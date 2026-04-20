@@ -24,6 +24,7 @@ from extractors.insurance2  import process_grouped_customer_files
 #from sales.mibb_quotation import create_mibb_excel, extract_mibb_header_from_pdf, extract_mibb_table_from_pdf
 
 from extractors.oracle import prepare_excel_bytes, process_oracle_pdfs_cached
+from lenovo_cn import build_ksa_output_filename, build_output_filename, prepare_ksa_excel_bytes, process_lenovo_credit_pdfs, process_lenovo_ksa_pdfs
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 from ibm import extract_ibm_data_from_pdf, create_styled_excel, create_styled_excel_template2, correct_descriptions, extract_last_page_text
@@ -288,121 +289,7 @@ def show_login():  # <-- right-side login
         st.markdown('<div class="mw-footer">Made with ❤️ by Mindware • © 2025</div>', unsafe_allow_html=True)
         st.markdown("</div></div>", unsafe_allow_html=True)
 
-# def show_login():
-#     # Add Christmas styling and animations
-#     st.markdown("""
-#     <style>
-#     @keyframes snowfall {
-#         0% { transform: translateY(-10px) rotate(0deg); opacity: 1; }
-#         100% { transform: translateY(100vh) rotate(360deg); opacity: 0; }
-#     }
-#     @keyframes glow {
-#         0%, 100% { text-shadow: 0 0 10px #1a73e8, 0 0 20px #1a73e8; }
-#         50% { text-shadow: 0 0 20px #1a73e8, 0 0 30px #1a73e8, 0 0 40px #1a73e8; }
-#     }
-#     @keyframes float {
-#         0%, 100% { transform: translateY(0px); }
-#         50% { transform: translateY(-8px); }
-#     }
-#     .login-snow {
-#         position: fixed;
-#         top: 0;
-#         left: 0;
-#         width: 100%;
-#         height: 100%;
-#         pointer-events: none;
-#         z-index: -1;
-#     }
-#     .snowflake {
-#         position: absolute;
-#         color: rgba(26, 115, 232, 0.6);
-#         user-select: none;
-#         animation: snowfall linear infinite;
-#     }
-#     .login-container {
-#         background: linear-gradient(135deg, #f8f9fa 0%, #e3f2fd 100%);
-#         border-radius: 20px;
-#         padding: 2rem;
-#         box-shadow: 0 15px 35px rgba(26, 115, 232, 0.1);
-#         border: 2px solid #e3f2fd;
-#         margin: 2rem 0;
-#         position: relative;
-#         overflow: hidden;
-#     }
-#     .login-title {
-#         animation: glow 3s ease-in-out infinite;
-#         color: #1a73e8;
-#         text-align: center;
-#         margin-bottom: 1rem;
-#         position: relative;
-#     }
-#     .christmas-icon {
-#         animation: float 2s ease-in-out infinite;
-#         display: inline-block;
-#         font-size: 1.5rem;
-#         margin: 0 0.5rem;
-#     }
-#     </style>
-    
-#     <!-- Animated snowflakes -->
-#     <div class="login-snow">
-#         <div class="snowflake" style="left: 10%; animation-duration: 3s; animation-delay: 0s;">❄️</div>
-#         <div class="snowflake" style="left: 20%; animation-duration: 4s; animation-delay: 1s;">🎄</div>
-#         <div class="snowflake" style="left: 30%; animation-duration: 3.5s; animation-delay: 0.5s;">❄️</div>
-#         <div class="snowflake" style="left: 40%; animation-duration: 5s; animation-delay: 2s;">⭐</div>
-#         <div class="snowflake" style="left: 50%; animation-duration: 3.2s; animation-delay: 1.5s;">❄️</div>
-#         <div class="snowflake" style="left: 60%; animation-duration: 4.5s; animation-delay: 0.8s;">🎁</div>
-#         <div class="snowflake" style="left: 70%; animation-duration: 3.8s; animation-delay: 2.2s;">❄️</div>
-#         <div class="snowflake" style="left: 80%; animation-duration: 4.2s; animation-delay: 1.2s;">🌟</div>
-#         <div class="snowflake" style="left: 90%; animation-duration: 3.6s; animation-delay: 0.3s;">❄️</div>
-#     </div>
-#     """, unsafe_allow_html=True)
-    
-#     for _ in range(10):
-#         st.write("")
-   
-#     col1, col2, col3 = st.columns([1,2,1])
-#     with col2:
-        
-#         # Animated title with Christmas emojis
-#         st.markdown("""
-#         <h1 class="login-title">
-#             <span class="christmas-icon" style="animation-delay: 0s;"></span>
-#          Mindbot 
-#             <span class="christmas-icon" style="animation-delay: 1s;"></span>
-#         </h1>
-#         """, unsafe_allow_html=True)
-        
-#         # Input fields with Christmas emojis
-#         username = st.text_input("👤 Username", key="login_user", placeholder="Enter your username...")
-#         password = st.text_input("🔐 Password", type="password", key="login_pass", placeholder="Enter your password...")
-        
-#         # Enhanced login button
-#         if st.button(" **Login** ", key="login_btn", use_container_width=True, type="primary"):
-#             if username == CORRECT_USERNAME and password == CORRECT_PASSWORD:
-#                 st.session_state.login_state = "success"
-              
-#                 st.snow()
-#             else:
-#                 st.session_state.login_state = "fail"
-        
-#         # Christmas footer
-#         st.markdown("""
-#         <div style="
-#             text-align: center;
-#             margin-top: 2rem;
-#             padding: 1rem;
-#             background: linear-gradient(90deg, #e3f2fd, #f3e5f5);
-#             border-radius: 10px;
-#             border: 1px solid #e1f5fe;
-#         ">
-#             <p style="margin: 0; color: #1a73e8; font-weight: 500;">
-#                 Made with ❤️ by Mindware✨<br>
-#             </p>
-#         </div>
-#         """, unsafe_allow_html=True)
-        
-#         st.markdown('</div>', unsafe_allow_html=True)  # Close login container
+
 
 def show_fail():
     st.error("Oops! Wrong credentials... Nice try, but no entry! 😜")
@@ -1021,7 +908,9 @@ if team == "Finance":
         "📄 Claims Automation",
         "🟨 AWS Invoice Tool",
         "🟧 Oracle Invoice Tool",
-        "🟥 Lenovo Credit Note Tool",
+        "🟥 Lenovo CNTS Tool - KSA",
+        "🟪 Lenovo Credit Note Tool - UAE",
+        
     ]
 elif team == "Operations":
     TOOL_OPTIONS = [
@@ -1897,51 +1786,74 @@ elif tool == "IBM Quotation":
                 )
 
 
-elif tool == "🟥 Lenovo Credit Note Tool":
-    st.title("Lenovo Credit Note Tool")
-    st.write("Upload Lenovo credit note PDF(s) and download the CN upload Excel.")
+elif tool == "🟥 Lenovo Credit Note Tool - UAE":
+
+    st.title("Lenovo Credit Note Tool - UAE")
+    st.write("Upload Lenovo UAE credit note PDF(s) and download the matching Excel output.")
 
     uploaded_files = st.file_uploader(
-        "Choose Lenovo credit note PDF(s)",
+        "Choose Lenovo UAE credit note PDF(s)",
         type=["pdf"],
         accept_multiple_files=True,
-        key="lenovo_cn_upload"
+        key="lenovo_cn_uae_upload",
     )
 
     if uploaded_files:
         file_blobs = [(f.name, f.read()) for f in uploaded_files]
-
-        # ✅ Import the actual functions implemented in the extractor
-        from extractors.lenovo_cn import (
-            process_lenovo_credit_pdfs,   # <-- correct function name
-            prepare_excel_bytes,
-            build_output_filename,
-        )
-
-        # ✅ Use the correct function name
         df = process_lenovo_credit_pdfs(file_blobs)
 
         if not df.empty:
-            # Build Excel (bytes)
             excel_bytes = prepare_excel_bytes(df)
 
-            # (Optional) quick sanity check—remove once verified
-            # assert isinstance(excel_bytes, (bytes, bytearray)) and len(excel_bytes) > 0
-
             st.download_button(
-                label="⬇️ Download Lenovo Credit Note Excel",
+                label="Download Lenovo UAE Excel",
                 data=excel_bytes,
-                file_name=build_output_filename(),   # ✅ Streamlit expects file_name, not download_name
+                file_name=build_output_filename(),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="lenovo_cn_download_btn",        # good practice: stable unique key
+                key="lenovo_uae_download_btn",
             )
 
             with st.expander("Preview extracted rows"):
                 st.dataframe(df, use_container_width=True)
         else:
-            st.warning("No rows produced. Please check the PDF format.")
+            st.warning("No rows produced. Check the UAE PDF format.")
+
     else:
-        st.info("Please upload Lenovo credit note PDFs to begin.")
+        st.info("Upload Lenovo UAE credit note PDFs to begin.")
+
+elif tool == "🟥 Lenovo CNTS Tool - KSA":
+
+    st.title("Lenovo CNTS Tool - KSA")
+    st.write("Upload Lenovo KSA credit note PDF(s) and download the CNTS workbook output.")
+
+    uploaded_files = st.file_uploader(
+        "Choose Lenovo KSA credit note PDF(s)",
+        type=["pdf"],
+        accept_multiple_files=True,
+        key="lenovo_cnts_ksa_upload",
+    )
+
+    if uploaded_files:
+        file_blobs = [(f.name, f.read()) for f in uploaded_files]
+        header_df, item_df = process_lenovo_ksa_pdfs(file_blobs)
+
+        if not header_df.empty and not item_df.empty:
+            excel_bytes = prepare_ksa_excel_bytes(header_df, item_df)
+
+            st.download_button(
+                label="Download Lenovo KSA CNTS Excel",
+                data=excel_bytes,
+                file_name=build_ksa_output_filename(),
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="lenovo_ksa_download_btn",
+            )
+
+        else:
+            st.warning("No rows produced. Check the KSA PDF format.")
+
+    else:
+        st.info("Upload Lenovo KSA credit note PDFs to begin.")
+ 
 
 st.markdown("""
 <footer style='text-align:center; margin-top:3rem; color:#1a73e8; font-size:20px; font-weight:bold; font-family: Google Sans, sans-serif;'>
