@@ -329,7 +329,7 @@ def generate_dell_extended_services_quote(
         for c, val in enumerate(row, 1):
             cell = ws.cell(r, c)
             if c == 16:
-                cell.value = f"=ROUND({price_usd}*(1+S{r})*{AED_RATE},2)"
+                cell.value = f"=ROUND({price_usd}/(1-S{r})*{AED_RATE},2)"
                 cell.number_format = '"AED" #,##0.00'
             else:
                 cell.value = val
