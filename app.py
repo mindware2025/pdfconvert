@@ -15,8 +15,8 @@ import gspread
 from budg.ui_old_tool import render_old_tool as render_old_tool_extern
 from budg.ui_new_bud2026 import render_new_bud_tool as render_new_bud_tool_external
 
-from dell import generate_dell_quote
-from dell_extended_services import generate_dell_extended_services_quote
+from dell import build_dell_output_filename, generate_dell_quote
+from dell_extended_services import build_dell_extended_services_output_filename, generate_dell_extended_services_quote
 from extractors.barcodeper50 import barcode_tooll
 from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_multiple_aws_pdfs
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
@@ -2353,16 +2353,15 @@ elif tool == "🟥 Lenovo Credit Note Tool":
     else:
         st.info("Upload Lenovo credit note PDFs to begin.")
         
-elif tool == "💻 Dell Quotation":
-    st.set_page_config(page_title="Dell Quotation Tool", layout="wide")
 
+elif tool == "💻 Dell Quotation":
     st.title("💼 Dell Quotation Tool")
 
     uploaded = st.file_uploader(
-        "Upload Dell BOQ Excel or PDF",
-        type=["xlsx", "xlsm", "xls", "pdf"],
-        accept_multiple_files=False,
-    )
+    "Upload Dell BOQ Excel or PDF",
+    type=["xlsx", "xlsm", "xls", "pdf"],
+    accept_multiple_files=False,
+)
 
     margin_percent = st.number_input(
         "Default Margin %",
@@ -2394,16 +2393,18 @@ elif tool == "💻 Dell Quotation":
                             input_excel_bytes=input_bytes,
                             margin_percent=margin_percent,
                         )
-                        output_name = "Dell_Extended_Services_Quotation.xlsx"
+                        output_name = build_dell_extended_services_output_filename(
+                            input_excel_bytes=input_bytes,
+                        )
                     else:
                         out_bytes = generate_dell_quote(
                             input_excel_bytes=input_bytes,
                             margin_percent=margin_percent,
                             currency_code=currency_code,
                         )
-                        output_name = (
-                            f"Dell_Quotation_"
-                            f"{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+                        output_name = build_dell_output_filename(
+                            input_excel_bytes=input_bytes,
+                            currency_code=currency_code,
                         )
 
                 except Exception as e:
@@ -2411,16 +2412,14 @@ elif tool == "💻 Dell Quotation":
                     st.stop()
 
                 st.download_button(
-                    label="⬇️ Download quotation",
+                    "⬇️ Download quotation",
                     data=out_bytes,
                     file_name=output_name,
-                    mime=(
-                        "application/vnd.openxmlformats-"
-                        "officedocument.spreadsheetml.sheet"
-                    ),
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
 
                 st.success("Done ✅")
+
 elif tool == "Other":
     st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
     st.info("Currently, only the Google DNTS Extractor tool is available. More tools can be added based on your requirements.")

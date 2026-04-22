@@ -89,6 +89,61 @@ def _make_item_key(s: str, key_len: int = 70) -> str:
     return _normalize_text(s)[:key_len]
 
 
+def _sanitize_filename_part(value: str) -> str:
+    """Return a filesystem-safe filename segment."""
+    text = re.sub(r"\s+", " ", _cell_to_text(value)).strip()
+    if not text:
+        return ""
+    text = re.sub(r'[<>:"/\\|?*]', "", text)
+    text = text.rstrip(". ")
+    return text
+
+
+def build_dell_output_filename(input_excel_bytes: bytes, currency_code: str = "USD") -> str:
+    """Build the download filename for the generated Dell workbook."""
+    currency_code = (currency_code or "USD").upper()
+    if currency_code != "AED":
+        return f"Dell_Quotation_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+
+    quote_ref_text = ""
+    quote_meta: Dict[str, str] = {}
+
+    try:
+        is_pdf = input_excel_bytes.lstrip().startswith(b"%PDF")
+        if is_pdf:
+            _, quote_meta, _, quote_ref_text, _, _ = _extract_pdf_quote_data(input_excel_bytes)
+        else:
+            src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
+            src_ws = src_wb.active
+            quote_ref_text, _ = _extract_metadata_strict(src_ws)
+            if (
+                not quote_ref_text
+                or "$" in quote_ref_text
+                or not re.search(r"\d{6,}", quote_ref_text)
+            ):
+                fb_ref, _ = _extract_metadata_excel_fallback(src_ws)
+                if fb_ref:
+                    quote_ref_text = fb_ref
+            quote_meta = _extract_quote_metadata(src_ws)
+    except Exception:
+        quote_ref_text = ""
+        quote_meta = {}
+
+    party_name = (
+        quote_meta.get("end user", "")
+        or quote_meta.get("reseller", "")
+        or ""
+    )
+
+    parts = [
+        "Mindware costing",
+        _sanitize_filename_part(quote_ref_text),
+        _sanitize_filename_part(party_name),
+        datetime.now().strftime("%Y-%m-%d"),
+    ]
+    return "- ".join(parts) + ".xlsx"
+
+
 
 
 def _row_text(ws, r, c1=1, c2=None) -> str:
@@ -2092,7 +2147,7 @@ def generate_dell_quote(
         ws.cell(footer_row, 2).alignment = Alignment(wrap_text=True, vertical="top")
         footer_row += 1
 
-    ws.freeze_panes = f"A{header_row}"
+    ws.freeze_panes = None
 
     # ===== Sheet 2: Configuration =====
     ws2 = wb.create_sheet("Configuration")
@@ -2283,7 +2338,7 @@ def generate_dell_quote(
             r2 += 1
             
 
-    ws2.freeze_panes = "A2"
+    ws2.freeze_panes = None
     
 
     # Save to bytes

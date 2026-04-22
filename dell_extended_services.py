@@ -1,6 +1,7 @@
 from io import BytesIO
 from pathlib import Path
 from typing import Optional, List, Dict
+from datetime import datetime
 import os
 import openpyxl
 from openpyxl import Workbook
@@ -14,6 +15,15 @@ AED_RATE = 3.68
 
 def _text(v):
     return "" if v is None else str(v).strip()
+
+
+def _sanitize_filename_part(value: str) -> str:
+    text = " ".join(_text(value).split()).strip()
+    if not text:
+        return ""
+    for ch in '<>:"/\\|?*':
+        text = text.replace(ch, "")
+    return text.rstrip(". ")
 
 
 def _usd_to_aed(val):
@@ -124,6 +134,29 @@ def _extract_metadata(ws) -> Dict[str, str]:
             break
 
     return meta
+
+
+def build_dell_extended_services_output_filename(input_excel_bytes: bytes) -> str:
+    """Build the download filename for the extended-services workbook."""
+    quote_no = ""
+    end_user = ""
+
+    try:
+        src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
+        src_ws = src_wb.active
+        meta = _extract_metadata(src_ws)
+        quote_no = meta.get("quote_no", "")
+        end_user = meta.get("end_user", "")
+    except Exception:
+        pass
+
+    parts = [
+        "Mindware costing",
+        _sanitize_filename_part(quote_no),
+        _sanitize_filename_part(end_user),
+        datetime.now().strftime("%Y-%m-%d"),
+    ]
+    return "- ".join(parts) + ".xlsx"
 
 
 def _aed_footer_notes() -> List[str]:
@@ -329,7 +362,7 @@ def generate_dell_extended_services_quote(
         for c, val in enumerate(row, 1):
             cell = ws.cell(r, c)
             if c == 16:
-                cell.value = f"=ROUND({price_usd}/(1-S{r})*{AED_RATE},2)"
+                cell.value = f"=ROUND({price_usd}*(1+S{r})*{AED_RATE},2)"
                 cell.number_format = '"AED" #,##0.00'
             else:
                 cell.value = val
