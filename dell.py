@@ -2014,7 +2014,9 @@ def generate_dell_quote(
     ws[f"{desc_col}{header_row}"] = "Description"
     ws[f"{qty_col}{header_row}"] = "Qty"
     ws[f"{unit_price_col}{header_row}"] = "Unit Price"
-    ws[f"{total_price_col}{header_row}"] = "Total Price"
+    ws[f"{total_price_col}{header_row}"] = (
+        "Total Price (excluding vat)" if currency_code == "AED" else "Total Price"
+    )
     ws[f"{helper_unit_col}{header_row}"] = "Original Unit Price"
     ws[f"{helper_margin_col}{header_row}"] = "Margin"
     header_fill = PatternFill(start_color="9BBB59", end_color="9BBB59", fill_type="solid")
