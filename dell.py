@@ -2145,6 +2145,7 @@ def generate_dell_quote(
     # Footer notes
     if currency_code == "AED":
         notes = [
+            "All prices are exclusive of VAT and any other applicable taxes, which shall be charged in accordance with applicable laws and regulations.",
             "Ø  Payment terms will be as per our finance approval.",
             "Ø  These prices are till DDP Dubai.",
             "Ø  Hardware will take 4-12 weeks delivery time from the date of Booking.",
@@ -2153,6 +2154,7 @@ def generate_dell_quote(
             "Ø  PO Should be addressed to Mindware Technology Trading LLC and should be in AED.",
             "Ø  For all B2B orders complete end customer details should be mentioned on the PO.",
             "Ø  Orders once placed with Dell cannot be cancelled.",
+            
             "Ø  Kindly also ensure to review the proposal specifications from your end and ensure that they match the requirements exactly as per the End User.",
             "Ø  Partial deliveries shall be acceptable",
             "Ø  For UAE DDP orders, the PO should be addressed to Mindware Technology Trading LLC and for Ex-Jablal Ali orders, it should be addressed to Mindware FZ.",
