@@ -958,7 +958,7 @@ elif tool == "🚚 Freight Forwarder JV Tool":
                 st.download_button(
                     label="⬇️ Download Freight Forwarder JV file",
                     data=output_excel.getvalue(),
-                    file_name=f"JV_UPLOAD_TEMPLATE_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+                    file_name=f"Expeditors-{datetime.now().strftime('%Y-%m-%d')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
     
