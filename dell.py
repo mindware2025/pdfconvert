@@ -1922,10 +1922,27 @@ def generate_dell_quote(
     ws[f"{helper_margin_col}2"].alignment = Alignment(horizontal="center", vertical="center")
     
     
+    # Give long descriptions more horizontal space so they don't create very tall rows.
+    longest_description = max((len(_cell_to_text(desc_text)) for desc_text, _, _, _ in items), default=0)
+    description_width = min(max(44, int(longest_description * 0.55)), 68)
+
     # Column widths for visible quote columns, metadata, and helper pricing columns.
-    widths = {"A": 14, "B": 20, "C": 14, "D": 14, "E": 14, "F": 14, "G": 14, "H": 14, "I": 14, "J": 16, "K": 14}
+    widths = {"A": 10, "B": 18, "C": 14, "D": 14, "E": 14, "F": 14, "G": 16, "H": 26, "I": 14, "J": 16, "K": 14}
+    if include_part_number:
+        widths["B"] = 15
+        widths["C"] = description_width
+        widths["D"] = 8
+        widths["E"] = 15
+        widths["F"] = 17
+    else:
+        widths["B"] = description_width
+        widths["C"] = 8
+        widths["D"] = 15
+        widths["E"] = 17
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
+    ws.column_dimensions[helper_unit_col].hidden = True
+    ws.column_dimensions[helper_margin_col].hidden = True
 
     # Header rows height
     for rr in range(1, 3):
@@ -2068,8 +2085,8 @@ def generate_dell_quote(
         for addr in data_cells:
             ws[addr].fill = yellow
             ws[addr].border = border_thin
-            ws[addr].alignment = Alignment(horizontal="center", vertical="center")
-        ws[f"{desc_col}{row_ptr}"].alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+            ws[addr].alignment = Alignment(horizontal="center", vertical="top")
+        ws[f"{desc_col}{row_ptr}"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
     
         total_cells.append(f"{total_price_col}{row_ptr}")
         sr_no += 1
