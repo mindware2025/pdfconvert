@@ -2000,11 +2000,35 @@ def generate_dell_quote(
             ("Reseller:", quote_meta.get("reseller", "")),
         ]
 
+    meta_label_col = "F" if currency_code == "AED" else "G"
+    meta_value_col = "G" if currency_code == "AED" else "H"
+    meta_value_end_col = "H" if currency_code == "AED" else None
+
+    if currency_code == "AED":
+        ws.column_dimensions["F"].width = 14
+        ws.column_dimensions["G"].width = 24
+        ws.column_dimensions["H"].width = 24
+
     for idx, (label, value) in enumerate(meta_rows, start=5):
-        ws[f"G{idx}"] = label
-        ws[f"G{idx}"].font = Font(bold=True)
-        ws[f"H{idx}"] = value
-        ws[f"H{idx}"].alignment = Alignment(wrap_text=True, vertical="center")
+        label_addr = f"{meta_label_col}{idx}"
+        value_addr = f"{meta_value_col}{idx}"
+
+        ws[label_addr] = label
+        ws[label_addr].font = Font(bold=True)
+        ws[label_addr].alignment = Alignment(horizontal="left", vertical="top")
+
+        if meta_value_end_col:
+            merge_range = f"{meta_value_col}{idx}:{meta_value_end_col}{idx}"
+            if merge_range not in ws.merged_cells:
+                ws.merge_cells(merge_range)
+
+        ws[value_addr] = value
+        ws[value_addr].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+
+        if currency_code == "AED":
+            text_len = len(_cell_to_text(value))
+            estimated_lines = max(1, min(4, (text_len // 28) + 1))
+            ws.row_dimensions[idx].height = max(ws.row_dimensions[idx].height or 20, estimated_lines * 18)
 
     # ===== TABLE HEADER at row 8; data from row 9 =====
     header_row = 11 if has_aed_expiry else 10
