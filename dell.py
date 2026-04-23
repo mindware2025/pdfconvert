@@ -2145,7 +2145,7 @@ def generate_dell_quote(
     # Footer notes
     if currency_code == "AED":
         notes = [
-            "All prices are exclusive of VAT and any other applicable taxes, which shall be charged in accordance with applicable laws and regulations.",
+            "Ø All prices are exclusive of VAT and any other applicable taxes, which shall be charged in accordance with applicable laws and regulations.",
             "Ø  Payment terms will be as per our finance approval.",
             "Ø  These prices are till DDP Dubai.",
             "Ø  Hardware will take 4-12 weeks delivery time from the date of Booking.",
@@ -2174,6 +2174,8 @@ def generate_dell_quote(
             "Estimated Delivery Time from the date of booking:",
             "",
             "These prices do not include installation of any kind",
+            "All prices are exclusive of VAT and any other applicable taxes, which shall be charged in accordance with applicable laws and regulations.",
+           
             "Change in Qty or partial shipment is not acceptable",
             "For all B2B orders complete end customer details should be mentioned on the PO",
             f"PO Should be addressed to Mindware FZ LLC and should be in {currency_code}",
