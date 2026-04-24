@@ -273,14 +273,10 @@ def generate_dell_extended_services_quote(
     ws["C5"] = "Quote No:"
     ws["D5"] = meta["quote_no"]
 
-    ws["C6"] = "BDM:"
-    ws["D6"] = "Omar Aboelawad"
 
     ws["C7"] = "Date:"
     ws["D7"] = meta["date"]
 
-    ws["E6"] = "E-mail:"
-    ws["F6"] = "o.aboelawad@mindware.net"
 
     ws["C8"] = "Quote Validity:"
     ws["D8"] = "30 days"
@@ -362,7 +358,7 @@ def generate_dell_extended_services_quote(
         for c, val in enumerate(row, 1):
             cell = ws.cell(r, c)
             if c == 16:
-                cell.value = f"=ROUND({price_usd}*(1+S{r})*{AED_RATE},2)"
+                cell.value = f"=ROUND({price_usd}*(1-S{r})*{AED_RATE},2)"
                 cell.number_format = '"AED" #,##0.00'
             else:
                 cell.value = val
