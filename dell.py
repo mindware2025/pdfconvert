@@ -1941,8 +1941,8 @@ def generate_dell_quote(
         widths["E"] = 17
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
-    ws.column_dimensions[helper_unit_col].hidden = True
-    ws.column_dimensions[helper_margin_col].hidden = True
+    ws.column_dimensions[helper_unit_col].hidden = False
+    ws.column_dimensions[helper_margin_col].hidden = False
 
     # Header rows height
     for rr in range(1, 3):
