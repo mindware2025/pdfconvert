@@ -1717,6 +1717,10 @@ elif tool == "🟧 Oracle Invoice Tool":
                 data=excel_bytes,
                 file_name="oracle_invoice_data.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            on_click=lambda: (
+                            update_usage("Oracle Automation ", team)
+                            
+                        ),
             )
 
             with st.expander("Preview extracted data"):
@@ -1811,6 +1815,10 @@ elif tool == "🟥 Lenovo Credit Note Tool - UAE":
                 file_name=build_output_filename(),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="lenovo_uae_download_btn",
+                            on_click=lambda: (
+                            update_usage("Lenovo Credit Note Tool - UAE", team)
+                            
+                        ),
             )
 
             with st.expander("Preview extracted rows"):
@@ -1845,6 +1853,7 @@ elif tool == "🟥 Lenovo CNTS Tool - KSA":
                 data=excel_bytes,
                 file_name=build_ksa_output_filename(),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                on_click=lambda: update_usage("Lenovo Credit Note Tool - KSA", team),
                 key="lenovo_ksa_download_btn",
             )
 
