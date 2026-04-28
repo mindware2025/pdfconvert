@@ -25,7 +25,12 @@ from extractors.insurance2  import process_grouped_customer_files
 
 from extractors.oracle import prepare_excel_bytes, process_oracle_pdfs_cached
 from extractors.lenovo_cn import build_ksa_output_filename, build_output_filename, prepare_ksa_excel_bytes, process_lenovo_credit_pdfs, process_lenovo_ksa_pdfs
-from extractors.freight_forwarder_processor import process_freight_forwarder_pdfs, JVConfig
+
+from extractors.freight_forwarder_processor import (
+    JVConfig,
+    create_excel_file as create_freight_forwarder_excel_file,
+    process_freight_forwarder_pdfs,
+)
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 from ibm import extract_ibm_data_from_pdf, create_styled_excel, create_styled_excel_template2, correct_descriptions, extract_last_page_text
@@ -913,7 +918,7 @@ if team == "Finance":
         "🟧 Oracle Invoice Tool",
         "🟥 Lenovo CNTS Tool - KSA",
         "🟪 Lenovo Credit Note Tool - UAE",
-        "🚚 Freight Forwarder JV Tool",s
+        "🚚 Freight Forwarder JV Tool",
         
     ]
 elif team == "Operations":
