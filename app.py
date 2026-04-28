@@ -25,6 +25,7 @@ from extractors.insurance2  import process_grouped_customer_files
 
 from extractors.oracle import prepare_excel_bytes, process_oracle_pdfs_cached
 from extractors.lenovo_cn import build_ksa_output_filename, build_output_filename, prepare_ksa_excel_bytes, process_lenovo_credit_pdfs, process_lenovo_ksa_pdfs
+from extractors.freight_forwarder_processor import process_freight_forwarder_pdfs, JVConfig
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 from ibm import extract_ibm_data_from_pdf, create_styled_excel, create_styled_excel_template2, correct_descriptions, extract_last_page_text
@@ -893,6 +894,8 @@ def extractor_workflow(
             st.warning("No table data found in the uploaded PDF.")
     else:
         st.info(f"Please upload a {extractor_name} PDF file to get started.")
+        
+
 # ----------- Tool Selector UI -----------
 st.markdown("""
     <div style='text-align:center; margin-top:2rem; margin-bottom:1.5rem;'>
@@ -910,6 +913,7 @@ if team == "Finance":
         "🟧 Oracle Invoice Tool",
         "🟥 Lenovo CNTS Tool - KSA",
         "🟪 Lenovo Credit Note Tool - UAE",
+        "🚚 Freight Forwarder JV Tool",s
         
     ]
 elif team == "Operations":
@@ -1030,6 +1034,32 @@ elif tool == "📄 Claims Automation":
             )
         except Exception as e:
             st.error(f"Error: {e}")
+
+elif tool == "🚚 Freight Forwarder JV Tool":
+    st.title("Freight Forwarder JV Tool")
+    st.write("Upload freight forwarder PDF invoices and download the JV upload file.")
+
+    uploaded_files = st.file_uploader(
+        "Choose Freight Forwarder PDF(s)",
+        type=["pdf"],
+        accept_multiple_files=True,
+        key="freight_forwarder_upload",
+    )
+
+    if uploaded_files:
+            output_df, _, errors = process_freight_forwarder_pdfs(uploaded_files, JVConfig())
+
+            if errors:
+                st.error("\n".join(errors))
+
+            if not output_df.empty:
+                output_excel = create_freight_forwarder_excel_file(output_df)
+                st.download_button(
+                    label="⬇️ Download Freight Forwarder JV file",
+                    data=output_excel.getvalue(),
+                    file_name=f"Expeditors-{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
 elif tool == "🧾 Cloud Invoice Tool":
     st.title("Cloud Invoice Tool")
     st.markdown(
