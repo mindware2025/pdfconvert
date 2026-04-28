@@ -1063,6 +1063,9 @@ elif tool == "🚚 Freight Forwarder JV Tool":
                     label="⬇️ Download Freight Forwarder JV file",
                     data=output_excel.getvalue(),
                     file_name=f"Expeditors-{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+                    on_click=lambda: (
+                            update_usage("freight_forwarder_Expeditor", team)
+                        ),
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
 elif tool == "🧾 Cloud Invoice Tool":
