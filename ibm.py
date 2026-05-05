@@ -909,7 +909,8 @@ def create_styled_excel(
     logo_path: str,
     output: BytesIO,
     compliance_text: str,
-    ibm_terms_text: str
+    ibm_terms_text: str,
+    country: str = "UAE"
 ):
     """
     Template 1 ONLY Excel generation
@@ -950,16 +951,39 @@ def create_styled_excel(
     ws.column_dimensions[get_column_letter(12)].width = 18  # L (Partner Price in AED)
     # Left block
     left_labels = ["Date:", "From:", "Email:", "Contact:", "", "Company:", "Attn:", "Email:"]
-    left_values = [
-        datetime.today().strftime('%d/%m/%Y'),
-        "",
-        "",
-        "",
-        "",
-        header_info.get('Reseller Name', 'empty'),
-        "empty",
-        "empty"
-    ]
+    if country == "Lebanon":
+        left_values = [
+            datetime.today().strftime('%d/%m/%Y'),
+            "Clara Tannoury",
+            "C.Tannoury@mindware.net",
+            "71/102910",
+            "",
+            header_info.get('Reseller Name', 'empty'),
+            "empty",
+            "empty"
+        ]
+    elif country == "Qatar":
+        left_values = [
+            datetime.today().strftime('%d/%m/%Y'),
+            "Eliana Youssef",
+            "e.youssef@mindware.net",
+            "70/519841",
+            "",
+            header_info.get('Reseller Name', 'empty'),
+            "empty",
+            "empty"
+        ]
+    else:
+        left_values = [
+            datetime.today().strftime('%d/%m/%Y'),
+            "",
+            "",
+            "",
+            "",
+            header_info.get('Reseller Name', 'empty'),
+            "empty",
+            "empty"
+        ]
     row_positions = [5, 6, 7, 8, 9, 10, 11, 12]  # Move up by 1 row
     for row, label, value in zip(row_positions, left_labels, left_values):
         if label:
@@ -1330,13 +1354,13 @@ def create_styled_excel_template2(
     """
     Template 2 Excel generation - Clean 8-column layout ONLY
     data rows: [sku, desc, qty, duration, start_date, end_date, bid_unit_aed, bid_total_aed, partner_price_aed]
-    country: UAE -> AED (3.6725); Qatar -> USD (1.0, same as Template 1); KSA -> SAR (3.75)
+    country: UAE -> AED (3.6725); Qatar/Lebanon -> USD (1.0, same as Template 1); KSA -> SAR (3.75)
     """
     c = (country or "").strip().upper()
     if c == "KSA":
         currency_label = "SAR"
         usd_to_local = 3.75
-    elif c == "QATAR":
+    elif c in {"QATAR", "LEBANON"}:
         currency_label = "USD"
         usd_to_local = 1.0
     else:
@@ -1377,16 +1401,39 @@ def create_styled_excel_template2(
     
     # Left block (EXACT COPY FROM TEMPLATE 1)
     left_labels = ["Date:", "From:", "Email:", "Contact:", "", "Company:", "Attn:", "Email:"]
-    left_values = [
-        datetime.today().strftime('%d/%m/%Y'),
-        "",
-        "",
-        "",
-        "",
-        header_info.get('Reseller Name', 'empty'),
-        "empty",
-        "empty"
-    ]
+    if country == "Lebanon":
+        left_values = [
+            datetime.today().strftime('%d/%m/%Y'),
+            "Clara Tannoury",
+            "C.Tannoury@mindware.net",
+            "71/102910",
+            "",
+            header_info.get('Reseller Name', 'empty'),
+            "empty",
+            "empty"
+        ]
+    elif country == "Qatar":
+        left_values = [
+            datetime.today().strftime('%d/%m/%Y'),
+            "Eliana Youssef",
+            "e.youssef@mindware.net",
+            "70/519841",
+            "",
+            header_info.get('Reseller Name', 'empty'),
+            "empty",
+            "empty"
+        ]
+    else:
+        left_values = [
+            datetime.today().strftime('%d/%m/%Y'),
+            "",
+            "",
+            "",
+            "",
+            header_info.get('Reseller Name', 'empty'),
+            "empty",
+            "empty"
+        ]
     row_positions = [5, 6, 7, 8, 9, 10, 11, 12]  # Move up by 1 row
     for row, label, value in zip(row_positions, left_labels, left_values):
         if label:

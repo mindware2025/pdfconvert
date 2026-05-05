@@ -42,13 +42,13 @@ debug_info = []
 # Constants: conversion rate and currency by country
 USD_TO_AED = 3.6725  # UAE
 USD_TO_SAR = 3.75    # KSA
-# Qatar Template 2: keep USD (rate 1), same as Template 1 Qatar
+# Qatar/Lebanon Template 2: keep USD (rate 1), same as Template 1 Qatar
 
 def _usd_to_local_rate(country: str):
     c = (country or "").strip().upper()
     if c == "KSA":
         return USD_TO_SAR
-    if c == "QATAR":
+    if c in {"QATAR", "LEBANON"}:
         return 1.0  # no conversion, keep USD
     return USD_TO_AED
 
@@ -132,7 +132,7 @@ def parse_quantity(value: str):
 def extract_ibm_template2_from_pdf(file_like, country: str = "UAE") -> tuple[list, dict]:
     """
     Extract data from IBM Template 2 (Software as a Service / Subscription format)
-    country: UAE, Qatar -> AED (3.6725); KSA -> SAR (3.75)
+    country: UAE -> AED (3.6725); Qatar/Lebanon -> USD (1.0); KSA -> SAR (3.75)
     Returns: (extracted_data, header_info)
     """
     clear_debug()
