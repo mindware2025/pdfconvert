@@ -141,7 +141,7 @@ def create_styled_excel_v2(
     ws.column_dimensions[get_column_letter(12)].width = 18
 
     left_labels = ["Date:", "From:", "Email:", "Contact:", "", "Company:", "Attn:", "Email:"]
-    if country == "Lebanon":
+    if country == "Levant":
         left_values = [
             datetime.today().strftime('%d/%m/%Y'),
             "Clara Tannoury",
@@ -205,7 +205,7 @@ def create_styled_excel_v2(
 
     # --- Table Headers ---
     curr = _currency_label(country)
-    if country in {"Qatar", "Lebanon"}:
+    if country in {"Qatar", "Levant"}:
         headers = [
                    "Sl", "SKU", "Product Description", "Quantity", "Start Date", "End Date",
                     "MEP Unit Price in USD", "Extended MEP Price USD", "Unit Partner Price USD", "Total Partner Price in USD"
@@ -234,7 +234,7 @@ def create_styled_excel_v2(
     # --- Data Rows ---
     for idx, row in enumerate(data, start=1):
         excel_row = start_row + idx - 1
-        if country in {"Qatar", "Lebanon"}:
+        if country in {"Qatar", "Levant"}:
             # row: [SKU, Product Description, Quantity, Start Date, End Date, Unit Price USD, Cost USD, Partner Discount, Partner Price USD]
             ws.cell(row=excel_row, column=2, value=idx).font = Font(size=11, color="1F497D")
             ws.cell(row=excel_row, column=2).alignment = Alignment(horizontal="center", vertical="center")
@@ -311,7 +311,7 @@ def create_styled_excel_v2(
             ws.cell(row=excel_row, column=4).alignment = Alignment(wrap_text=True, horizontal="left", vertical="center")
 
     # --- Summary sections ---
-    if country in {"Qatar", "Lebanon"}:
+    if country in {"Qatar", "Levant"}:
         # Qatar summary (after all rows)
         if data:
             data_start_row = start_row

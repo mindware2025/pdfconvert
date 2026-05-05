@@ -120,7 +120,7 @@ def process_ibm_combo(pdf_file, excel_file=None, master_csv=None, country="UAE")
                     logging.error(f"Date validation failed: {e}")
                     result['date_validation_msg'] = f"Failed to perform date validation: {e}"
 
-            if country in {"Qatar", "Lebanon"}:
+            if country in {"Qatar", "Levant"}:
                 columns = [
                     "SKU", "Product Description", "Quantity", "Start Date", "End Date",
                     "MEP Unit Price in USD", "Extended MEP Price USD", "Unit Partner Price USD", "Total Partner Price in USD"

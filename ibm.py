@@ -951,7 +951,7 @@ def create_styled_excel(
     ws.column_dimensions[get_column_letter(12)].width = 18  # L (Partner Price in AED)
     # Left block
     left_labels = ["Date:", "From:", "Email:", "Contact:", "", "Company:", "Attn:", "Email:"]
-    if country == "Lebanon":
+    if country == "Levant":
         left_values = [
             datetime.today().strftime('%d/%m/%Y'),
             "Clara Tannoury",
@@ -1354,13 +1354,13 @@ def create_styled_excel_template2(
     """
     Template 2 Excel generation - Clean 8-column layout ONLY
     data rows: [sku, desc, qty, duration, start_date, end_date, bid_unit_aed, bid_total_aed, partner_price_aed]
-    country: UAE -> AED (3.6725); Qatar/Lebanon -> USD (1.0, same as Template 1); KSA -> SAR (3.75)
+    country: UAE -> AED (3.6725); Qatar/Levant -> USD (1.0, same as Template 1); KSA -> SAR (3.75)
     """
     c = (country or "").strip().upper()
     if c == "KSA":
         currency_label = "SAR"
         usd_to_local = 3.75
-    elif c in {"QATAR", "LEBANON"}:
+    elif c in {"QATAR", "LEVANT"}:
         currency_label = "USD"
         usd_to_local = 1.0
     else:
@@ -1401,7 +1401,7 @@ def create_styled_excel_template2(
     
     # Left block (EXACT COPY FROM TEMPLATE 1)
     left_labels = ["Date:", "From:", "Email:", "Contact:", "", "Company:", "Attn:", "Email:"]
-    if country == "Lebanon":
+    if country == "Levant":
         left_values = [
             datetime.today().strftime('%d/%m/%Y'),
             "Clara Tannoury",
