@@ -364,6 +364,7 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
         "Bid Number": "",
         "PA Agreement Number": "",
         "PA Site Number": "",
+        "IBM Opportunity Number": "",
         "Select Territory": "",
         "Government Entity (GOE)": "",
        
@@ -390,6 +391,12 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
         if "PA Site Number:" in line:
             header_info["PA Site Number"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
             header_fields_found += 1
+        if "IBM Opportunity Number" in line:
+            opp_match = re.search(r'IBM Opportunity Number:\s*(.+)$', line, re.I)
+            if opp_match and opp_match.group(1).strip():
+                header_info["IBM Opportunity Number"] = opp_match.group(1).strip()
+            elif i + 1 < len(lines):
+                header_info["IBM Opportunity Number"] = lines[i + 1].strip()
         if "Select Territory:" in line:
             header_info["Select Territory"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
             header_fields_found += 1
@@ -452,6 +459,12 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
             if "PA Site Number:" in line:
                 header_info["PA Site Number"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
                 header_fields_found += 1
+            if "IBM Opportunity Number" in line:
+                opp_match = re.search(r'IBM Opportunity Number:\s*(.+)$', line, re.I)
+                if opp_match and opp_match.group(1).strip():
+                    header_info["IBM Opportunity Number"] = opp_match.group(1).strip()
+                elif i + 1 < len(lines):
+                    header_info["IBM Opportunity Number"] = lines[i + 1].strip()
             if "Select Territory:" in line:
                 header_info["Select Territory"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
                 header_fields_found += 1
@@ -1445,8 +1458,14 @@ def create_styled_excel_template2(
     
    
     
-    # Get IBM Opportunity Number from header, or extract from first data row description
-   
+    # Show IBM Opportunity Number next to PA Site Number when available.
+    pa_site_display = header_info.get('PA Site Number', '')
+    ibm_opportunity_number = header_info.get('IBM Opportunity Number', '').strip()
+    if ibm_opportunity_number:
+        if pa_site_display:
+            pa_site_display = f"{pa_site_display} | IBM Opportunity Number: {ibm_opportunity_number}"
+        else:
+            pa_site_display = f"IBM Opportunity Number: {ibm_opportunity_number}"
     
     # Right block (EXACT COPY FROM TEMPLATE 1)
     right_labels = [
@@ -1457,7 +1476,7 @@ def create_styled_excel_template2(
         header_info.get('Customer Name', ''),
         header_info.get('Bid Number', ''),
         header_info.get('PA Agreement Number', ''),
-        header_info.get('PA Site Number', ''),
+        pa_site_display,
         "",
         header_info.get('Select Territory', ''),
         header_info.get('Government Entity (GOE)', ''),
