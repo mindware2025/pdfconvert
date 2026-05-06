@@ -300,6 +300,9 @@ def generate_dell_extended_services_quote(
     ws["D5"] = meta["quote_no"]
     ws["C7"] = "Date:"
     ws["D7"] = meta["date"]
+    ws["C6"] = "Margin:"
+    ws["D6"] = (margin_percent or 0.0) / 100.0
+    ws["D6"].number_format = '0.00%'
     ws["C8"] = "Quote Validity:"
     ws["D8"] = "30 days"
     ws["E5"] = "End User:"
@@ -314,16 +317,16 @@ def generate_dell_extended_services_quote(
     header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
     table_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
 
-    for cell in ("C5", "C7", "C8", "E5"):
+    for cell in ("C5", "C6", "C7", "C8", "E5"):
         ws[cell].font = Font(bold=True, color="1F497D")
         ws[cell].alignment = Alignment(horizontal="left", vertical="center")
         ws[cell].border = border_thin
         ws[cell].fill = header_fill
 
-    for cell in ("D5", "D7", "D8", "F5"):
+    for cell in ("D5", "D6", "D7", "D8", "F5"):
         ws[cell].alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
         ws[cell].border = border_thin
-    for row in (5, 7, 8):
+    for row in (5, 6, 7, 8):
         for col in (3, 4):
             ws.cell(row=row, column=col).border = border_thin
         if row == 5:
