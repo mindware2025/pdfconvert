@@ -300,9 +300,6 @@ def generate_dell_extended_services_quote(
     ws["D5"] = meta["quote_no"]
     ws["C7"] = "Date:"
     ws["D7"] = meta["date"]
-    ws["C6"] = "Margin:"
-    ws["D6"] = (margin_percent or 0.0) / 100.0
-    ws["D6"].number_format = '0.00%'
     ws["C8"] = "Quote Validity:"
     ws["D8"] = "30 days"
     ws["E5"] = "End User:"
@@ -317,16 +314,16 @@ def generate_dell_extended_services_quote(
     header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
     table_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
 
-    for cell in ("C5", "C6", "C7", "C8", "E5"):
+    for cell in ("C5", "C7", "C8", "E5"):
         ws[cell].font = Font(bold=True, color="1F497D")
         ws[cell].alignment = Alignment(horizontal="left", vertical="center")
         ws[cell].border = border_thin
         ws[cell].fill = header_fill
 
-    for cell in ("D5", "D6", "D7", "D8", "F5"):
+    for cell in ("D5", "D7", "D8", "F5"):
         ws[cell].alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
         ws[cell].border = border_thin
-    for row in (5, 6, 7, 8):
+    for row in (5, 7, 8):
         for col in (3, 4):
             ws.cell(row=row, column=col).border = border_thin
         if row == 5:
@@ -346,6 +343,7 @@ def generate_dell_extended_services_quote(
         "Qty",
         "Unit Price",
         "Total Price (excluding vat)",
+        "Margin",
     ]
 
     start = 11
@@ -370,12 +368,14 @@ def generate_dell_extended_services_quote(
         ws[f"B{r}"] = services_sku
         ws[f"C{r}"] = description
         ws[f"D{r}"] = qty_value
-        ws[f"E{r}"] = f'=ROUND(({price_usd}*{AED_RATE})/(1-{margin_percent}/100),2)'
+        ws[f"G{r}"] = (margin_percent or 0.0) / 100.0
+        ws[f"G{r}"].number_format = '0.00%'
+        ws[f"E{r}"] = f'=ROUND(({price_usd}*{AED_RATE})/(1-G{r}),2)'
         ws[f"E{r}"].number_format = CURRENCY_FMT_AED
         ws[f"F{r}"] = f"=ROUND(E{r}*D{r},2)"
         ws[f"F{r}"].number_format = CURRENCY_FMT_AED
 
-        for col in ("A", "B", "C", "D", "E", "F"):
+        for col in ("A", "B", "C", "D", "E", "F", "G"):
             ws[f"{col}{r}"].border = border_thin
             ws[f"{col}{r}"].fill = table_fill
             ws[f"{col}{r}"].alignment = Alignment(horizontal="center", vertical="top")
