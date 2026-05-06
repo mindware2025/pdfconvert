@@ -9,6 +9,7 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.drawing.image import Image as XLImage
 
 AED_RATE = 3.68
+CURRENCY_FMT_AED = '"AED" #,##0.00'
 
 
 # ---------------- Helpers ----------------
@@ -24,6 +25,13 @@ def _sanitize_filename_part(value: str) -> str:
     for ch in '<>:"/\\|?*':
         text = text.replace(ch, "")
     return text.rstrip(". ")
+
+
+def _clean_party_name(value: str) -> str:
+    text = " ".join(_text(value).split()).strip()
+    if not text:
+        return ""
+    return text.split("*", 1)[0].strip()
 
 
 def _usd_to_aed(val):
@@ -267,22 +275,35 @@ def generate_dell_extended_services_quote(
     ws = wb.active
     ws.title = "Quote"
     ws.sheet_view.showGridLines = False
-    _add_logo(ws, None)
+    _add_logo(ws, logo_bytes)
+
+    widths = {
+        "A": 10,
+        "B": 18,
+        "C": 68,
+        "D": 10,
+        "E": 16,
+        "F": 20,
+        "G": 16,
+    }
+    for col, width in widths.items():
+        ws.column_dimensions[col].width = width
+
+    for rr in range(1, 3):
+        ws.row_dimensions[rr].height = 28
+    ws.row_dimensions[3].height = 12
+    for rr in range(5, 12):
+        ws.row_dimensions[rr].height = 20
 
     # ----- Header -----
     ws["C5"] = "Quote No:"
     ws["D5"] = meta["quote_no"]
-
-
     ws["C7"] = "Date:"
     ws["D7"] = meta["date"]
-
-
     ws["C8"] = "Quote Validity:"
     ws["D8"] = "30 days"
-
-    ws["E7"] = "End User:"
-    ws["F7"] = meta["end_user"]
+    ws["E5"] = "End User:"
+    ws["F5"] = _clean_party_name(meta["end_user"])
 
     border_thin = Border(
         left=Side(style="thin", color="000000"),
@@ -290,59 +311,41 @@ def generate_dell_extended_services_quote(
         top=Side(style="thin", color="000000"),
         bottom=Side(style="thin", color="000000"),
     )
-
-    for cell in ("C5", "C6", "C7", "C8", "D5", "D6", "D7", "D8", "E6", "F6", "E7", "F7"):
-        ws[cell].font = Font(bold=True)
-        ws[cell].border = border_thin
-
-    for row in (5, 6, 7, 8):
-        for col in (3, 4, 5, 6):
-            cell = ws.cell(row=row, column=col)
-            cell.border = border_thin
-
-    ws.merge_cells("B11:M11")
-    ws.merge_cells("B12:M12")
-    ws.merge_cells("N12:R12")
-    ws["B11"] = "Dell Extended Services Details"
-    ws["B12"] = "Current Equipment Information"
-    ws["N12"] = "Extended Service Information"
     header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
-    border_thin = Border(
-        left=Side(style="thin", color="000000"),
-        right=Side(style="thin", color="000000"),
-        top=Side(style="thin", color="000000"),
-        bottom=Side(style="thin", color="000000"),
-    )
+    table_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
 
-    for r, cols in [(11, range(2, 14)), (12, range(2, 14)), (12, range(14, 19))]:
-        for c in cols:
-            cell = ws.cell(row=r, column=c)
-            cell.fill = header_fill
-            cell.border = border_thin
-            cell.alignment = Alignment(horizontal="center", vertical="center")
+    for cell in ("C5", "C7", "C8", "E5"):
+        ws[cell].font = Font(bold=True, color="1F497D")
+        ws[cell].alignment = Alignment(horizontal="left", vertical="center")
+        ws[cell].border = border_thin
+        ws[cell].fill = header_fill
 
-    for cell in ("B11", "B12", "N12"):
-        ws[cell].font = Font(bold=True)
+    for cell in ("D5", "D7", "D8", "F5"):
+        ws[cell].alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        ws[cell].border = border_thin
+    for row in (5, 7, 8):
+        for col in (3, 4):
+            ws.cell(row=row, column=col).border = border_thin
+        if row == 5:
+            for col in (5, 6):
+                ws.cell(row=row, column=col).border = border_thin
+
+    ws["C10"] = "Quote Details"
+    ws["C10"].font = Font(bold=True, size=12, color="1F497D")
+    ws["C10"].alignment = Alignment(horizontal="center", vertical="center")
+    ws.merge_cells("C10:F10")
 
     # ----- Table -----
     headers = [
-        "Asset", "Agreement ID", "Model", "Install At/Ship To",
-        "Install At/Ship To City", "Install At/Ship To State",
-        "Install At/Ship To Country", "LOB or Family", "Ship Date",
-        "Service Contract Expiration", "Service Contract Description",
-        "Services SKU", "New Contract Start Date", "New Contract End Date",
-        "Quantity", "Price After Discount (AED)", "EOSS Date", "Product Type",
-        "Margin"
+        "Sr. No.",
+        "Part Number",
+        "Description",
+        "Qty",
+        "Unit Price",
+        "Total Price (excluding vat)",
     ]
 
-    start = 13
-    header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
-    border_thin = Border(
-        left=Side(style="thin", color="000000"),
-        right=Side(style="thin", color="000000"),
-        top=Side(style="thin", color="000000"),
-        bottom=Side(style="thin", color="000000"),
-    )
+    start = 11
 
     for c, h in enumerate(headers, 1):
         cell = ws.cell(start, c)
@@ -353,31 +356,48 @@ def generate_dell_extended_services_quote(
         cell.border = border_thin
 
     r = start + 1
-    for row in rows:
-        price_usd = row[15]
-        for c, val in enumerate(row, 1):
-            cell = ws.cell(r, c)
-            if c == 16:
-                cell.value = f"=ROUND({price_usd}/(1-S{r})*{AED_RATE},2)"
-                cell.number_format = '"AED" #,##0.00'
-            else:
-                cell.value = val
-            cell.border = border_thin
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-        margin_cell = ws.cell(r, 19)
-        margin_cell.value = margin_percent / 100.0
-        margin_cell.number_format = '0.00%'
-        margin_cell.border = border_thin
-        margin_cell.alignment = Alignment(horizontal="center", vertical="center")
+    total_cells = []
+    for idx, row in enumerate(rows, start=1):
+        services_sku = row[11]
+        description = row[10]
+        qty_value = _to_number(row[14])
+        price_usd = _to_number(row[15])
+
+        ws[f"A{r}"] = idx
+        ws[f"B{r}"] = services_sku
+        ws[f"C{r}"] = description
+        ws[f"D{r}"] = qty_value
+        ws[f"E{r}"] = f'=ROUND(({price_usd}*{AED_RATE})/(1-{margin_percent}/100),2)'
+        ws[f"E{r}"].number_format = CURRENCY_FMT_AED
+        ws[f"F{r}"] = f"=ROUND(E{r}*D{r},2)"
+        ws[f"F{r}"].number_format = CURRENCY_FMT_AED
+
+        for col in ("A", "B", "C", "D", "E", "F"):
+            ws[f"{col}{r}"].border = border_thin
+            ws[f"{col}{r}"].fill = table_fill
+            ws[f"{col}{r}"].alignment = Alignment(horizontal="center", vertical="top")
+        ws[f"C{r}"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+        total_cells.append(f"F{r}")
         r += 1
 
+    ws.merge_cells(start_row=r, start_column=3, end_row=r, end_column=5)
+    ws[f"C{r}"] = "Total price"
+    ws[f"C{r}"].font = Font(bold=True, color="1F497D")
+    ws[f"C{r}"].alignment = Alignment(horizontal="right", vertical="center")
+    ws[f"F{r}"] = f"=SUM({','.join(total_cells)})" if total_cells else 0
+    ws[f"F{r}"].number_format = CURRENCY_FMT_AED
+    ws[f"F{r}"].font = Font(bold=True, color="1F497D")
+    ws[f"F{r}"].alignment = Alignment(horizontal="center", vertical="center")
+    for col in ("C", "D", "E", "F"):
+        ws[f"{col}{r}"].border = border_thin
+
     notes_title_row = r + 2
-    ws.merge_cells(start_row=notes_title_row, start_column=2, end_row=notes_title_row, end_column=18)
+    ws.merge_cells(start_row=notes_title_row, start_column=2, end_row=notes_title_row, end_column=6)
     ws.cell(notes_title_row, 2).value = "Terms and Conditions"
     ws.cell(notes_title_row, 2).font = Font(bold=True)
 
     notes_body_row = notes_title_row + 1
-    ws.merge_cells(start_row=notes_body_row, start_column=2, end_row=notes_body_row, end_column=18)
+    ws.merge_cells(start_row=notes_body_row, start_column=2, end_row=notes_body_row, end_column=6)
     body_cell = ws.cell(notes_body_row, 2)
     body_cell.value = "\n".join(footer_notes)
     body_cell.alignment = Alignment(wrap_text=True, vertical="top")
