@@ -1800,6 +1800,41 @@ def generate_dell_quote(
             logger.info("Detected grouped config Excel template")
             quote_ref_text, date_text = _extract_grouped_template_metadata(src_ws)
             items, grouped_config_rows = _extract_grouped_template_items_and_config(src_ws)
+            if not items:
+                logger.info("Grouped template parser returned no items; falling back to compact/generic extraction")
+                compact_items, compact_config_rows = _extract_compact_quote_items_and_config(src_ws)
+                if compact_items:
+                    items = compact_items
+                    grouped_config_rows = compact_config_rows
+                    logger.info("Fallback compact extraction recovered %d items", len(items))
+                else:
+                    first_data_row, desc_col, qty_col, unit_col = _find_header_row_strict_or_detect(src_ws)
+                    logger.info(
+                        "Fallback generic extraction starting at row %d (desc_col=%d, qty_col=%d, unit_col=%d)",
+                        first_data_row,
+                        desc_col,
+                        qty_col,
+                        unit_col,
+                    )
+                    items = []
+                    r = first_data_row
+                    while r <= src_ws.max_row:
+                        desc = src_ws.cell(r, desc_col).value
+                        qty = src_ws.cell(r, qty_col).value
+                        unit = src_ws.cell(r, unit_col).value
+
+                        desc_text = _cell_to_text(desc)
+                        if not desc_text or desc_text.lower().startswith("total"):
+                            break
+                        try:
+                            qty_val = int(qty) if qty not in (None, "") else 0
+                        except Exception:
+                            qty_val = int(_parse_money(qty) or 0)
+                        unit_val = _parse_money(unit) or 0.0
+                        if qty_val > 0:
+                            items.append((desc_text, qty_val, unit_val, None))
+                        r += 1
+                    logger.info("Fallback generic extraction recovered %d items", len(items))
             if src_config_ws is not None:
                 config_rows = _extract_config_rows_from_configuration_sheet(src_config_ws)
                 logger.info("Used separate configuration sheet for grouped template: %d config rows", len(config_rows))
