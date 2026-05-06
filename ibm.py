@@ -351,6 +351,8 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
                 lines.append(l.rstrip())
                 page_lines.append(l.rstrip())
 
+    full_text = "\n".join(lines)
+
     # Log every raw line before any processing
     log_raw_pdf_lines(lines)
 
@@ -805,6 +807,21 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
         if not matched:
             i += 1
     
+    if not header_info.get("IBM Opportunity Number"):
+        full_text_match = re.search(r'IBM Opportunity Number:\s*([A-Za-z0-9]+)', full_text, re.I)
+        if full_text_match:
+            header_info["IBM Opportunity Number"] = full_text_match.group(1).strip()
+            add_debug(f"[OPP FOUND FULL TEXT] {header_info['IBM Opportunity Number']}")
+
+    if not header_info.get("IBM Opportunity Number"):
+        for row in extracted_data:
+            desc = row[1] if len(row) > 1 and row[1] else ""
+            desc_match = re.search(r'IBM Opportunity Number:\s*([A-Za-z0-9]+)', desc, re.I)
+            if desc_match:
+                header_info["IBM Opportunity Number"] = desc_match.group(1).strip()
+                add_debug(f"[OPP FOUND DESC] {header_info['IBM Opportunity Number']}")
+                break
+
     add_debug(f"[EXTRACTION COMPLETE] Total rows extracted: {len(extracted_data)}")
     debug_logger.info(f"=== EXTRACTION COMPLETE ===")
     debug_logger.info(f"Total line items: {len(extracted_data)}")
@@ -1461,6 +1478,13 @@ def create_styled_excel_template2(
     # Show IBM Opportunity Number next to PA Site Number when available.
     pa_site_display = header_info.get('PA Site Number', '')
     ibm_opportunity_number = header_info.get('IBM Opportunity Number', '').strip()
+    if not ibm_opportunity_number:
+        for row in data:
+            desc = row[1] if len(row) > 1 and row[1] else ""
+            desc_match = re.search(r'IBM Opportunity Number:\s*([A-Za-z0-9]+)', desc, re.I)
+            if desc_match:
+                ibm_opportunity_number = desc_match.group(1).strip()
+                break
     if ibm_opportunity_number:
         if pa_site_display:
             pa_site_display = f"{pa_site_display} | IBM Opportunity Number: {ibm_opportunity_number}"
