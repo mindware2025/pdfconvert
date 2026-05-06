@@ -1828,7 +1828,7 @@ elif tool == "IBM Quotation":
                 )
 
 
-elif tool == "🟥 Lenovo Credit Note Tool - UAE":
+elif tool == "🟪 Lenovo Credit Note Tool - UAE":
 
     st.title("Lenovo Credit Note Tool - UAE")
     st.write("Upload Lenovo UAE credit note PDF(s) and download the matching Excel output.")
