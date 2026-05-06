@@ -2029,15 +2029,16 @@ def generate_dell_quote(
         ("Reseller:", _clean_party_name(quote_meta.get("reseller", ""))),
     ]
 
-    meta_label_col = "E" if aed_compact_layout else "G"
-    meta_value_col = "F" if aed_compact_layout else "H"
+    meta_label_col = "C" if aed_compact_layout else "G"
+    meta_value_col = "D" if aed_compact_layout else "H"
     meta_value_end_col = None
 
     if aed_compact_layout:
-        ws.column_dimensions["E"].width = 14
-        ws.column_dimensions["F"].width = 24
+        ws.column_dimensions["C"].width = 14
+        ws.column_dimensions["D"].width = 24
 
-    for idx, (label, value) in enumerate(meta_rows, start=5):
+    meta_start_row = 11 if has_aed_expiry else 10
+    for idx, (label, value) in enumerate(meta_rows, start=meta_start_row):
         label_addr = f"{meta_label_col}{idx}"
         value_addr = f"{meta_value_col}{idx}"
 
@@ -2059,7 +2060,7 @@ def generate_dell_quote(
             ws.row_dimensions[idx].height = max(ws.row_dimensions[idx].height or 20, estimated_lines * 18)
 
     # ===== TABLE HEADER at row 8; data from row 9 =====
-    header_row = 11 if has_aed_expiry else 10
+    header_row = 13 if aed_compact_layout and has_aed_expiry else (12 if aed_compact_layout else (11 if has_aed_expiry else 10))
     ws[f"A{header_row}"] = "Sr. No."
     if include_part_number:
         ws[f"B{header_row}"] = "Part Number"
@@ -2083,11 +2084,9 @@ def generate_dell_quote(
     calc_font = Font(bold=True, color="C00000")
 
     if aed_compact_layout:
-        meta_block_rows = [8, 9]
-        if has_aed_expiry:
-            meta_block_rows.append(10)
+        meta_block_rows = [8, 9, 10, 11, 12] if has_aed_expiry else [8, 9, 10, 11]
         for row_idx in meta_block_rows:
-            for col_idx in range(3, 7):
+            for col_idx in range(3, 5):
                 ws.cell(row=row_idx, column=col_idx).border = border_thin
 
         for addr in (f"{helper_unit_col}1", f"{helper_margin_col}1", f"{helper_unit_col}2", f"{helper_margin_col}2", f"{helper_unit_col}3"):
