@@ -292,18 +292,28 @@ def generate_dell_extended_services_quote(
     for rr in range(1, 3):
         ws.row_dimensions[rr].height = 28
     ws.row_dimensions[3].height = 12
-    for rr in range(5, 12):
+    for rr in range(5, 15):
         ws.row_dimensions[rr].height = 20
 
+    ws.merge_cells("A5:D5")
+    ws.merge_cells("A6:D6")
+    ws.merge_cells("A7:D7")
+    ws["A5"] = "P O Box 55609, Dubai, UAE"
+    ws["A6"] = "Tel :  +9714 4500600    Fax : +9714 4500678"
+    ws["A7"] = "Website :  www.mindware.ae"
+    for cell in ("A5", "A6", "A7"):
+        ws[cell].font = Font(bold=True, size=11, color="1F497D")
+        ws[cell].alignment = Alignment(horizontal="left", vertical="center")
+
     # ----- Header -----
-    ws["C5"] = "Quote No:"
-    ws["D5"] = meta["quote_no"]
-    ws["C7"] = "Date:"
-    ws["D7"] = meta["date"]
-    ws["C8"] = "Quote Validity:"
-    ws["D8"] = "30 days"
-    ws["E5"] = "End User:"
-    ws["F5"] = _clean_party_name(meta["end_user"])
+    ws["C9"] = "Quote No:"
+    ws["D9"] = meta["quote_no"]
+    ws["C10"] = "Date:"
+    ws["D10"] = meta["date"]
+    ws["C11"] = "Quote Validity:"
+    ws["D11"] = "30 days"
+    ws["E9"] = "End User:"
+    ws["F9"] = _clean_party_name(meta["end_user"])
 
     border_thin = Border(
         left=Side(style="thin", color="000000"),
@@ -314,26 +324,26 @@ def generate_dell_extended_services_quote(
     header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
     table_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
 
-    for cell in ("C5", "C7", "C8", "E5"):
+    for cell in ("C9", "C10", "C11", "E9"):
         ws[cell].font = Font(bold=True, color="1F497D")
         ws[cell].alignment = Alignment(horizontal="left", vertical="center")
         ws[cell].border = border_thin
         ws[cell].fill = header_fill
 
-    for cell in ("D5", "D7", "D8", "F5"):
+    for cell in ("D9", "D10", "D11", "F9"):
         ws[cell].alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
         ws[cell].border = border_thin
-    for row in (5, 7, 8):
+    for row in (9, 10, 11):
         for col in (3, 4):
             ws.cell(row=row, column=col).border = border_thin
-        if row == 5:
+        if row == 9:
             for col in (5, 6):
                 ws.cell(row=row, column=col).border = border_thin
 
-    ws["C10"] = "Quote Details"
-    ws["C10"].font = Font(bold=True, size=12, color="1F497D")
-    ws["C10"].alignment = Alignment(horizontal="center", vertical="center")
-    ws.merge_cells("C10:F10")
+    ws["C13"] = "Quote Details"
+    ws["C13"].font = Font(bold=True, size=12, color="1F497D")
+    ws["C13"].alignment = Alignment(horizontal="center", vertical="center")
+    ws.merge_cells("C13:F13")
 
     # ----- Table -----
     headers = [
@@ -346,7 +356,7 @@ def generate_dell_extended_services_quote(
         "Margin",
     ]
 
-    start = 11
+    start = 14
 
     for c, h in enumerate(headers, 1):
         cell = ws.cell(start, c)
