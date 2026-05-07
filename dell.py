@@ -2008,20 +2008,24 @@ def generate_dell_quote(
         widths["D"] = 15
         widths["E"] = 17
     if aed_compact_layout:
-        widths["E"] = 13
-        widths["F"] = 22
-        widths["G"] = 16
-        widths["H"] = 12
+        widths["A"] = 10
+        widths["B"] = 18
+        widths["C"] = max(description_width, 52)
+        widths["D"] = 10
+        widths["E"] = 14
+        widths["F"] = 28
+        widths["G"] = 2
+        widths["H"] = 10
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
-    ws.column_dimensions[helper_unit_col].hidden = False
+    ws.column_dimensions[helper_unit_col].hidden = aed_compact_layout
     ws.column_dimensions[helper_margin_col].hidden = False
 
     # Header rows height
     for rr in range(1, 3):
         ws.row_dimensions[rr].height = 28
     ws.row_dimensions[3].height = 12
-    for rr in range(5, 11):
+    for rr in range(5, 15):
         ws.row_dimensions[rr].height = 20
 
     # ===== HEADER: use the full banner logo across A:H =====
@@ -2043,58 +2047,90 @@ def generate_dell_quote(
         ws[cell].font = Font(bold=True, size=11, color="1F497D")
         ws[cell].alignment = Alignment(horizontal="left", vertical="center")
 
+    border_thin = Border(
+        left=Side(style="thin", color="000000"),
+        right=Side(style="thin", color="000000"),
+        top=Side(style="thin", color="000000"),
+        bottom=Side(style="thin", color="000000"),
+    )
+    meta_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+
     # ===== META =====
-    ws["C8"] = "Quote Ref"
-    ws["C8"].font = Font(bold=True, color="1F497D")
-    ws["D8"] = quote_ref_text
-
-    ws["C9"] = "Date"
-    ws["C9"].font = Font(bold=True, color="1F497D")
-    ws["D9"] = date_text
-
     has_aed_expiry = currency_code == "AED" and bool(expiry_text)
-    if has_aed_expiry:
-        ws["C10"] = "Expires By"
-        ws["C10"].font = Font(bold=True, color="1F497D")
-        ws["D10"] = _shift_expiry_date(expiry_text, days=-2)
-
-    # ---- Quote metadata
-    meta_rows = [
-        ("End User:", _clean_party_name(quote_meta.get("end user", ""))),
-        ("Reseller:", _clean_party_name(quote_meta.get("reseller", ""))),
-    ]
-
-    meta_label_col = "E" if aed_compact_layout else "G"
-    meta_value_col = "F" if aed_compact_layout else "H"
-    meta_value_end_col = None
-
     if aed_compact_layout:
-        ws.column_dimensions["E"].width = 14
-        ws.column_dimensions["F"].width = 24
+        compact_meta_rows = [
+            ("Quote No:", quote_ref_text),
+            ("Date:", date_text),
+            ("Quote Validity:", _shift_expiry_date(expiry_text, days=-2) if has_aed_expiry else "30 days"),
+            ("End User:", _clean_party_name(quote_meta.get("end user", ""))),
+        ]
+        reseller_value = _clean_party_name(quote_meta.get("reseller", ""))
+        if reseller_value:
+            compact_meta_rows.append(("Reseller:", reseller_value))
 
-    for idx, (label, value) in enumerate(meta_rows, start=5):
-        label_addr = f"{meta_label_col}{idx}"
-        value_addr = f"{meta_value_col}{idx}"
+        meta_start_row = 9
+        for offset, (label, value) in enumerate(compact_meta_rows):
+            row_idx = meta_start_row + offset
+            ws[f"A{row_idx}"] = label
+            ws[f"B{row_idx}"] = value
+            ws[f"A{row_idx}"].font = Font(bold=True, color="1F497D")
+            ws[f"A{row_idx}"].fill = meta_fill
+            ws[f"A{row_idx}"].alignment = Alignment(horizontal="left", vertical="center")
+            ws[f"B{row_idx}"].alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+            ws[f"A{row_idx}"].border = border_thin
+            ws[f"B{row_idx}"].border = border_thin
 
-        ws[label_addr] = label
-        ws[label_addr].font = Font(bold=True)
-        ws[label_addr].alignment = Alignment(horizontal="left", vertical="top")
-
-        if meta_value_end_col:
-            merge_range = f"{meta_value_col}{idx}:{meta_value_end_col}{idx}"
-            if merge_range not in ws.merged_cells:
-                ws.merge_cells(merge_range)
-
-        ws[value_addr] = value
-        ws[value_addr].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
-
-        if aed_compact_layout:
             text_len = len(_cell_to_text(value))
-            estimated_lines = max(1, min(4, (text_len // 28) + 1))
-            ws.row_dimensions[idx].height = max(ws.row_dimensions[idx].height or 20, estimated_lines * 18)
+            estimated_lines = max(1, min(4, (text_len // 34) + 1))
+            ws.row_dimensions[row_idx].height = max(ws.row_dimensions[row_idx].height or 20, estimated_lines * 18)
 
-    # ===== TABLE HEADER at row 8; data from row 9 =====
-    header_row = 11 if has_aed_expiry else 10
+        title_row = meta_start_row + len(compact_meta_rows)
+        ws.merge_cells(start_row=title_row, start_column=4, end_row=title_row, end_column=8)
+        ws[f"D{title_row}"] = "Quote Details"
+        ws[f"D{title_row}"].font = Font(bold=True, size=12, color="1F497D")
+        ws[f"D{title_row}"].alignment = Alignment(horizontal="center", vertical="center")
+        header_row = title_row + 1
+    else:
+        ws["C8"] = "Quote Ref"
+        ws["C8"].font = Font(bold=True, color="1F497D")
+        ws["D8"] = quote_ref_text
+
+        ws["C9"] = "Date"
+        ws["C9"].font = Font(bold=True, color="1F497D")
+        ws["D9"] = date_text
+
+        if has_aed_expiry:
+            ws["C10"] = "Expires By"
+            ws["C10"].font = Font(bold=True, color="1F497D")
+            ws["D10"] = _shift_expiry_date(expiry_text, days=-2)
+
+        meta_rows = [
+            ("End User:", _clean_party_name(quote_meta.get("end user", ""))),
+            ("Reseller:", _clean_party_name(quote_meta.get("reseller", ""))),
+        ]
+        meta_label_col = "G"
+        meta_value_col = "H"
+        meta_value_end_col = None
+
+        for idx, (label, value) in enumerate(meta_rows, start=5):
+            label_addr = f"{meta_label_col}{idx}"
+            value_addr = f"{meta_value_col}{idx}"
+
+            ws[label_addr] = label
+            ws[label_addr].font = Font(bold=True)
+            ws[label_addr].alignment = Alignment(horizontal="left", vertical="top")
+
+            if meta_value_end_col:
+                merge_range = f"{meta_value_col}{idx}:{meta_value_end_col}{idx}"
+                if merge_range not in ws.merged_cells:
+                    ws.merge_cells(merge_range)
+
+            ws[value_addr] = value
+            ws[value_addr].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+
+        header_row = 10
+
+    # ===== TABLE HEADER =====
     ws[f"A{header_row}"] = "Sr. No."
     if include_part_number:
         ws[f"B{header_row}"] = "Part Number"
@@ -2106,25 +2142,16 @@ def generate_dell_quote(
     )
     ws[f"{helper_unit_col}{header_row}"] = "Original Unit Price"
     ws[f"{helper_margin_col}{header_row}"] = "Margin"
-    header_fill = PatternFill(start_color="9BBB59", end_color="9BBB59", fill_type="solid")
-    header_font = Font(bold=True, color="000000")
-    border_thin = Border(
-        left=Side(style="thin", color="000000"),
-        right=Side(style="thin", color="000000"),
-        top=Side(style="thin", color="000000"),
-        bottom=Side(style="thin", color="000000"),
+    header_fill = PatternFill(
+        start_color="D9E1F2" if aed_compact_layout else "9BBB59",
+        end_color="D9E1F2" if aed_compact_layout else "9BBB59",
+        fill_type="solid",
     )
+    header_font = Font(bold=True, color="000000")
     calc_fill = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")
     calc_font = Font(bold=True, color="C00000")
 
     if aed_compact_layout:
-        meta_block_rows = [8, 9]
-        if has_aed_expiry:
-            meta_block_rows.append(10)
-        for row_idx in meta_block_rows:
-            for col_idx in range(3, 7):
-                ws.cell(row=row_idx, column=col_idx).border = border_thin
-
         for addr in (f"{helper_unit_col}1", f"{helper_margin_col}1", f"{helper_unit_col}2", f"{helper_margin_col}2", f"{helper_unit_col}3"):
             ws[addr].font = calc_font
             ws[addr].fill = calc_fill
@@ -2135,7 +2162,10 @@ def generate_dell_quote(
     if include_part_number:
         header_cells.insert(1, f"B{header_row}")
     for addr in header_cells:
-        if aed_compact_layout and addr in (f"{helper_unit_col}{header_row}", f"{helper_margin_col}{header_row}"):
+        if aed_compact_layout and addr == f"{helper_unit_col}{header_row}":
+            ws[addr].fill = calc_fill
+            ws[addr].font = calc_font
+        elif aed_compact_layout and addr == f"{helper_margin_col}{header_row}":
             ws[addr].fill = calc_fill
             ws[addr].font = calc_font
         else:
@@ -2192,7 +2222,10 @@ def generate_dell_quote(
         if include_part_number:
             data_cells.insert(1, f"B{row_ptr}")
         for addr in data_cells:
-            if aed_compact_layout and addr in (f"{helper_unit_col}{row_ptr}", f"{helper_margin_col}{row_ptr}"):
+            if aed_compact_layout and addr == f"{helper_unit_col}{row_ptr}":
+                ws[addr].fill = calc_fill
+                ws[addr].font = Font(color="C00000")
+            elif aed_compact_layout and addr == f"{helper_margin_col}{row_ptr}":
                 ws[addr].fill = calc_fill
                 ws[addr].font = Font(color="C00000")
             else:
