@@ -1475,7 +1475,8 @@ def create_styled_excel_template2(
     
    
     
-    # Show IBM Opportunity Number next to PA Site Number when available.
+    # Show IBM Opportunity Number next to Bid Number when available.
+    bid_number_display = header_info.get('Bid Number', '')
     pa_site_display = header_info.get('PA Site Number', '')
     ibm_opportunity_number = header_info.get('IBM Opportunity Number', '').strip()
     if not ibm_opportunity_number:
@@ -1486,10 +1487,10 @@ def create_styled_excel_template2(
                 ibm_opportunity_number = desc_match.group(1).strip()
                 break
     if ibm_opportunity_number:
-        if pa_site_display:
-            pa_site_display = f"{pa_site_display} | IBM Opportunity Number: {ibm_opportunity_number}"
+        if bid_number_display:
+            bid_number_display = f"{bid_number_display} | IBM Opportunity Number: {ibm_opportunity_number}"
         else:
-            pa_site_display = f"IBM Opportunity Number: {ibm_opportunity_number}"
+            bid_number_display = f"IBM Opportunity Number: {ibm_opportunity_number}"
     
     # Right block (EXACT COPY FROM TEMPLATE 1)
     right_labels = [
@@ -1498,7 +1499,7 @@ def create_styled_excel_template2(
     ]
     right_values = [
         header_info.get('Customer Name', ''),
-        header_info.get('Bid Number', ''),
+        bid_number_display,
         header_info.get('PA Agreement Number', ''),
         pa_site_display,
         "",
