@@ -102,7 +102,10 @@ def _sanitize_filename_part(value: str) -> str:
 def _strip_trailing_asterisk(value: str) -> str:
     if value is None:
         return ""
-    return re.sub(r"\s*\*+$", "", _cell_to_text(value)).strip()
+    text = _cell_to_text(value)
+    text = re.sub(r"\*+", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
 
 
 def build_dell_output_filename(input_excel_bytes: bytes, currency_code: str = "USD") -> str:
