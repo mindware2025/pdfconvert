@@ -1913,11 +1913,29 @@ def generate_dell_quote(
             if sku and item_no not in part_numbers_by_item:
                 part_numbers_by_item[item_no] = sku
 
+    heading_part_numbers_by_item: Dict[str, str] = {}
+    for item_key, heading in item_headings_by_item.items():
+        part_number = _extract_part_number_from_description(heading)
+        if part_number:
+            heading_part_numbers_by_item[item_key] = part_number
+
+    for idx, desc in enumerate(item_descs_order, start=1):
+        item_key = str(idx)
+        if item_key not in heading_part_numbers_by_item:
+            part_number = _extract_part_number_from_description(desc)
+            if part_number:
+                heading_part_numbers_by_item[item_key] = part_number
+
+    if allow_part_number:
+        for item_key, part_number in heading_part_numbers_by_item.items():
+            part_numbers_by_item.setdefault(item_key, part_number)
+
     has_config_part_number = any(
         len(row) >= 5 and str(row[4]).strip()
         for row in config_rows
     )
-    include_part_number = allow_part_number and not is_compact_quote and has_config_part_number
+    has_heading_part_number = bool(heading_part_numbers_by_item)
+    include_part_number = allow_part_number and not is_compact_quote and (has_config_part_number or has_heading_part_number)
 
     # ---- Build output workbook ----
     wb = Workbook()
@@ -2304,14 +2322,25 @@ def generate_dell_quote(
     ws2.sheet_view.showGridLines = False
 
     use_service_layout = bool(service_fields_by_item) and (currency_code == "AED") and (not is_pdf) and (not config_rows)
+    show_sku_col = bool(part_numbers_by_item) or any(
+        len(row) >= 5 and str(row[4]).strip()
+        for row in config_rows
+    )
     if use_service_layout:
         ws2.column_dimensions["A"].width = 14  # Item #
         ws2.column_dimensions["B"].width = 18  # Module
         ws2.column_dimensions["C"].width = 80  # Description
-        ws2.column_dimensions["D"].width = 18  # Service Tag
-        ws2.column_dimensions["E"].width = 18  # Service Start Date
-        ws2.column_dimensions["F"].width = 18  # Service End Date
-        ws2.column_dimensions["G"].width = 10  # Qty
+        if show_sku_col:
+            ws2.column_dimensions["D"].width = 18  # SKU
+            ws2.column_dimensions["E"].width = 18  # Service Tag
+            ws2.column_dimensions["F"].width = 18  # Service Start Date
+            ws2.column_dimensions["G"].width = 18  # Service End Date
+            ws2.column_dimensions["H"].width = 10  # Qty
+        else:
+            ws2.column_dimensions["D"].width = 18  # Service Tag
+            ws2.column_dimensions["E"].width = 18  # Service Start Date
+            ws2.column_dimensions["F"].width = 18  # Service End Date
+            ws2.column_dimensions["G"].width = 10  # Qty
     else:
         ws2.column_dimensions["A"].width = 22  # Item #
         ws2.column_dimensions["B"].width = 70  # Module
@@ -2335,11 +2364,22 @@ def generate_dell_quote(
                 ("A", "Item #"),
                 ("B", "Module"),
                 ("C", "Description"),
-                ("D", "Service Tag:"),
-                ("E", "Service Start Date:"),
-                ("F", "Service End Date:"),
-                ("G", "Qty"),
             ]
+            if show_sku_col:
+                headers.append(("D", "SKU"))
+                headers.extend([
+                    ("E", "Service Tag:"),
+                    ("F", "Service Start Date:"),
+                    ("G", "Service End Date:"),
+                    ("H", "Qty"),
+                ])
+            else:
+                headers.extend([
+                    ("D", "Service Tag:"),
+                    ("E", "Service Start Date:"),
+                    ("F", "Service End Date:"),
+                    ("G", "Qty"),
+                ])
         else:
             headers = [
                 ("A", "Item #"),
@@ -2369,7 +2409,7 @@ def generate_dell_quote(
         ws2.row_dimensions[row_index].height = 20
 
     # Determine whether any configuration rows include actual SKU values.
-    show_sku_col = any(
+    show_sku_col = bool(part_numbers_by_item) or any(
         len(row) >= 5 and str(row[4]).strip()
         for row in config_rows
     )
@@ -2407,12 +2447,21 @@ def generate_dell_quote(
                 ws2[f"A{r2}"] = display_item_no
                 ws2[f"B{r2}"] = ""
                 ws2[f"C{r2}"] = heading
-                ws2[f"D{r2}"] = details.get("service_tag", "")
-                ws2[f"E{r2}"] = details.get("service_start_date", "")
-                ws2[f"F{r2}"] = details.get("service_end_date", "")
-                ws2[f"G{r2}"] = qty_by_item.get(item_key, "")
+                if show_sku_col:
+                    ws2[f"D{r2}"] = part_numbers_by_item.get(item_key, "")
+                    ws2[f"E{r2}"] = details.get("service_tag", "")
+                    ws2[f"F{r2}"] = details.get("service_start_date", "")
+                    ws2[f"G{r2}"] = details.get("service_end_date", "")
+                    ws2[f"H{r2}"] = qty_by_item.get(item_key, "")
+                    cols = ("A", "B", "C", "D", "E", "F", "G", "H")
+                else:
+                    ws2[f"D{r2}"] = details.get("service_tag", "")
+                    ws2[f"E{r2}"] = details.get("service_start_date", "")
+                    ws2[f"F{r2}"] = details.get("service_end_date", "")
+                    ws2[f"G{r2}"] = qty_by_item.get(item_key, "")
+                    cols = ("A", "B", "C", "D", "E", "F", "G")
 
-                for col in ("A", "B", "C", "D", "E", "F", "G"):
+                for col in cols:
                     ws2[f"{col}{r2}"].border = thin_gray
                     ws2[f"{col}{r2}"].alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
                 r2 += 1
