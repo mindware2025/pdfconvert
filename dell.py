@@ -2013,7 +2013,7 @@ def generate_dell_quote(
     else:
         ws["A5"] = "P O Box 55609, Dubai, UAE"
         ws["A6"] = "Tel :  +9714 4500600    Fax : +9714 4500678"
-        ws["A7"] = "Website :  www.mindware.ae"
+        ws["A7"] = "Website :  www.mindware.net"
     for cell in ("A5", "A6", "A7"):
         ws[cell].font = Font(bold=True, size=11, color="1F497D")
         ws[cell].alignment = Alignment(horizontal="left", vertical="center")
