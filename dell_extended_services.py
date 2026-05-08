@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Optional, List, Dict
 from datetime import datetime
 import os
+import re
 import openpyxl
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -24,6 +25,12 @@ def _sanitize_filename_part(value: str) -> str:
     for ch in '<>:"/\\|?*':
         text = text.replace(ch, "")
     return text.rstrip(". ")
+
+
+def _strip_trailing_asterisk(value: str) -> str:
+    if value is None:
+        return ""
+    return re.sub(r"\s*\*+$", "", _text(value)).strip()
 
 
 def _usd_to_aed(val):
@@ -118,17 +125,16 @@ def _extract_metadata(ws) -> Dict[str, str]:
         if "end user -" in row_text:
             for idx, cell_text in enumerate(row_lower):
                 if "end user -" in cell_text:
+                    col = idx + 1
                     next_row = r + 1
                     while next_row <= min(ws.max_row, r + 8):
-                        line_parts = [_text(ws.cell(next_row, c).value) for c in range(1, 11)]
-                        line_parts = [part for part in line_parts if part]
-                        if not line_parts:
+                        cell_value = _text(ws.cell(next_row, col).value)
+                        if not cell_value:
                             break
-                        joined_line = " ".join(line_parts).strip()
-                        joined_line_lower = joined_line.lower()
-                        if any(marker in joined_line_lower for marker in ("dell extended services details", "customer information", "terms of sale")):
+                        cell_lower = cell_value.lower()
+                        if any(marker in cell_lower for marker in ("dell extended services details", "customer information", "terms of sale")):
                             break
-                        meta["end_user"] = joined_line
+                        meta["end_user"] = cell_value.strip()
                         break
                     break
             break
@@ -146,7 +152,7 @@ def build_dell_extended_services_output_filename(input_excel_bytes: bytes) -> st
         src_ws = src_wb.active
         meta = _extract_metadata(src_ws)
         quote_no = meta.get("quote_no", "")
-        end_user = meta.get("end_user", "")
+        end_user = _strip_trailing_asterisk(meta.get("end_user", ""))
     except Exception:
         pass
 
@@ -260,83 +266,99 @@ def generate_dell_extended_services_quote(
     src_ws = src_wb.active
 
     meta = _extract_metadata(src_ws)
+    meta = {k: _strip_trailing_asterisk(v) for k, v in meta.items()}
     rows = _extract_extended_services_rows(src_ws)
-    footer_notes = _aed_footer_notes()
 
     wb = Workbook()
     ws = wb.active
     ws.title = "Quote"
     ws.sheet_view.showGridLines = False
-    _add_logo(ws, None)
 
-    # ----- Header -----
-    ws["C5"] = "Quote No:"
-    ws["D5"] = meta["quote_no"]
+    # ===== HEADER: use the full banner logo across A:H =====
+    ws.merge_cells("A1:H2")
+    _add_logo(ws, logo_bytes, anchor="A1", width=780, height=52)
 
+    # Contact info (AED style)
+    ws.merge_cells("A5:D5")
+    ws.merge_cells("A6:D6")
+    ws.merge_cells("A7:D7")
+    ws["A5"] = "P O Box 55609, Dubai, UAE"
+    ws["A6"] = "Tel :  +9714 4500600    Fax : +9714 4500678"
+    ws["A7"] = "Website :  www.mindware.ae"
+    for cell in ("A5", "A6", "A7"):
+        ws[cell].font = Font(bold=True, size=11, color="1F497D")
+        ws[cell].alignment = Alignment(horizontal="left", vertical="center")
 
-    ws["C7"] = "Date:"
-    ws["D7"] = meta["date"]
-
-
-    ws["C8"] = "Quote Validity:"
-    ws["D8"] = "30 days"
-
-    ws["E7"] = "End User:"
-    ws["F7"] = meta["end_user"]
-
-    border_thin = Border(
-        left=Side(style="thin", color="000000"),
-        right=Side(style="thin", color="000000"),
-        top=Side(style="thin", color="000000"),
-        bottom=Side(style="thin", color="000000"),
+    # ===== METADATA SECTION (AED style) =====
+    section_fill = PatternFill(start_color="D9EAF7", end_color="D9EAF7", fill_type="solid")
+    ws.merge_cells("A8:D8")
+    ws["A8"] = "Quote Summary"
+    ws["A8"].font = Font(bold=True, color="1F497D")
+    ws["A8"].alignment = Alignment(horizontal="left", vertical="center")
+    ws["A8"].fill = section_fill
+    ws["A8"].border = Border(
+        left=Side(style="thin", color="9FBAD0"),
+        right=Side(style="thin", color="9FBAD0"),
+        top=Side(style="thin", color="9FBAD0"),
+        bottom=Side(style="thin", color="9FBAD0"),
     )
 
-    for cell in ("C5", "C6", "C7", "C8", "D5", "D6", "D7", "D8", "E6", "F6", "E7", "F7"):
-        ws[cell].font = Font(bold=True)
-        ws[cell].border = border_thin
-
-    for row in (5, 6, 7, 8):
-        for col in (3, 4, 5, 6):
-            cell = ws.cell(row=row, column=col)
-            cell.border = border_thin
-
-    ws.merge_cells("B11:M11")
-    ws.merge_cells("B12:M12")
-    ws.merge_cells("N12:R12")
-    ws["B11"] = "Dell Extended Services Details"
-    ws["B12"] = "Current Equipment Information"
-    ws["N12"] = "Extended Service Information"
-    header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
-    border_thin = Border(
-        left=Side(style="thin", color="000000"),
-        right=Side(style="thin", color="000000"),
-        top=Side(style="thin", color="000000"),
-        bottom=Side(style="thin", color="000000"),
-    )
-
-    for r, cols in [(11, range(2, 14)), (12, range(2, 14)), (12, range(14, 19))]:
-        for c in cols:
-            cell = ws.cell(row=r, column=c)
-            cell.fill = header_fill
-            cell.border = border_thin
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-
-    for cell in ("B11", "B12", "N12"):
-        ws[cell].font = Font(bold=True)
-
-    # ----- Table -----
-    headers = [
-        "Asset", "Agreement ID", "Model", "Install At/Ship To",
-        "Install At/Ship To City", "Install At/Ship To State",
-        "Install At/Ship To Country", "LOB or Family", "Ship Date",
-        "Service Contract Expiration", "Service Contract Description",
-        "Services SKU", "New Contract Start Date", "New Contract End Date",
-        "Quantity", "Price After Discount (AED)", "EOSS Date", "Product Type",
-        "Margin"
+    summary_rows = [
+        (9, "Quote Ref", meta["quote_no"]),
+        (10, "Date", meta["date"]),
     ]
 
-    start = 13
-    header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+    for row_idx, label, value in summary_rows:
+        ws[f"A{row_idx}"] = label
+        ws[f"A{row_idx}"].font = Font(bold=True, color="1F497D")
+        ws[f"A{row_idx}"].alignment = Alignment(horizontal="left", vertical="center")
+        ws.merge_cells(start_row=row_idx, start_column=2, end_row=row_idx, end_column=4)
+        ws[f"B{row_idx}"] = value
+        ws[f"B{row_idx}"].alignment = Alignment(horizontal="left", vertical="center")
+
+    # Customer Information section
+    customer_title_row = 12
+    ws.merge_cells(start_row=customer_title_row, start_column=1, end_row=customer_title_row, end_column=8)
+    ws[f"A{customer_title_row}"] = "Customer Information"
+    ws[f"A{customer_title_row}"].font = Font(bold=True, color="1F497D")
+    ws[f"A{customer_title_row}"].alignment = Alignment(horizontal="left", vertical="center")
+    ws[f"A{customer_title_row}"].fill = section_fill
+    ws[f"A{customer_title_row}"].border = Border(
+        left=Side(style="thin", color="9FBAD0"),
+        right=Side(style="thin", color="9FBAD0"),
+        top=Side(style="thin", color="9FBAD0"),
+        bottom=Side(style="thin", color="9FBAD0"),
+    )
+
+    meta_rows = [
+        ("End User:", meta["end_user"]),
+    ]
+
+    for idx, (label, value) in enumerate(meta_rows, start=customer_title_row + 1):
+        ws[f"A{idx}"] = label
+        ws[f"A{idx}"].font = Font(bold=True)
+        ws[f"A{idx}"].alignment = Alignment(horizontal="left", vertical="top")
+        ws.merge_cells(start_row=idx, start_column=2, end_row=idx, end_column=8)
+        ws[f"B{idx}"] = value
+        ws[f"B{idx}"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+
+        text_len = len(_text(value))
+        estimated_lines = max(1, min(4, (text_len // 32) + 1))
+        ws.row_dimensions[idx].height = max(ws.row_dimensions[idx].height or 20, estimated_lines * 18)
+
+    # ===== TABLE HEADER =====
+    header_row = customer_title_row + 2
+    ws[f"A{header_row}"] = "Sr. No."
+    ws[f"B{header_row}"] = "Part Number"
+    ws[f"C{header_row}"] = "Description"
+    ws[f"D{header_row}"] = "Qty"
+    ws[f"E{header_row}"] = "Unit Price"
+    ws[f"F{header_row}"] = "Total Price (excluding vat)"
+    ws[f"G{header_row}"] = "Margin"
+
+    header_fill = PatternFill(start_color="9BBB59", end_color="9BBB59", fill_type="solid")
+    helper_header_fill = PatternFill(start_color="F4CCCC", end_color="F4CCCC", fill_type="solid")
+    header_font = Font(bold=True, color="000000")
     border_thin = Border(
         left=Side(style="thin", color="000000"),
         right=Side(style="thin", color="000000"),
@@ -344,45 +366,100 @@ def generate_dell_extended_services_quote(
         bottom=Side(style="thin", color="000000"),
     )
 
-    for c, h in enumerate(headers, 1):
-        cell = ws.cell(start, c)
-        cell.value = h
-        cell.font = Font(bold=True)
-        cell.alignment = Alignment(horizontal="center")
-        cell.fill = header_fill
-        cell.border = border_thin
+    header_cells = [f"A{header_row}", f"B{header_row}", f"C{header_row}", f"D{header_row}", f"E{header_row}", f"F{header_row}", f"G{header_row}"]
+    for addr in header_cells:
+        ws[addr].fill = helper_header_fill if addr == f"G{header_row}" else header_fill
+        ws[addr].font = header_font
+        ws[addr].alignment = Alignment(horizontal="center", vertical="center")
+        ws[addr].border = border_thin
+    ws.row_dimensions[header_row].height = 20
 
-    r = start + 1
+    # ===== DATA ROWS =====
+    row_ptr = header_row + 1
+    sr_no = 1
+    currency_fmt = '"AED" #,##0.00'
+    margin_fmt = '0.00%'
+    yellow = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+    helper_body_fill = PatternFill(start_color="FCE5E5", end_color="FCE5E5", fill_type="solid")
+    total_cells = []
+
     for row in rows:
-        price_usd = row[15]
-        for c, val in enumerate(row, 1):
-            cell = ws.cell(r, c)
-            if c == 16:
-                cell.value = f"=ROUND({price_usd}/(1-S{r})*{AED_RATE},2)"
-                cell.number_format = '"AED" #,##0.00'
-            else:
-                cell.value = val
-            cell.border = border_thin
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-        margin_cell = ws.cell(r, 19)
-        margin_cell.value = margin_percent / 100.0
-        margin_cell.number_format = '0.00%'
-        margin_cell.border = border_thin
-        margin_cell.alignment = Alignment(horizontal="center", vertical="center")
-        r += 1
+        # Extract data from the extended services row
+        services_sku = row[11]  # Services SKU column
+        service_desc = row[10]  # Service Contract Description column
+        qty = _to_number(row[14])  # Quantity column
+        price_usd = row[15]  # Price After Discount (USD) column
 
-    notes_title_row = r + 2
-    ws.merge_cells(start_row=notes_title_row, start_column=2, end_row=notes_title_row, end_column=18)
-    ws.cell(notes_title_row, 2).value = "Terms and Conditions"
-    ws.cell(notes_title_row, 2).font = Font(bold=True)
+        if not service_desc or qty <= 0:
+            continue
+
+        ws[f"A{row_ptr}"] = sr_no
+        ws[f"B{row_ptr}"] = services_sku
+        ws[f"C{row_ptr}"] = service_desc
+        ws[f"D{row_ptr}"] = qty
+
+        # Unit Price with AED conversion and margin (like Standard Quote logic)
+        ws[f"E{row_ptr}"].value = f"=ROUND(({price_usd}*{AED_RATE})/(1-{margin_percent}/100),2)"
+        ws[f"E{row_ptr}"].number_format = currency_fmt
+
+        # Total Price = Qty * Unit Price
+        ws[f"F{row_ptr}"].value = f"=D{row_ptr}*E{row_ptr}"
+        ws[f"F{row_ptr}"].number_format = currency_fmt
+
+        # Margin column
+        ws[f"G{row_ptr}"].value = margin_percent / 100.0
+        ws[f"G{row_ptr}"].number_format = margin_fmt
+
+        # Styling
+        data_cells = [f"A{row_ptr}", f"B{row_ptr}", f"C{row_ptr}", f"D{row_ptr}", f"E{row_ptr}", f"F{row_ptr}", f"G{row_ptr}"]
+        for addr in data_cells:
+            ws[addr].fill = helper_body_fill if addr == f"G{row_ptr}" else yellow
+            ws[addr].border = border_thin
+            ws[addr].alignment = Alignment(horizontal="center", vertical="top")
+        ws[f"C{row_ptr}"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+
+        total_cells.append(f"F{row_ptr}")
+        sr_no += 1
+        row_ptr += 1
+
+    # ===== TOTAL ROW =====
+    if total_cells:
+        total_row = row_ptr
+        ws.merge_cells(start_row=total_row, start_column=2, end_row=total_row, end_column=5)
+        ws[f"B{total_row}"] = "Total price"
+        ws[f"B{total_row}"].alignment = Alignment(horizontal="right", vertical="center")
+        ws[f"B{total_row}"].font = Font(bold=True, color="1F497D")
+
+        ws[f"F{total_row}"] = f"=SUM({','.join(total_cells)})"
+        ws[f"F{total_row}"].number_format = currency_fmt
+        ws[f"F{total_row}"].font = Font(bold=True, color="1F497D")
+        ws[f"F{total_row}"].alignment = Alignment(horizontal="center", vertical="center")
+        ws[f"F{total_row}"].border = border_thin
+        ws[f"G{total_row}"].fill = helper_body_fill
+        ws[f"G{total_row}"].border = border_thin
+
+    # ===== FOOTER NOTES =====
+    footer_notes = _aed_footer_notes()
+    notes_title_row = (total_row + 2) if total_cells else (row_ptr + 2)
+    ws.merge_cells(start_row=notes_title_row, start_column=1, end_row=notes_title_row, end_column=7)
+    ws.cell(notes_title_row, 1).value = "Terms and Conditions"
+    ws.cell(notes_title_row, 1).font = Font(bold=True, color="1F497D")
+    ws.cell(notes_title_row, 1).alignment = Alignment(horizontal="left", vertical="center")
 
     notes_body_row = notes_title_row + 1
-    ws.merge_cells(start_row=notes_body_row, start_column=2, end_row=notes_body_row, end_column=18)
-    body_cell = ws.cell(notes_body_row, 2)
+    ws.merge_cells(start_row=notes_body_row, start_column=1, end_row=notes_body_row, end_column=7)
+    body_cell = ws.cell(notes_body_row, 1)
     body_cell.value = "\n".join(footer_notes)
     body_cell.alignment = Alignment(wrap_text=True, vertical="top")
     body_cell.border = border_thin
     ws.row_dimensions[notes_body_row].height = max(180, min(520, len(footer_notes) * 22))
+
+    # Column widths
+    widths = {
+        "A": 8, "B": 15, "C": 50, "D": 8, "E": 15, "F": 18, "G": 12
+    }
+    for col, w in widths.items():
+        ws.column_dimensions[col].width = w
 
     out = BytesIO()
     wb.save(out)

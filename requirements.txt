@@ -17,3 +17,5 @@ pdf417
 docx
 xlsxwriter 
 PyPDF2
+pypdf
+streamlit

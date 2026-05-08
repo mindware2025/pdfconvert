@@ -1,5 +1,5 @@
 # dell.py
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import BytesIO
 from typing import Optional, Dict, List, Tuple
 import logging
@@ -99,6 +99,12 @@ def _sanitize_filename_part(value: str) -> str:
     return text
 
 
+def _strip_trailing_asterisk(value: str) -> str:
+    if value is None:
+        return ""
+    return re.sub(r"\s*\*+$", "", _cell_to_text(value)).strip()
+
+
 def build_dell_output_filename(input_excel_bytes: bytes, currency_code: str = "USD") -> str:
     """Build the download filename for the generated Dell workbook."""
     currency_code = (currency_code or "USD").upper()
@@ -134,6 +140,7 @@ def build_dell_output_filename(input_excel_bytes: bytes, currency_code: str = "U
         or quote_meta.get("reseller", "")
         or ""
     )
+    party_name = _strip_trailing_asterisk(party_name)
 
     parts = [
         "Mindware costing",
@@ -295,6 +302,15 @@ def _extract_expiry_date(ws) -> str:
         match = re.search(r"\d{2}/\d{2}/\d{4}", text)
         return match.group(0) if match else text
 
+    def _adjust_expiry_date(value: str) -> str:
+        if not value:
+            return ""
+        try:
+            parsed = datetime.strptime(value, "%d/%m/%Y")
+            return (parsed - timedelta(days=2)).strftime("%d/%m/%Y")
+        except Exception:
+            return value
+
     def _scan_row(row_idx: int) -> str:
         if row_idx < 1 or row_idx > ws.max_row:
             return ""
@@ -329,21 +345,18 @@ def _extract_expiry_date(ws) -> str:
 
     direct_expiry = _format_date_value(ws["E19"].value)
     if direct_expiry:
-        return direct_expiry
+        return _adjust_expiry_date(direct_expiry)
 
     quote_date_row = 18
     for row_idx in range(max(1, quote_date_row - 4), min(ws.max_row, quote_date_row + 4) + 1):
         expiry = _scan_row(row_idx)
         if expiry:
-            return expiry
+                return _adjust_expiry_date(expiry)
 
     for row_idx in range(1, min(ws.max_row, 80) + 1):
         expiry = _scan_row(row_idx)
         if expiry:
-            return expiry
-
-    return ""
-
+            return _adjust_expiry_date(expiry)
 
 def _add_logo(ws, logo_bytes: Optional[bytes], anchor="A1", width: int = 180, height: int = 60):
     """Add logo from uploaded bytes or fallback to a local logo file."""
@@ -542,8 +555,8 @@ def _find_product_details_anchor(ws) -> Optional[int]:
 
 
 def _find_config_table_header(ws, start_row: int, search_rows: int = 30) -> Optional[Tuple[int, Dict[str, int]]]:
-    """Find the row that contains the header like 'Module | Description | SKU | Tax Type | Qty'.
-    Returns (header_row, columns_map). columns_map keys: module, description, sku, tax, qty (optional if missing).
+    """Find the row that contains the header like 'Module | Description | SKU | Qty'.
+    Returns (header_row, columns_map). columns_map keys: module, description, sku, qty (optional if missing).
     """
     last_row = min(ws.max_row, start_row + search_rows)
     for r in range(start_row, last_row + 1):
@@ -563,8 +576,6 @@ def _find_config_table_header(ws, start_row: int, search_rows: int = 30) -> Opti
                 or ('part' in normalized_name and 'number' in normalized_name)
             ) and 'sku' not in labels:
                 labels['sku'] = c
-            if 'tax' in name and 'type' in name and 'tax' not in labels:
-                labels['tax'] = c
             if name.strip() in ('qty', 'quantity') and 'qty' not in labels:
                 labels['qty'] = c
         # Some Dell exports omit the "Module" column and start directly with Description.
@@ -574,10 +585,10 @@ def _find_config_table_header(ws, start_row: int, search_rows: int = 30) -> Opti
     return None
 
 
-def _collect_config_rows_for_product(ws, start_row: int, columns: Dict[str, int], next_product_start: Optional[int]) -> List[Tuple[str, str, str, str]]:
+def _collect_config_rows_for_product(ws, start_row: int, columns: Dict[str, int], next_product_start: Optional[int]) -> List[Tuple[str, str, str]]:
     """Collect configuration lines for a product starting at start_row (first line AFTER header).
     Stops before next_product_start if provided, otherwise when a strong stop condition occurs.
-    Returns list of tuples (module, description, sku, tax_type). Qty/Price are intentionally ignored.
+    Returns list of tuples (module, description, sku). Qty/Price are intentionally ignored.
     """
     rows = []
     r = start_row
@@ -593,11 +604,10 @@ def _collect_config_rows_for_product(ws, start_row: int, columns: Dict[str, int]
         m = _cell_to_text(ws.cell(r, columns.get('module', 0)).value)
         d = _cell_to_text(ws.cell(r, columns.get('description', 0)).value)
         s = _cell_to_text(ws.cell(r, columns.get('sku', 0)).value)
-        t = _cell_to_text(ws.cell(r, columns.get('tax', 0)).value)
         # If the row is essentially empty, stop
-        if not any([m, d, s, t]):
+        if not any([m, d, s]):
             break
-        rows.append((m, d, s, t))
+        rows.append((m, d, s))
         r += 1
     return rows
 
@@ -672,17 +682,16 @@ def _extract_config_rows_from_configuration_sheet(ws) -> List[Tuple[str, str, st
         module = _cell_to_text(ws.cell(r, colmap.get("module", 0)).value) if has_real_module_col else ""
         description = _cell_to_text(ws.cell(r, colmap.get("description", 0)).value)
         sku = _cell_to_text(ws.cell(r, colmap.get("sku", 0)).value)
-        tax = _cell_to_text(ws.cell(r, colmap.get("tax", 0)).value)
         qty = _cell_to_text(ws.cell(r, colmap.get("qty", 0)).value)
 
-        if not has_real_module_col and description and not any([sku, tax, qty]):
+        if not has_real_module_col and description and not any([sku, qty]):
             module = description
             description = ""
 
-        if not any([module, description, sku, tax, qty]):
+        if not any([module, description, sku, qty]):
             continue
 
-        rows.append((current_item, "", module, description, sku, tax, qty))
+        rows.append((current_item, "", module, description, sku, qty))
 
     return rows
 
@@ -798,7 +807,7 @@ def _extract_grouped_template_items_and_config(ws):
 
         # Grouped config row belongs to the last top-level item.
         if current_item and desc:
-            config_rows.append((current_item, "", "", desc, sku, "", qty_raw))
+            config_rows.append((current_item, "", "", desc, sku, qty_raw))
 
     return items, config_rows
 
@@ -823,7 +832,8 @@ def _find_compact_quote_header(ws):
                 columns["unit"] = c
             if "total selling price" in name and "total" not in columns:
                 columns["total"] = c
-        if all(k in columns for k in ("item", "sku", "description", "qty", "unit", "total")):
+        if all(k in columns for k in ("item", "sku", "description", "qty", "total")):
+            # Some Dell exports omit a separate Unit Selling Price column.
             return r, columns
     return None
 
@@ -852,7 +862,8 @@ def _extract_compact_quote_items_and_config(ws):
         sku = _cell_to_text(ws.cell(r, cols["sku"]).value)
         desc = _cell_to_text(ws.cell(r, cols["description"]).value)
         qty_raw = _cell_to_text(ws.cell(r, cols["qty"]).value)
-        unit_price = _parse_money(ws.cell(r, cols["unit"]).value) or 0.0
+        unit_col = cols.get("unit")
+        unit_price = _parse_money(ws.cell(r, unit_col).value) or 0.0 if unit_col else None
         total_price = _parse_money(ws.cell(r, cols["total"]).value)
 
         if not any([first_cell, sku, desc, qty_raw, unit_price, total_price]):
@@ -866,6 +877,11 @@ def _extract_compact_quote_items_and_config(ws):
         except Exception:
             qty_val = int(_parse_money(qty_raw) or 0)
 
+        if unit_col is None and total_price is not None:
+            unit_price = total_price
+        elif unit_price == 0.0 and qty_val > 0 and total_price is not None:
+            unit_price = total_price / qty_val
+
         if first_cell:
             if desc and qty_val > 0:
                 items.append((desc, qty_val, unit_price, total_price))
@@ -873,7 +889,7 @@ def _extract_compact_quote_items_and_config(ws):
             continue
 
         if current_item and (sku or desc):
-            config_rows.append((current_item, "", "", desc, sku, "", qty_raw))
+            config_rows.append((current_item, "", "", desc, "", qty_raw))
 
     return items, config_rows
 
@@ -1023,9 +1039,9 @@ def _extract_excel_service_fields(ws) -> Dict[str, Dict[str, str]]:
     return out
 
 
-def _is_config_section_row(module: str, description: str, sku: str, tax: str) -> bool:
+def _is_config_section_row(module: str, description: str, sku: str) -> bool:
     """Rows like 'Components', 'Software', 'Service' act as section headers in Product Details."""
-    return bool(module and not description and not sku and not tax)
+    return bool(module and not description and not sku)
 
 
 def _extract_pdf_lines(pdf_bytes: bytes) -> List[str]:
@@ -1481,13 +1497,13 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
 
     return items, metadata, config_rows, quote_ref_text, date_text, consolidation_fee
 
-def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str, str]]:
+def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str]]:
     """
     FINAL CLEAN VERSION (Excel upload only)
     Extracts ALL configuration rows under Product Details from Excel files.
 
     Output rows have the structure:
-      (item_number, item_heading, module, description, sku, tax_type, qty)
+      (item_number, item_heading, module, description, sku, qty)
 
     • Preserves original Excel order
     • Skips totals / shipping / price lines
@@ -1500,7 +1516,7 @@ def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str, str
     if not anchor:
         return []
 
-    rows: List[Tuple[str, str, str, str, str, str, str]] = []
+    rows: List[Tuple[str, str, str, str, str, str]] = []
     r = anchor + 1
     max_col = min(ws.max_column, 40)
 
@@ -1589,17 +1605,16 @@ def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str, str
             mod = _cell_to_text(ws.cell(data_row, colmap.get("module", 0)).value) if has_real_module_col else ""
             desc = _cell_to_text(ws.cell(data_row, colmap.get("description", 0)).value)
             sku = _cell_to_text(ws.cell(data_row, colmap.get("sku", 0)).value)
-            tax = _cell_to_text(ws.cell(data_row, colmap.get("tax", 0)).value)
             qty = _cell_to_text(ws.cell(data_row, colmap.get("qty", 0)).value)
 
-            if not has_real_module_col and desc and not any([sku, tax, qty]):
+            if not has_real_module_col and desc and not any([sku, qty]):
                 mod = desc
                 desc = ""
 
-            if not any([mod, desc, sku, tax, qty]):
+            if not any([mod, desc, sku, qty]):
                 break
 
-            rows.append((current_item, current_heading, mod, desc, sku, tax, qty))
+            rows.append((current_item, current_heading, mod, desc, sku, qty))
             data_row += 1
 
         r = next_item_row if next_item_row is not None else ws.max_row + 1
@@ -1610,19 +1625,19 @@ def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str, str
     cleaned = []
     i = 0
     while i < len(rows):
-        item, head, mod, desc, sku, tax, qty = rows[i]
+        item, head, mod, desc, sku, qty = rows[i]
         mod, desc = mod.strip(), desc.strip()
 
         # CASE: 2-line module label (common in Dell exports)
         if i + 1 < len(rows):
-            ni, nh, nmod, ndesc, nsku, ntax, nqty = rows[i + 1]
+            ni, nh, nmod, ndesc, nsku, nqty = rows[i + 1]
             if ni == item and nh == head:
                 if desc == "" and ndesc == "" and ":" not in mod and ":" not in nmod:
                     # join "Smart" + "Dock SD25TB5"
                     mod = f"{mod} {nmod}".strip()
                     i += 1
 
-        cleaned.append((item, head, mod, desc, sku, tax, qty))
+        cleaned.append((item, head, mod, desc, sku, qty))
         i += 1
 
     return cleaned
@@ -1708,7 +1723,7 @@ def generate_dell_quote(
           - 'Date' shown at C6 with value at D6 (read from INPUT E18 or PDF "Quote date")
           - Table header at row 8; data from row 9
       - 'Configuration' sheet that replicates the 'Product Details' configuration table(s)
-        PER PRODUCT, preserving columns Module, Description, SKU, Tax Type (dropping Qty/Unit Price/Subtotal/date lines).
+        PER PRODUCT, preserving columns Module, Description, SKU (dropping Qty/Unit Price/Subtotal/date lines).
     """
     logger = _get_logger()
     logger.info("Generating Dell quote (bytes=%d)", len(input_excel_bytes) if input_excel_bytes is not None else 0)
@@ -1767,6 +1782,7 @@ def generate_dell_quote(
             )
 
         quote_meta = _extract_quote_metadata(src_ws)
+        is_compact_quote = False
 
         if _is_grouped_config_template(src_ws):
             logger.info("Detected grouped config Excel template")
@@ -1785,6 +1801,7 @@ def generate_dell_quote(
         else:
             # ---- Extract items (Pricing Summary layout first; else generic) ----
             extracted_config_rows = None
+            is_compact_quote = False
             items_ps = _try_extract_items_from_pricing_summary(src_ws)
             if items_ps:
                 items = items_ps
@@ -1795,6 +1812,7 @@ def generate_dell_quote(
                 if compact_items:
                     items = compact_items
                     extracted_config_rows = compact_config_rows
+                    is_compact_quote = True
                     logger.info("Found %d items via compact quote extraction", len(items))
                     _log_items("Compact quote items", items)
                 else:
@@ -1845,8 +1863,7 @@ def generate_dell_quote(
                 if not config_rows:
                     service_fields_by_item = _extract_excel_service_fields(src_ws)
 
-    # Use today's date on the generated quote instead of the source file date.
-    date_text = datetime.now().strftime("%d/%m/%Y")
+    quote_meta = {k: _strip_trailing_asterisk(v) for k, v in (quote_meta or {}).items()}
 
     if conversion_rate != 1.0:
         items = [
@@ -1881,11 +1898,9 @@ def generate_dell_quote(
                 return normalized
         return ""
 
-    include_part_number = not is_pdf
+    allow_part_number = not is_pdf
     part_numbers_by_item: Dict[str, str] = {}
-    item_headings_by_item = item_headings_by_item if include_part_number else {}
-    item_display_numbers_by_item = item_display_numbers_by_item if include_part_number else {}
-    if include_part_number:
+    if allow_part_number:
         for row_data in config_rows:
             if len(row_data) >= 7:
                 item_no, _heading, _module, _desc, sku, _tax, _qty = row_data
@@ -1894,6 +1909,12 @@ def generate_dell_quote(
             if sku and item_no not in part_numbers_by_item:
                 part_numbers_by_item[item_no] = sku
 
+    has_config_part_number = any(
+        len(row) >= 5 and str(row[4]).strip()
+        for row in config_rows
+    )
+    include_part_number = allow_part_number and not is_compact_quote and has_config_part_number
+
     # ---- Build output workbook ----
     wb = Workbook()
     ws = wb.active
@@ -1901,8 +1922,14 @@ def generate_dell_quote(
     ws.sheet_view.showGridLines = False
 
 
-    helper_unit_col = "J" if include_part_number else "I"
-    helper_margin_col = "K" if include_part_number else "J"
+    if currency_code == "AED":
+        helper_unit_col = "G" if include_part_number else "F"
+        helper_margin_col = "H" if include_part_number else "G"
+    else:
+        helper_unit_col = "J" if include_part_number else "I"
+        helper_margin_col = "K" if include_part_number else "J"
+    helper_value_row = 16 if currency_code == "AED" else 2
+    helper_aux_row = helper_value_row + 1
     desc_col = "C" if include_part_number else "B"
     qty_col = "D" if include_part_number else "C"
     unit_price_col = "E" if include_part_number else "D"
@@ -1910,16 +1937,16 @@ def generate_dell_quote(
 
     # ---- Step 2: Write Consolidation Fee and Factor ----
     # The helper columns store the consolidation fee and per-line margin inputs.
-    ws[f"{helper_unit_col}2"] = consolidation_fee
-    ws[f"{helper_unit_col}2"].font = Font(bold=True, color="1F497D")
-    ws[f"{helper_unit_col}2"].alignment = Alignment(horizontal="center", vertical="center")
+    ws[f"{helper_unit_col}{helper_value_row}"] = consolidation_fee
+    ws[f"{helper_unit_col}{helper_value_row}"].font = Font(bold=True, color="1F497D")
+    ws[f"{helper_unit_col}{helper_value_row}"].alignment = Alignment(horizontal="center", vertical="center")
 
-    ws[f"{helper_unit_col}3"].value = ""
-    ws[f"{helper_unit_col}3"].font = Font(bold=True, color="1F497D")
-    ws[f"{helper_unit_col}3"].alignment = Alignment(horizontal="center", vertical="center")
+    ws[f"{helper_unit_col}{helper_aux_row}"].value = ""
+    ws[f"{helper_unit_col}{helper_aux_row}"].font = Font(bold=True, color="1F497D")
+    ws[f"{helper_unit_col}{helper_aux_row}"].alignment = Alignment(horizontal="center", vertical="center")
 
-    ws[f"{helper_margin_col}2"].font = Font(bold=True, color="1F497D")
-    ws[f"{helper_margin_col}2"].alignment = Alignment(horizontal="center", vertical="center")
+    ws[f"{helper_margin_col}{helper_value_row}"].font = Font(bold=True, color="1F497D")
+    ws[f"{helper_margin_col}{helper_value_row}"].alignment = Alignment(horizontal="center", vertical="center")
 
 
     # Give long descriptions more horizontal space so they don't create very tall rows.
@@ -1939,6 +1966,23 @@ def generate_dell_quote(
         widths["C"] = 8
         widths["D"] = 15
         widths["E"] = 17
+    if currency_code == "AED":
+        widths["A"] = 11
+        if include_part_number:
+            widths["B"] = 16
+            widths["C"] = min(max(42, description_width), 56)
+            widths["D"] = 8
+            widths["E"] = 16
+            widths["F"] = 18
+            widths["G"] = 17
+            widths["H"] = 12
+        else:
+            widths["B"] = min(max(42, description_width), 56)
+            widths["C"] = 8
+            widths["D"] = 16
+            widths["E"] = 18
+            widths["F"] = 17
+            widths["G"] = 12
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
     ws.column_dimensions[helper_unit_col].hidden = False
@@ -1970,20 +2014,60 @@ def generate_dell_quote(
         ws[cell].font = Font(bold=True, size=11, color="1F497D")
         ws[cell].alignment = Alignment(horizontal="left", vertical="center")
 
-    # ===== META =====
-    ws["C8"] = "Quote Ref"
-    ws["C8"].font = Font(bold=True, color="1F497D")
-    ws["D8"] = quote_ref_text
+    section_fill = PatternFill(start_color="D9EAF7", end_color="D9EAF7", fill_type="solid")
+    helper_header_fill = PatternFill(start_color="F4CCCC", end_color="F4CCCC", fill_type="solid")
+    helper_body_fill = PatternFill(start_color="FCE5E5", end_color="FCE5E5", fill_type="solid")
+    helper_font = Font(bold=True, color="9C0006")
+    border_thin = Border(
+        left=Side(style="thin", color="000000"),
+        right=Side(style="thin", color="000000"),
+        top=Side(style="thin", color="000000"),
+        bottom=Side(style="thin", color="000000"),
+    )
 
-    ws["C9"] = "Date"
-    ws["C9"].font = Font(bold=True, color="1F497D")
-    ws["D9"] = date_text
+    def _style_section_title(cell_addr: str):
+        ws[cell_addr].font = Font(bold=True, color="1F497D")
+        ws[cell_addr].alignment = Alignment(horizontal="left", vertical="center")
+        ws[cell_addr].fill = section_fill
+        ws[cell_addr].border = Border(
+            left=Side(style="thin", color="9FBAD0"),
+            right=Side(style="thin", color="9FBAD0"),
+            top=Side(style="thin", color="9FBAD0"),
+            bottom=Side(style="thin", color="9FBAD0"),
+        )
 
     has_aed_expiry = currency_code == "AED" and bool(expiry_text)
-    if has_aed_expiry:
-        ws["C10"] = "Expires By"
-        ws["C10"].font = Font(bold=True, color="1F497D")
-        ws["D10"] = expiry_text
+    if currency_code == "AED":
+        ws.merge_cells("A8:D8")
+        ws["A8"] = "Quote Summary"
+        _style_section_title("A8")
+
+        summary_rows = [
+            (9, "Quote Ref", quote_ref_text),
+            (10, "Date", date_text),
+        ]
+        if has_aed_expiry:
+            summary_rows.append((11, "Expires By", expiry_text))
+
+        for row_idx, label, value in summary_rows:
+            ws[f"A{row_idx}"] = label
+            ws[f"A{row_idx}"].font = Font(bold=True, color="1F497D")
+            ws[f"A{row_idx}"].alignment = Alignment(horizontal="left", vertical="center")
+            ws.merge_cells(start_row=row_idx, start_column=2, end_row=row_idx, end_column=4)
+            ws[f"B{row_idx}"] = value
+            ws[f"B{row_idx}"].alignment = Alignment(horizontal="left", vertical="center")
+
+        customer_title_row = 13 if has_aed_expiry else 12
+    else:
+        # ===== META =====
+        ws["C8"] = "Quote Ref"
+        ws["C8"].font = Font(bold=True, color="1F497D")
+        ws["D8"] = quote_ref_text
+
+        ws["C9"] = "Date"
+        ws["C9"].font = Font(bold=True, color="1F497D")
+        ws["D9"] = date_text
+        customer_title_row = None
 
     # ---- Quote metadata (varies by country/template)
     if currency_code == "AED":
@@ -2000,38 +2084,53 @@ def generate_dell_quote(
             ("Reseller:", quote_meta.get("reseller", "")),
         ]
 
-    meta_label_col = "F" if currency_code == "AED" else "G"
-    meta_value_col = "G" if currency_code == "AED" else "H"
-    meta_value_end_col = "H" if currency_code == "AED" else None
-
     if currency_code == "AED":
-        ws.column_dimensions["F"].width = 14
-        ws.column_dimensions["G"].width = 24
-        ws.column_dimensions["H"].width = 24
+        ws.merge_cells(start_row=customer_title_row, start_column=1, end_row=customer_title_row, end_column=8)
+        ws[f"A{customer_title_row}"] = "Customer Information"
+        _style_section_title(f"A{customer_title_row}")
 
-    for idx, (label, value) in enumerate(meta_rows, start=5):
-        label_addr = f"{meta_label_col}{idx}"
-        value_addr = f"{meta_value_col}{idx}"
+        for idx, (label, value) in enumerate(meta_rows, start=customer_title_row + 1):
+            ws[f"A{idx}"] = label
+            ws[f"A{idx}"].font = Font(bold=True)
+            ws[f"A{idx}"].alignment = Alignment(horizontal="left", vertical="top")
+            ws.merge_cells(start_row=idx, start_column=2, end_row=idx, end_column=8)
+            ws[f"B{idx}"] = value
+            ws[f"B{idx}"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
 
-        ws[label_addr] = label
-        ws[label_addr].font = Font(bold=True)
-        ws[label_addr].alignment = Alignment(horizontal="left", vertical="top")
-
-        if meta_value_end_col:
-            merge_range = f"{meta_value_col}{idx}:{meta_value_end_col}{idx}"
-            if merge_range not in ws.merged_cells:
-                ws.merge_cells(merge_range)
-
-        ws[value_addr] = value
-        ws[value_addr].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
-
-        if currency_code == "AED":
             text_len = len(_cell_to_text(value))
-            estimated_lines = max(1, min(4, (text_len // 28) + 1))
+            estimated_lines = max(1, min(4, (text_len // 32) + 1))
             ws.row_dimensions[idx].height = max(ws.row_dimensions[idx].height or 20, estimated_lines * 18)
 
+        ws[f"{helper_unit_col}{helper_value_row}"] = consolidation_fee
+        ws[f"{helper_unit_col}{helper_value_row}"].font = helper_font
+        ws[f"{helper_unit_col}{helper_value_row}"].alignment = Alignment(horizontal="center", vertical="center")
+        ws[f"{helper_unit_col}{helper_value_row}"].fill = helper_body_fill
+        ws[f"{helper_unit_col}{helper_value_row}"].border = border_thin
+        ws[f"{helper_margin_col}{helper_value_row}"].font = helper_font
+        ws[f"{helper_margin_col}{helper_value_row}"].alignment = Alignment(horizontal="center", vertical="center")
+        ws[f"{helper_margin_col}{helper_value_row}"].fill = helper_body_fill
+        ws[f"{helper_margin_col}{helper_value_row}"].border = border_thin
+    else:
+        meta_label_col = "G"
+        meta_value_col = "H"
+        meta_value_end_col = None
+
+        for idx, (label, value) in enumerate(meta_rows, start=5):
+            label_addr = f"{meta_label_col}{idx}"
+            value_addr = f"{meta_value_col}{idx}"
+
+            ws[label_addr] = label
+            ws[label_addr].font = Font(bold=True)
+            ws[label_addr].alignment = Alignment(horizontal="left", vertical="top")
+
+            ws[value_addr] = value
+            ws[value_addr].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+
     # ===== TABLE HEADER at row 8; data from row 9 =====
-    header_row = 11 if has_aed_expiry else 10
+    if currency_code == "AED":
+        header_row = helper_aux_row + 1
+    else:
+        header_row = 11 if has_aed_expiry else 10
     ws[f"A{header_row}"] = "Sr. No."
     if include_part_number:
         ws[f"B{header_row}"] = "Part Number"
@@ -2043,20 +2142,14 @@ def generate_dell_quote(
     )
     ws[f"{helper_unit_col}{header_row}"] = "Original Unit Price"
     ws[f"{helper_margin_col}{header_row}"] = "Margin"
-    header_fill = PatternFill(start_color="9BBB59", end_color="9BBB59", fill_type="solid")
+    header_fill = PatternFill(start_color="9BC2E6", end_color="9BC2E6", fill_type="solid")
     header_font = Font(bold=True, color="000000")
-    border_thin = Border(
-        left=Side(style="thin", color="000000"),
-        right=Side(style="thin", color="000000"),
-        top=Side(style="thin", color="000000"),
-        bottom=Side(style="thin", color="000000"),
-    )
 
     header_cells = [f"A{header_row}", f"{desc_col}{header_row}", f"{qty_col}{header_row}", f"{unit_price_col}{header_row}", f"{total_price_col}{header_row}", f"{helper_unit_col}{header_row}", f"{helper_margin_col}{header_row}"]
     if include_part_number:
         header_cells.insert(1, f"B{header_row}")
     for addr in header_cells:
-        ws[addr].fill = header_fill
+        ws[addr].fill = helper_header_fill if addr in (f"{helper_unit_col}{header_row}", f"{helper_margin_col}{header_row}") else header_fill
         ws[addr].font = header_font
         ws[addr].alignment = Alignment(horizontal="center", vertical="center")
         ws[addr].border = border_thin
@@ -2097,7 +2190,7 @@ def generate_dell_quote(
         ws[f"{helper_margin_col}{row_ptr}"].number_format = margin_fmt
 
         # ---- Unit Price shows the adjusted unit price
-        ws[f"{unit_price_col}{row_ptr}"].value = f"=ROUND(((({helper_unit_col}{row_ptr}*${helper_margin_col}$2)+{helper_unit_col}{row_ptr})/(1-{helper_margin_col}{row_ptr}/100)),2)"
+        ws[f"{unit_price_col}{row_ptr}"].value = f"=ROUND(((({helper_unit_col}{row_ptr}*${helper_margin_col}${helper_value_row})+{helper_unit_col}{row_ptr})/(1-{helper_margin_col}{row_ptr}/100)),2)"
         ws[f"{unit_price_col}{row_ptr}"].number_format = currency_fmt
 
         # ---- Total Price = Qty * adjusted unit price
@@ -2109,7 +2202,7 @@ def generate_dell_quote(
         if include_part_number:
             data_cells.insert(1, f"B{row_ptr}")
         for addr in data_cells:
-            ws[addr].fill = yellow
+            ws[addr].fill = helper_body_fill if addr in (f"{helper_unit_col}{row_ptr}", f"{helper_margin_col}{row_ptr}") else yellow
             ws[addr].border = border_thin
             ws[addr].alignment = Alignment(horizontal="center", vertical="top")
         ws[f"{desc_col}{row_ptr}"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
@@ -2121,9 +2214,9 @@ def generate_dell_quote(
     first_data_row = header_row + 1
     last_data_row = row_ptr - 1
     if last_data_row >= first_data_row:
-        ws[f"{helper_margin_col}2"] = f"=IFERROR(${helper_unit_col}$2/SUMPRODUCT(${qty_col}${first_data_row}:${qty_col}${last_data_row},${helper_unit_col}${first_data_row}:${helper_unit_col}${last_data_row}),0)"
+        ws[f"{helper_margin_col}{helper_value_row}"] = f"=IFERROR(${helper_unit_col}${helper_value_row}/SUMPRODUCT(${qty_col}${first_data_row}:${qty_col}${last_data_row},${helper_unit_col}${first_data_row}:${helper_unit_col}${last_data_row}),0)"
     else:
-        ws[f"{helper_margin_col}2"] = 0
+        ws[f"{helper_margin_col}{helper_value_row}"] = 0
 
     # ===== TOTAL ROW =====
     total_label_col = "C" if include_part_number else "B"
@@ -2141,6 +2234,11 @@ def generate_dell_quote(
     ws[f"{total_value_col}{row_ptr}"].font = Font(bold=True, color="1F497D")
     ws[f"{total_value_col}{row_ptr}"].alignment = Alignment(horizontal="center", vertical="center")
     ws[f"{total_value_col}{row_ptr}"].border = border_thin
+    if currency_code == "AED":
+        ws[f"{helper_unit_col}{row_ptr}"].fill = helper_body_fill
+        ws[f"{helper_margin_col}{row_ptr}"].fill = helper_body_fill
+        ws[f"{helper_unit_col}{row_ptr}"].border = border_thin
+        ws[f"{helper_margin_col}{row_ptr}"].border = border_thin
 
     # Footer notes
     if currency_code == "AED":
@@ -2187,9 +2285,10 @@ def generate_dell_quote(
             "",
             "Kindly also ensure to review the proposal specifications from your end and ensure that they match the requirements exactly as per the End User.",
         ]
-    footer_row = max(row_ptr + 2, 22)
+    footer_row = max(row_ptr + 2, 22 if currency_code != "AED" else header_row + 8)
     for line in notes:
-        ws.merge_cells(start_row=footer_row, start_column=2, end_row=footer_row, end_column=6)
+        footer_end_col = 8 if currency_code == "AED" else 6
+        ws.merge_cells(start_row=footer_row, start_column=2, end_row=footer_row, end_column=footer_end_col)
         ws.cell(footer_row, 2).value = line
         ws.cell(footer_row, 2).alignment = Alignment(wrap_text=True, vertical="top")
         footer_row += 1
@@ -2214,12 +2313,11 @@ def generate_dell_quote(
         ws2.column_dimensions["B"].width = 70  # Module
         ws2.column_dimensions["C"].width = 100  # Description
         ws2.column_dimensions["D"].width = 20  # SKU
-        ws2.column_dimensions["E"].width = 14  # Tax Type
-        ws2.column_dimensions["F"].width = 10  # Qty
+        ws2.column_dimensions["E"].width = 10  # Qty
 
     r2 = 1
     title_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
-    section_fill = PatternFill(start_color="E2F0D9", end_color="E2F0D9", fill_type="solid")
+    section_fill = PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid")
     thin_gray = Border(
         left=Side(style="thin", color="DDDDDD"),
         right=Side(style="thin", color="DDDDDD"),
@@ -2243,10 +2341,14 @@ def generate_dell_quote(
                 ("A", "Item #"),
                 ("B", "Module"),
                 ("C", "Description"),
-                ("D", "SKU"),
-                ("E", "Tax Type"),
-                ("F", "Qty"),
             ]
+            if show_sku_col:
+                headers.extend([
+                    ("D", "SKU"),
+                    ("E", "Qty"),
+                ])
+            else:
+                headers.append(("D", "Qty"))
 
         for col, label in headers:
             addr = f"{col}{row_index}"
@@ -2261,6 +2363,12 @@ def generate_dell_quote(
                 bottom=Side(style="thin", color="000000"),
             )
         ws2.row_dimensions[row_index].height = 20
+
+    # Determine whether any configuration rows include actual SKU values.
+    show_sku_col = any(
+        len(row) >= 5 and str(row[4]).strip()
+        for row in config_rows
+    )
 
     # Header row
     write_table_header(r2)
@@ -2331,42 +2439,44 @@ def generate_dell_quote(
             extracted_heading = rows_for_item[0][1] if rows_for_item and rows_for_item[0][1] else ""
             item_heading = fallback_heading if extracted_heading in ("", f"Item {idx}") else extracted_heading
 
-            ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=6)
+            ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=5)
             ws2[f"A{r2}"] = f"Item {display_item_no}"
             ws2[f"A{r2}"].font = Font(bold=True, color="1F497D")
             ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
             r2 += 1
 
-            ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=6)
+            ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=5)
             ws2[f"A{r2}"] = item_heading
             ws2[f"A{r2}"].font = Font(italic=True, color="1F497D")
             ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
             r2 += 1
 
             if not rows_for_item:
-                ws2.merge_cells(start_row=r2, start_column=2, end_row=r2, end_column=6)
+                ws2.merge_cells(start_row=r2, start_column=2, end_row=r2, end_column=5)
                 ws2[f"B{r2}"] = "(No configuration details found for this item)"
                 ws2[f"B{r2}"].font = Font(italic=True, color="7F7F7F")
                 ws2[f"B{r2}"].alignment = Alignment(horizontal="left", vertical="center")
-                for col in ("A", "B", "C", "D", "E", "F"):
+                for col in ("A", "B", "C", "D", "E"):
                     ws2[f"{col}{r2}"].border = thin_gray
                 r2 += 1
                 continue
 
             for row_data in rows_for_item:
-                if len(row_data) >= 7:
-                    _, _, module, dsc, sku, tax, qty = row_data
+                if len(row_data) >= 6:
+                    _, _, module, dsc, sku, qty = row_data
                 else:
-                    _, _, module, dsc, sku, tax = row_data
+                    _, _, module, dsc, sku = row_data
                     qty = ""
-                if _is_config_section_row(module, dsc, sku, tax):
+                if _is_config_section_row(module, dsc, sku):
                     ws2[f"A{r2}"] = ""
-                    ws2.merge_cells(start_row=r2, start_column=2, end_row=r2, end_column=6)
+                    end_col = 5 if show_sku_col else 4
+                    ws2.merge_cells(start_row=r2, start_column=2, end_row=r2, end_column=end_col)
                     ws2[f"B{r2}"] = module
                     ws2[f"B{r2}"].font = Font(bold=True, color="1F1F1F")
                     ws2[f"B{r2}"].fill = section_fill
                     ws2[f"B{r2}"].alignment = Alignment(horizontal="left", vertical="center")
-                    for col in ("A", "B", "C", "D", "E", "F"):
+                    cols = ("A", "B", "C", "D", "E") if show_sku_col else ("A", "B", "C", "D")
+                    for col in cols:
                         ws2[f"{col}{r2}"].border = thin_gray
                     r2 += 1
                     continue
@@ -2374,10 +2484,14 @@ def generate_dell_quote(
                 ws2[f"A{r2}"] = ""
                 ws2[f"B{r2}"] = module
                 ws2[f"C{r2}"] = dsc
-                ws2[f"D{r2}"] = sku
-                ws2[f"E{r2}"] = tax
-                ws2[f"F{r2}"] = qty
-                for col in ("A", "B", "C", "D", "E", "F"):
+                if show_sku_col:
+                    ws2[f"D{r2}"] = sku
+                    ws2[f"E{r2}"] = qty
+                    cols = ("A", "B", "C", "D", "E")
+                else:
+                    ws2[f"D{r2}"] = qty
+                    cols = ("A", "B", "C", "D")
+                for col in cols:
                     ws2[f"{col}{r2}"].alignment = Alignment(vertical="top", wrap_text=True)
                     ws2[f"{col}{r2}"].border = thin_gray
                 r2 += 1
