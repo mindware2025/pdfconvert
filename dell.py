@@ -103,6 +103,7 @@ def _strip_trailing_asterisk(value: str) -> str:
     if value is None:
         return ""
     text = _cell_to_text(value)
+    text = text.split("|")[0]
     text = re.sub(r"\*+", "", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
