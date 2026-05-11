@@ -2181,9 +2181,7 @@ def generate_dell_quote(
     row_ptr = header_row + 1
     sr_no = 1
     currency_fmt = CURRENCY_NUMBER_FORMATS.get(currency_code, f'"{currency_code}" #,##0.00')
-    margin_fmt = '0.00\\%'
-    yellow = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
-    total_cells = []
+    yellow = PatternFill(start_color="D9EAF7", end_color="D9EAF7", fill_type="solid")
 
     for (desc_text, qty_val, unit_val, subtotal_val) in items:
         ws[f"A{row_ptr}"] = sr_no

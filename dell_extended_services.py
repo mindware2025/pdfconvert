@@ -379,7 +379,7 @@ def generate_dell_extended_services_quote(
     sr_no = 1
     currency_fmt = '"AED" #,##0.00'
     margin_fmt = '0.00%'
-    yellow = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+    yellow = PatternFill(start_color="D9EAF7", end_color="D9EAF7", fill_type="solid")
     helper_body_fill = PatternFill(start_color="FCE5E5", end_color="FCE5E5", fill_type="solid")
     total_cells = []
 
