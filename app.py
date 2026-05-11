@@ -31,6 +31,10 @@ from extractors.freight_forwarder_processor import (
     create_excel_file as create_freight_forwarder_excel_file,
     process_freight_forwarder_pdfs,
 )
+from sales.dell_extended_services import generate_dell_extended_services_quote
+from sales.dell import build_dell_output_filename, generate_dell_quote
+from sales.dell_extended_services import build_dell_extended_services_output_filename
+from sales.quotetemplate import detect_dell_template
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
 from ibm import extract_ibm_data_from_pdf, create_styled_excel, create_styled_excel_template2, correct_descriptions, extract_last_page_text
@@ -937,6 +941,7 @@ elif team == "Sales":
     TOOL_OPTIONS = [
         "IBM Quotation",
         "MIBB Quotations",
+        "💻 Dell Quotation",
     ]
 else:
     TOOL_OPTIONS = ["-- Select a tool --"]
@@ -1900,6 +1905,72 @@ elif tool == "🟥 Lenovo CNTS Tool - KSA":
 
     else:
         st.info("Upload Lenovo KSA credit note PDFs to begin.")
+        
+elif tool == "💻 Dell Quotation":
+    st.title("💼 Dell Quotation Tool")
+
+    uploaded = st.file_uploader(
+    "Upload Dell BOQ Excel or PDF",
+    type=["xlsx", "xlsm", "xls", "pdf"],
+    accept_multiple_files=False,
+)
+
+    margin_percent = st.number_input(
+        "Default Margin %",
+        min_value=0.0,
+        max_value=100.0,
+        value=0.0,
+        step=0.5,
+    )
+
+    currency_code = st.radio(
+        "Currency",
+        ["USD", "QAR", "AED"],
+        horizontal=True,
+    )
+
+    if st.button("Generate Dell Quotation"):
+        if not uploaded:
+            st.warning("Please upload a file.")
+        else:
+            input_bytes = uploaded.read()
+            output_name = "Dell_Quotation.xlsx"
+
+            with st.spinner("Generating..."):
+                try:
+                    template_type = detect_dell_template(input_bytes)
+
+                    if template_type == "extended_services":
+                        out_bytes = generate_dell_extended_services_quote(
+                            input_excel_bytes=input_bytes,
+                            margin_percent=margin_percent,
+                        )
+                        output_name = build_dell_extended_services_output_filename(
+                            input_excel_bytes=input_bytes,
+                        )
+                    else:
+                        out_bytes = generate_dell_quote(
+                            input_excel_bytes=input_bytes,
+                            margin_percent=margin_percent,
+                            currency_code=currency_code,
+                        )
+                        output_name = build_dell_output_filename(
+                            input_excel_bytes=input_bytes,
+                            currency_code=currency_code,
+                        )
+
+                except Exception as e:
+                    st.error(f"Generation failed: {e}")
+                    st.stop()
+
+                st.download_button(
+                    "⬇️ Download quotation",
+                    data=out_bytes,
+                    file_name=output_name,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+
+                st.success("Done ✅")
  
 
 st.markdown("""
