@@ -1968,6 +1968,7 @@ elif tool == "💻 Dell Quotation":
                     data=out_bytes,
                     file_name=output_name,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    on_click=lambda: update_usage("Dell Quotation Tool", team),
                 )
 
                 st.success("Done ✅")
