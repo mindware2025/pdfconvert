@@ -2058,40 +2058,31 @@ def generate_dell_quote(
             bottom=Side(style="thin", color="9FBAD0"),
         )
 
-    has_aed_expiry = currency_code == "AED" and bool(expiry_text)
-    if currency_code == "AED":
-        ws.merge_cells("A8:D8")
-        ws["A8"] = "Quote Summary"
-        _style_section_title("A8")
+    # ---- Quote Summary Section (Same layout for all currencies) ----
+    has_currency_expiry = bool(expiry_text) and currency_code == "AED"
+    
+    ws.merge_cells("A8:D8")
+    ws["A8"] = "Quote Summary"
+    _style_section_title("A8")
 
-        summary_rows = [
-            (9, "Quote Ref", quote_ref_text),
-            (10, "Date", date_text),
-        ]
-        if has_aed_expiry:
-            summary_rows.append((11, "Expires By", expiry_text))
+    summary_rows = [
+        (9, "Quote Ref", quote_ref_text),
+        (10, "Date", date_text),
+    ]
+    if has_currency_expiry:
+        summary_rows.append((11, "Expires By", expiry_text))
 
-        for row_idx, label, value in summary_rows:
-            ws[f"A{row_idx}"] = label
-            ws[f"A{row_idx}"].font = Font(bold=True, color="1F497D")
-            ws[f"A{row_idx}"].alignment = Alignment(horizontal="left", vertical="center")
-            ws.merge_cells(start_row=row_idx, start_column=2, end_row=row_idx, end_column=4)
-            ws[f"B{row_idx}"] = value
-            ws[f"B{row_idx}"].alignment = Alignment(horizontal="left", vertical="center")
+    for row_idx, label, value in summary_rows:
+        ws[f"A{row_idx}"] = label
+        ws[f"A{row_idx}"].font = Font(bold=True, color="1F497D")
+        ws[f"A{row_idx}"].alignment = Alignment(horizontal="left", vertical="center")
+        ws.merge_cells(start_row=row_idx, start_column=2, end_row=row_idx, end_column=4)
+        ws[f"B{row_idx}"] = value
+        ws[f"B{row_idx}"].alignment = Alignment(horizontal="left", vertical="center")
 
-        customer_title_row = 13 if has_aed_expiry else 12
-    else:
-        # ===== META =====
-        ws["C8"] = "Quote Ref"
-        ws["C8"].font = Font(bold=True, color="1F497D")
-        ws["D8"] = quote_ref_text
+    customer_title_row = 12 if has_currency_expiry else 11
 
-        ws["C9"] = "Date"
-        ws["C9"].font = Font(bold=True, color="1F497D")
-        ws["D9"] = date_text
-        customer_title_row = None
-
-    # ---- Quote metadata (varies by country/template)
+    # ---- Quote metadata (varies by country/template) ----
     if currency_code == "AED":
         meta_rows = [
             ("End User:", quote_meta.get("end user", "")),
@@ -2106,53 +2097,40 @@ def generate_dell_quote(
             ("Reseller:", quote_meta.get("reseller", "")),
         ]
 
-    if currency_code == "AED":
-        ws.merge_cells(start_row=customer_title_row, start_column=1, end_row=customer_title_row, end_column=8)
-        ws[f"A{customer_title_row}"] = "Customer Information"
-        _style_section_title(f"A{customer_title_row}")
+    # ---- Customer Information Section (Same layout for all currencies) ----
+    ws.merge_cells(start_row=customer_title_row, start_column=1, end_row=customer_title_row, end_column=8)
+    ws[f"A{customer_title_row}"] = "Customer Information"
+    _style_section_title(f"A{customer_title_row}")
 
-        for idx, (label, value) in enumerate(meta_rows, start=customer_title_row + 1):
-            ws[f"A{idx}"] = label
-            ws[f"A{idx}"].font = Font(bold=True)
-            ws[f"A{idx}"].alignment = Alignment(horizontal="left", vertical="top")
-            ws.merge_cells(start_row=idx, start_column=2, end_row=idx, end_column=8)
-            ws[f"B{idx}"] = value
-            ws[f"B{idx}"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+    for idx, (label, value) in enumerate(meta_rows, start=customer_title_row + 1):
+        ws[f"A{idx}"] = label
+        ws[f"A{idx}"].font = Font(bold=True)
+        ws[f"A{idx}"].alignment = Alignment(horizontal="left", vertical="top")
+        ws.merge_cells(start_row=idx, start_column=2, end_row=idx, end_column=8)
+        ws[f"B{idx}"] = value
+        ws[f"B{idx}"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
 
-            text_len = len(_cell_to_text(value))
-            estimated_lines = max(1, min(4, (text_len // 32) + 1))
-            ws.row_dimensions[idx].height = max(ws.row_dimensions[idx].height or 20, estimated_lines * 18)
+        text_len = len(_cell_to_text(value))
+        estimated_lines = max(1, min(4, (text_len // 32) + 1))
+        ws.row_dimensions[idx].height = max(ws.row_dimensions[idx].height or 20, estimated_lines * 18)
 
-        ws[f"{helper_unit_col}{helper_value_row}"] = consolidation_fee
-        ws[f"{helper_unit_col}{helper_value_row}"].font = helper_font
-        ws[f"{helper_unit_col}{helper_value_row}"].alignment = Alignment(horizontal="center", vertical="center")
-        ws[f"{helper_unit_col}{helper_value_row}"].fill = helper_body_fill
-        ws[f"{helper_unit_col}{helper_value_row}"].border = border_thin
-        ws[f"{helper_margin_col}{helper_value_row}"].font = helper_font
-        ws[f"{helper_margin_col}{helper_value_row}"].alignment = Alignment(horizontal="center", vertical="center")
-        ws[f"{helper_margin_col}{helper_value_row}"].fill = helper_body_fill
-        ws[f"{helper_margin_col}{helper_value_row}"].border = border_thin
-    else:
-        meta_label_col = "G"
-        meta_value_col = "H"
-        meta_value_end_col = None
+    # ---- Recalculate helper row positions based on where metadata ends ----
+    last_metadata_row = customer_title_row + len(meta_rows)
+    helper_value_row = last_metadata_row + 1
+    helper_aux_row = helper_value_row + 1
 
-        for idx, (label, value) in enumerate(meta_rows, start=5):
-            label_addr = f"{meta_label_col}{idx}"
-            value_addr = f"{meta_value_col}{idx}"
+    ws[f"{helper_unit_col}{helper_value_row}"] = consolidation_fee
+    ws[f"{helper_unit_col}{helper_value_row}"].font = helper_font
+    ws[f"{helper_unit_col}{helper_value_row}"].alignment = Alignment(horizontal="center", vertical="center")
+    ws[f"{helper_unit_col}{helper_value_row}"].fill = helper_body_fill
+    ws[f"{helper_unit_col}{helper_value_row}"].border = border_thin
+    ws[f"{helper_margin_col}{helper_value_row}"].font = helper_font
+    ws[f"{helper_margin_col}{helper_value_row}"].alignment = Alignment(horizontal="center", vertical="center")
+    ws[f"{helper_margin_col}{helper_value_row}"].fill = helper_body_fill
+    ws[f"{helper_margin_col}{helper_value_row}"].border = border_thin
 
-            ws[label_addr] = label
-            ws[label_addr].font = Font(bold=True)
-            ws[label_addr].alignment = Alignment(horizontal="left", vertical="top")
-
-            ws[value_addr] = value
-            ws[value_addr].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
-
-    # ===== TABLE HEADER at row 8; data from row 9 =====
-    if currency_code == "AED":
-        header_row = helper_aux_row + 1
-    else:
-        header_row = 11 if has_aed_expiry else 10
+    # ===== TABLE HEADER (Same position logic for all currencies) =====
+    header_row = helper_aux_row + 1
     ws[f"A{header_row}"] = "Sr. No."
     if include_part_number:
         ws[f"B{header_row}"] = "Part Number"
@@ -2307,7 +2285,7 @@ def generate_dell_quote(
             "",
             "Kindly also ensure to review the proposal specifications from your end and ensure that they match the requirements exactly as per the End User.",
         ]
-    footer_row = max(row_ptr + 2, 22 if currency_code != "AED" else header_row + 8)
+    footer_row = max(row_ptr + 2, header_row + 8)
     for line in notes:
         footer_end_col = 8 if currency_code == "AED" else 6
         ws.merge_cells(start_row=footer_row, start_column=2, end_row=footer_row, end_column=footer_end_col)
