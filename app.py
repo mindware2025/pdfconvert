@@ -1915,28 +1915,37 @@ elif tool == "💻 Dell Quotation":
     uploaded = st.file_uploader(
         "Upload Dell BOQ Excel or PDF",
         type=["xlsx", "xlsm", "xls", "pdf"],
+        key="dell_uploader"
     )
 
     margin_percent = st.number_input(
         "Default Margin %",
         min_value=0.0,
         max_value=100.0,
-        value=0.0,
+        value=5.0,
         step=0.5,
+        key="dell_margin"
     )
 
     currency_code = st.radio(
         "Currency",
         ["USD", "QAR", "AED"],
         horizontal=True,
+        key="dell_currency"
     )
 
-    if uploaded:
-        input_bytes = uploaded.getvalue()
+    # ✅ INIT STATE ONCE
+    if "dell_output" not in st.session_state:
+        st.session_state.dell_output = None
+        st.session_state.dell_filename = None
 
+    if uploaded:
         st.success("✅ File ready")
 
-        if st.button("🚀 Generate Quote"):
+        # ✅ IMPORTANT: use getvalue (NOT read)
+        input_bytes = uploaded.getvalue()
+
+        if st.button("🚀 Generate Quote", key="generate_dell"):
 
             try:
                 template_type = detect_dell_template(input_bytes)
@@ -1947,33 +1956,43 @@ elif tool == "💻 Dell Quotation":
                         margin_percent=margin_percent,
                     )
                     output_name = build_dell_extended_services_output_filename(input_bytes)
+
                 else:
                     out_bytes = generate_dell_quote(
                         input_excel_bytes=input_bytes,
                         margin_percent=margin_percent,
                         currency_code=currency_code,
                     )
-                    output_name = build_dell_output_filename(input_bytes, currency_code)
+                    output_name = build_dell_output_filename(
+                        input_excel_bytes=input_bytes,
+                        currency_code=currency_code,
+                    )
 
-                # ✅ Store result
-                st.session_state["dell_output"] = out_bytes
-                st.session_state["dell_filename"] = output_name
+                # ✅ STORE OUTPUT
+                st.session_state.dell_output = out_bytes
+                st.session_state.dell_filename = output_name
+
+                st.success("✅ Quote generated")
+
+                # ✅ FORCE rerun so UI refreshes properly
+                st.rerun()
 
             except Exception:
+                import traceback
                 st.error(traceback.format_exc())
 
-    # ✅ ALWAYS render output if exists (like IBM UI rebuild)
+    # ✅ ALWAYS SHOW DOWNLOAD IF EXISTS
     if st.session_state.get("dell_output"):
 
-        st.success("✅ Quotation ready")
+        st.success("✅ Ready to download")
 
         st.download_button(
-            "⬇️ Download quotation",
-            data=st.session_state["dell_output"],
-            file_name=st.session_state["dell_filename"],
+            label="⬇️ Download quotation",
+            data=st.session_state.dell_output,
+            file_name=st.session_state.dell_filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="download_dell"
         )
-
  
 
 st.markdown("""
