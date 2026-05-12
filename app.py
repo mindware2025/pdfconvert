@@ -1930,14 +1930,19 @@ elif tool == "💻 Dell Quotation":
         horizontal=True,
     )
 
+    # ✅ INIT SESSION STORAGE
+    if "dell_output" not in st.session_state:
+        st.session_state["dell_output"] = None
+        st.session_state["dell_filename"] = None
+
     if st.button("🚀 Generate Quote"):
         if not uploaded:
             st.warning("⚠️ Please upload a file first")
             st.stop()
 
         try:
-            # ✅ FIX: read file ONLY here
-            input_bytes = uploaded.read()
+            # ✅ SAFE FILE READ
+            input_bytes = uploaded.getvalue()
 
             template_type = detect_dell_template(input_bytes)
 
@@ -1959,20 +1964,23 @@ elif tool == "💻 Dell Quotation":
                     currency_code=currency_code,
                 )
 
-            if out_bytes:
-                st.success("✅ Quotation ready")
-
-                st.download_button(
-                    "⬇️ Download quotation",
-                    data=out_bytes,
-                    file_name=output_name,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
-            else:
-                st.error("❌ Output empty")
+            # ✅ STORE RESULT
+            st.session_state["dell_output"] = out_bytes
+            st.session_state["dell_filename"] = output_name
 
         except Exception:
             st.error(traceback.format_exc())
+
+    # ✅ ALWAYS SHOW DOWNLOAD IF DATA EXISTS
+    if st.session_state["dell_output"]:
+        st.success("✅ Quotation ready")
+
+        st.download_button(
+            "⬇️ Download quotation",
+            data=st.session_state["dell_output"],
+            file_name=st.session_state["dell_filename"],
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
  
 
 st.markdown("""
