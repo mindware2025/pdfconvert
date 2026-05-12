@@ -1932,39 +1932,15 @@ elif tool == "💻 Dell Quotation":
         horizontal=True,
     )
 
-    if "dell_quote_uploaded_id" not in st.session_state:
-        st.session_state.dell_quote_uploaded_id = None
-    if "dell_quote_out_bytes" not in st.session_state:
-        st.session_state.dell_quote_out_bytes = None
-    if "dell_quote_output_name" not in st.session_state:
-        st.session_state.dell_quote_output_name = None
-    if "dell_quote_debug" not in st.session_state:
-        st.session_state.dell_quote_debug = ""
-    if "dell_quote_generated" not in st.session_state:
-        st.session_state.dell_quote_generated = False
-
-    current_uploaded_id = None
     input_bytes = None
     if uploaded is not None:
         try:
             input_bytes = uploaded.getvalue()
-            current_uploaded_id = (
-                uploaded.name,
-                len(input_bytes),
-                hashlib.sha256(input_bytes).hexdigest(),
-            )
-        except Exception:
-            current_uploaded_id = (uploaded.name, None, None)
+        except Exception as e:
+            st.error(f"Unable to read uploaded file: {e}")
             input_bytes = None
 
-    if st.session_state.dell_quote_uploaded_id != current_uploaded_id:
-        st.session_state.dell_quote_uploaded_id = current_uploaded_id
-        st.session_state.dell_quote_out_bytes = None
-        st.session_state.dell_quote_output_name = None
-        st.session_state.dell_quote_debug = "New upload detected."
-        st.session_state.dell_quote_generated = False
-
-    if uploaded and input_bytes is not None and not st.session_state.dell_quote_generated:
+    if uploaded is not None and input_bytes is not None:
         st.write("File uploaded, starting detection")
         st.write("Uploaded file:", getattr(uploaded, 'name', 'unknown'), "size:", len(input_bytes))
 
@@ -2002,41 +1978,23 @@ elif tool == "💻 Dell Quotation":
                 else:
                     raise TypeError(f"Unexpected Dell output type: {type(raw_output)}")
 
-                if out_bytes and len(out_bytes) > 0:
-                    st.session_state.dell_quote_out_bytes = out_bytes
-                    st.session_state.dell_quote_output_name = output_name
-                    st.session_state.dell_quote_debug = f"Generated successfully: {len(out_bytes)} bytes."
-                    st.session_state.dell_quote_generated = True
-                    st.success("Dell quotation generated successfully.")
-                else:
-                    st.session_state.dell_quote_out_bytes = None
-                    st.session_state.dell_quote_output_name = None
-                    st.session_state.dell_quote_generated = False
-                    st.session_state.dell_quote_debug = "Generation returned empty bytes. Check the input file format."
-                    st.error("Generation completed, but no output bytes were produced.")
+                if not out_bytes:
+                    raise ValueError("Generated output is empty.")
+
+                st.success("Dell quotation generated successfully.")
+                st.download_button(
+                    "⬇️ Download quotation",
+                    data=out_bytes,
+                    file_name=output_name,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="dell_quote_download",
+                )
 
             except Exception as e:
-                st.session_state.dell_quote_out_bytes = None
-                st.session_state.dell_quote_output_name = None
-                st.session_state.dell_quote_generated = False
-                st.session_state.dell_quote_debug = traceback.format_exc()
                 st.error(f"Generation failed: {e}")
-                st.text_area("Traceback", st.session_state.dell_quote_debug, height=240)
-
-    if st.session_state.dell_quote_generated and st.session_state.dell_quote_out_bytes:
-        st.success("Dell quotation is ready for download.")
-        st.download_button(
-            "⬇️ Download quotation",
-            data=st.session_state.dell_quote_out_bytes,
-            file_name=st.session_state.dell_quote_output_name or "Dell_Quotation.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="dell_quote_download",
-        )
+                st.text_area("Traceback", traceback.format_exc(), height=240)
     else:
-        if uploaded is None:
-            st.info("Upload your Dell BOQ Excel or PDF to generate the download immediately.")
-        if st.session_state.dell_quote_debug:
-            st.write(f"Debug: {st.session_state.dell_quote_debug}")
+        st.info("Upload your Dell BOQ Excel or PDF to generate and download immediately.")
  
 
 st.markdown("""
