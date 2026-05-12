@@ -1946,7 +1946,7 @@ elif tool == "💻 Dell Quotation":
         if not uploaded:
             st.warning("Please upload a file.")
         else:
-            input_bytes = uploaded.read()
+            input_bytes = uploaded.getvalue()
             st.write("File uploaded, starting detection")
             output_name = "Dell_Quotation.xlsx"
 
@@ -1974,10 +1974,11 @@ elif tool == "💻 Dell Quotation":
                             currency_code=currency_code,
                         )
 
-                    st.write("Generation completed")
                     st.session_state.dell_out_bytes = out_bytes
                     st.session_state.dell_output_name = output_name
                     st.session_state.dell_generated = True
+                    st.success("Dell quotation generated successfully.")
+                    st.experimental_rerun()
 
                 except Exception as e:
                     st.error(f"Generation failed: {e}")
@@ -1991,6 +1992,7 @@ elif tool == "💻 Dell Quotation":
             data=st.session_state.dell_out_bytes,
             file_name=st.session_state.dell_output_name,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dell_quote_download",
         )
         st.success("Done ✅")
  
