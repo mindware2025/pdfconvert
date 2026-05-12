@@ -1963,15 +1963,19 @@ elif tool == "💻 Dell Quotation":
                     st.error(f"Generation failed: {e}")
                     st.stop()
 
-            st.download_button(
-                "⬇️ Download quotation",
-                data=out_bytes,
-                file_name=output_name,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                on_click=lambda: update_usage(f"Dell Quotation Tool ({currency_code})", team),
-            )
+            if out_bytes:
+                st.download_button(
+                    "⬇️ Download quotation",
+                    data=out_bytes,
+                    file_name=output_name,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    on_click=lambda: update_usage(f"Dell Quotation Tool ({currency_code})", team),
+                )
 
-            st.success("Done ✅")
+                st.success("Done ✅")
+                st.info(f"Generated file: {output_name}")
+            else:
+                st.error("Generation produced no output. Please check the input file.")
  
 
 st.markdown("""
