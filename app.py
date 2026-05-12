@@ -1952,7 +1952,8 @@ elif tool == "💻 Dell Quotation":
         st.session_state.dell_quote_output_name = None
         st.session_state.dell_quote_debug = "New upload detected. Ready to generate."
 
-    if st.button("Generate Dell Quotation", key="dell_quote_generate"):
+    generate_clicked = st.button("Generate Dell Quotation", key="dell_quote_generate")
+    if generate_clicked:
         if not uploaded:
             st.warning("Please upload a file.")
             st.session_state.dell_quote_debug = "No file uploaded."
@@ -1984,24 +1985,29 @@ elif tool == "💻 Dell Quotation":
                             currency_code=currency_code,
                         )
 
-                    if out_bytes:
+                    if out_bytes and len(out_bytes) > 0:
                         st.session_state.dell_quote_out_bytes = out_bytes
                         st.session_state.dell_quote_output_name = output_name
-                        st.session_state.dell_quote_debug = (
-                            f"Generated successfully: {len(out_bytes)} bytes."
+                        st.session_state.dell_quote_debug = f"Generated successfully: {len(out_bytes)} bytes."
+                        st.success("Dell quotation generated successfully.")
+                        st.download_button(
+                            "⬇️ Download quotation",
+                            data=out_bytes,
+                            file_name=output_name,
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key="dell_quote_download_instant",
                         )
                     else:
                         st.session_state.dell_quote_out_bytes = None
                         st.session_state.dell_quote_output_name = None
-                        st.session_state.dell_quote_debug = (
-                            "Generation returned empty bytes. Check the input file format."
-                        )
+                        st.session_state.dell_quote_debug = "Generation returned empty bytes. Check the input file format."
+                        st.error("Generation completed, but no output bytes were produced.")
 
                 except Exception as e:
-                    st.error(f"Generation failed: {e}")
                     st.session_state.dell_quote_out_bytes = None
                     st.session_state.dell_quote_output_name = None
                     st.session_state.dell_quote_debug = f"Generation exception: {e}"
+                    st.error(f"Generation failed: {e}")
 
     if st.session_state.dell_quote_out_bytes:
         st.success("Dell quotation is ready for download.")
@@ -2014,7 +2020,8 @@ elif tool == "💻 Dell Quotation":
         )
         st.info("If you change the file, click Generate again to refresh the output.")
     else:
-        st.info("Upload completed. Click Generate Dell Quotation to create and download the file.")
+        if not generate_clicked:
+            st.info("Upload completed. Click Generate Dell Quotation to create and download the file.")
         if st.session_state.dell_quote_debug:
             st.write(f"Debug: {st.session_state.dell_quote_debug}")
  
