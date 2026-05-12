@@ -9,6 +9,7 @@ import streamlit as st
 import pandas as pd
 import io
 import traceback
+import hashlib
 from datetime import datetime
 from openpyxl.styles import PatternFill
 from openpyxl import Workbook, load_workbook
@@ -1943,11 +1944,18 @@ elif tool == "💻 Dell Quotation":
         st.session_state.dell_quote_generated = False
 
     current_uploaded_id = None
+    input_bytes = None
     if uploaded is not None:
         try:
-            current_uploaded_id = (uploaded.name, uploaded.size)
+            input_bytes = uploaded.getvalue()
+            current_uploaded_id = (
+                uploaded.name,
+                len(input_bytes),
+                hashlib.sha256(input_bytes).hexdigest(),
+            )
         except Exception:
-            current_uploaded_id = (uploaded.name, None)
+            current_uploaded_id = (uploaded.name, None, None)
+            input_bytes = None
 
     if st.session_state.dell_quote_uploaded_id != current_uploaded_id:
         st.session_state.dell_quote_uploaded_id = current_uploaded_id
@@ -1958,13 +1966,12 @@ elif tool == "💻 Dell Quotation":
 
     generate_clicked = st.button("Generate Dell Quotation", key="dell_quote_generate")
     if generate_clicked:
-        if not uploaded:
+        if not uploaded or input_bytes is None:
             st.warning("Please upload a file.")
-            st.session_state.dell_quote_debug = "No file uploaded."
+            st.session_state.dell_quote_debug = "No file uploaded or file could not be read."
         else:
-            input_bytes = uploaded.getvalue()
             st.write("File uploaded, starting detection")
-            st.write("Uploaded file:", getattr(uploaded, 'name', 'unknown'), "size:", getattr(uploaded, 'size', 'unknown'))
+            st.write("Uploaded file:", getattr(uploaded, 'name', 'unknown'), "size:", len(input_bytes))
 
             with st.spinner("Generating..."):
                 try:
@@ -2009,13 +2016,6 @@ elif tool == "💻 Dell Quotation":
                         st.session_state.dell_quote_debug = f"Generated successfully: {len(out_bytes)} bytes."
                         st.session_state.dell_quote_generated = True
                         st.success("Dell quotation generated successfully.")
-                        st.download_button(
-                            "⬇️ Download quotation",
-                            data=out_bytes,
-                            file_name=output_name,
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            key="dell_quote_download_instant",
-                        )
                     else:
                         st.session_state.dell_quote_out_bytes = None
                         st.session_state.dell_quote_output_name = None
