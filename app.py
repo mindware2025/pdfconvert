@@ -1929,6 +1929,19 @@ elif tool == "💻 Dell Quotation":
         horizontal=True,
     )
 
+    if "dell_out_bytes" not in st.session_state:
+        st.session_state.dell_out_bytes = None
+        st.session_state.dell_output_name = "Dell_Quotation.xlsx"
+        st.session_state.dell_generated = False
+        st.session_state.dell_uploaded_identity = None
+
+    if uploaded is not None:
+        uploaded_identity = f"{uploaded.name}-{uploaded.size}"
+        if st.session_state.dell_uploaded_identity != uploaded_identity:
+            st.session_state.dell_uploaded_identity = uploaded_identity
+            st.session_state.dell_out_bytes = None
+            st.session_state.dell_generated = False
+
     if st.button("Generate Dell Quotation"):
         if not uploaded:
             st.warning("Please upload a file.")
@@ -1962,20 +1975,24 @@ elif tool == "💻 Dell Quotation":
                         )
 
                     st.write("Generation completed")
+                    st.session_state.dell_out_bytes = out_bytes
+                    st.session_state.dell_output_name = output_name
+                    st.session_state.dell_generated = True
 
                 except Exception as e:
                     st.error(f"Generation failed: {e}")
+                    st.session_state.dell_generated = False
                     st.stop()
 
-            st.write(f"Generation successful. File size: {len(out_bytes)} bytes")
-            st.download_button(
-                "⬇️ Download quotation",
-                data=out_bytes,
-                file_name=output_name,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
-
-            st.success("Done ✅")
+    if st.session_state.dell_generated and st.session_state.dell_out_bytes:
+        st.write(f"Generation successful. File size: {len(st.session_state.dell_out_bytes)} bytes")
+        st.download_button(
+            "⬇️ Download quotation",
+            data=st.session_state.dell_out_bytes,
+            file_name=st.session_state.dell_output_name,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        st.success("Done ✅")
  
 
 st.markdown("""
