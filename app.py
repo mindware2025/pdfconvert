@@ -1918,9 +1918,9 @@ elif tool == "💻 Dell Quotation":
         key="dell_uploader"
     )
 
-    # ✅ persist uploader
+    # ✅ STORE BYTES
     if uploaded is not None:
-        st.session_state["dell_uploaded_file"] = uploaded
+        st.session_state["dell_uploaded_file_bytes"] = uploaded.getvalue()
 
     margin_percent = st.number_input(
         "Default Margin %",
@@ -1933,10 +1933,10 @@ elif tool == "💻 Dell Quotation":
         horizontal=True
     )
 
-    # ✅ stable check
-    if "dell_uploaded_file" in st.session_state:
+    # ✅ USE BYTES
+    if "dell_uploaded_file_bytes" in st.session_state:
 
-        input_bytes = st.session_state["dell_uploaded_file"].getvalue()
+        input_bytes = st.session_state["dell_uploaded_file_bytes"]
 
         with st.spinner("⚙️ Generating quotation..."):
             try:
