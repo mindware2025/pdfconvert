@@ -849,13 +849,17 @@ def extract_ibm_template2_from_pdf(file_like, country: str = "UAE") -> tuple[lis
                     if duration_match:
                         duration = f"{duration_match.group(1)}-{duration_match.group(2)}"
                         add_debug(f"  ✓ Duration extracted from row line: {duration}")
-                    elif i + 2 < len(lines):
-                        duration_line = lines[i + 2].strip()
-                        add_debug(f"  Duration line: '{duration_line}'")
-                        duration_match = re.search(r'(\d+)-(\d+)', duration_line)
-                        if duration_match:
-                            duration = f"{duration_match.group(1)}-{duration_match.group(2)}"
-                            add_debug(f"  ✓ Duration extracted: {duration}")
+                    else:
+                        for offset in range(1, 6):
+                            if i + offset >= len(lines):
+                                break
+                            duration_line = lines[i + offset].strip()
+                            add_debug(f"  Duration line ({offset}): '{duration_line}'")
+                            duration_match = re.search(r'(\d+)-(\d+)', duration_line)
+                            if duration_match:
+                                duration = f"{duration_match.group(1)}-{duration_match.group(2)}"
+                                add_debug(f"  ✓ Duration extracted: {duration}")
+                                break
                     
                     # --- For each table row: prefer the label from the block ABOVE this row (backwards-only search) ---
                     sku_table = None
