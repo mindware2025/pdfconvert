@@ -1934,11 +1934,13 @@ elif tool == "💻 Dell Quotation":
             st.warning("Please upload a file.")
         else:
             input_bytes = uploaded.read()
+            st.write("File uploaded, starting detection")
             output_name = "Dell_Quotation.xlsx"
 
             with st.spinner("Generating..."):
                 try:
                     template_type = detect_dell_template(input_bytes)
+                    st.write(f"Template type: {template_type}")
 
                     if template_type == "extended_services":
                         out_bytes = generate_dell_extended_services_quote(
@@ -1958,6 +1960,8 @@ elif tool == "💻 Dell Quotation":
                             input_excel_bytes=input_bytes,
                             currency_code=currency_code,
                         )
+
+                    st.write("Generation completed")
 
                 except Exception as e:
                     st.error(f"Generation failed: {e}")
