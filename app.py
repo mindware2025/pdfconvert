@@ -1920,19 +1920,17 @@ elif tool == "💻 Dell Quotation":
 
     margin_percent = st.number_input(
         "Default Margin %",
-        0.0, 100.0, 5.0, 0.5,
-        key="dell_margin"
+        0.0, 100.0, 5.0, 0.5
     )
 
     currency_code = st.radio(
         "Currency",
         ["USD", "QAR", "AED"],
-        horizontal=True,
-        key="dell_currency"
+        horizontal=True
     )
 
+    # ✅ SAME PATTERN AS IBM
     if uploaded:
-        st.success("✅ File ready")
 
         input_bytes = uploaded.getvalue()
 
@@ -1967,9 +1965,8 @@ elif tool == "💻 Dell Quotation":
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
 
-            except Exception:
-                import traceback
-                st.error(traceback.format_exc())
+            except Exception as e:
+                st.error(str(e))
  
 
 st.markdown("""
