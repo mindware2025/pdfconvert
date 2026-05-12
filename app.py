@@ -1918,10 +1918,6 @@ elif tool == "💻 Dell Quotation":
         key="dell_uploader"
     )
 
-    # ✅ STORE BYTES
-    if uploaded is not None:
-        st.session_state["dell_uploaded_file_bytes"] = uploaded.getvalue()
-
     margin_percent = st.number_input(
         "Default Margin %",
         0.0, 100.0, 5.0, 0.5
@@ -1933,32 +1929,42 @@ elif tool == "💻 Dell Quotation":
         horizontal=True
     )
 
-    # ✅ USE BYTES
-    if "dell_uploaded_file_bytes" in st.session_state:
+    if uploaded is not None:
 
-        input_bytes = st.session_state["dell_uploaded_file_bytes"]
+        input_bytes = uploaded.getvalue()
 
         with st.spinner("⚙️ Generating quotation..."):
             try:
+
                 template_type = detect_dell_template(input_bytes)
 
                 if template_type == "extended_services":
+
                     out_bytes = generate_dell_extended_services_quote(
                         input_excel_bytes=input_bytes,
                         margin_percent=margin_percent,
                     )
-                    output_name = build_dell_extended_services_output_filename(input_bytes)
+
+                    output_name = build_dell_extended_services_output_filename(
+                        input_bytes
+                    )
 
                 else:
+
                     out_bytes = generate_dell_quote(
                         input_excel_bytes=input_bytes,
                         margin_percent=margin_percent,
                         currency_code=currency_code,
                     )
+
                     output_name = build_dell_output_filename(
                         input_excel_bytes=input_bytes,
                         currency_code=currency_code,
                     )
+
+                # IMPORTANT
+                if isinstance(out_bytes, io.BytesIO):
+                    out_bytes = out_bytes.getvalue()
 
                 st.success("✅ Quotation ready")
 
@@ -1967,10 +1973,11 @@ elif tool == "💻 Dell Quotation":
                     data=out_bytes,
                     file_name=output_name,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="dell_download_btn"
                 )
 
-            except Exception as e:
-                st.error(str(e))
+            except Exception:
+                st.error(traceback.format_exc())
  
 
 st.markdown("""
