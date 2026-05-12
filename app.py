@@ -1964,6 +1964,9 @@ elif tool == "💻 Dell Quotation":
                             currency_code=currency_code,
                         )
 
+                    st.write("Generation function returned")
+                    st.write("out_bytes type:", type(out_bytes), "len:", len(out_bytes) if out_bytes is not None else None)
+
                 except Exception as e:
                     st.error(f"Generation failed: {e}")
                     out_bytes = None
@@ -1978,6 +1981,8 @@ elif tool == "💻 Dell Quotation":
                     key="dell_quote_download",
                 )
                 st.success("Done ✅")
+            else:
+                st.write("No output bytes were generated.")
  
 
 st.markdown("""
