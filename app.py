@@ -1931,57 +1931,45 @@ elif tool == "💻 Dell Quotation":
         horizontal=True,
     )
 
-    # ✅ SESSION STATE (IMPORTANT)
-    if "dell_output" not in st.session_state:
-        st.session_state.dell_output = None
-        st.session_state.dell_filename = None
+    # ✅ AUTO RUN when file is uploaded
+    if uploaded:
+        input_bytes = uploaded.read()
 
-    # ✅ GENERATE BUTTON
-    if st.button("Generate Dell Quotation"):
-        if not uploaded:
-            st.warning("Please upload a file.")
-        else:
-            input_bytes = uploaded.read()
+        try:
+            template_type = detect_dell_template(input_bytes)
 
-            try:
-                template_type = detect_dell_template(input_bytes)
+            if template_type == "extended_services":
+                out_bytes = generate_dell_extended_services_quote(
+                    input_excel_bytes=input_bytes,
+                    margin_percent=margin_percent,
+                )
+                output_name = build_dell_extended_services_output_filename(input_bytes)
 
-                if template_type == "extended_services":
-                    out_bytes = generate_dell_extended_services_quote(
-                        input_excel_bytes=input_bytes,
-                        margin_percent=margin_percent,
-                    )
-                    output_name = build_dell_extended_services_output_filename(input_bytes)
+            else:
+                out_bytes = generate_dell_quote(
+                    input_excel_bytes=input_bytes,
+                    margin_percent=margin_percent,
+                    currency_code=currency_code,
+                )
+                output_name = build_dell_output_filename(
+                    input_excel_bytes=input_bytes,
+                    currency_code=currency_code,
+                )
 
-                else:
-                    out_bytes = generate_dell_quote(
-                        input_excel_bytes=input_bytes,
-                        margin_percent=margin_percent,
-                        currency_code=currency_code,
-                    )
-                    output_name = build_dell_output_filename(
-                        input_excel_bytes=input_bytes,
-                        currency_code=currency_code,
-                    )
+            if out_bytes:
+                st.success("✅ Quotation generated")
+                st.download_button(
+                    "⬇️ Download quotation",
+                    data=out_bytes,
+                    file_name=output_name,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            else:
+                st.error("❌ Output is empty")
 
-                # ✅ SAVE RESULT (this fixes your issue)
-                st.session_state.dell_output = out_bytes
-                st.session_state.dell_filename = output_name
-
-                st.success("Quotation generated ✅")
-
-            except Exception as e:
-                st.error(f"Generation failed: {e}")
-
-    # ✅ ALWAYS SHOW DOWNLOAD AFTER GENERATION
-    if st.session_state.dell_output:
-        st.download_button(
-            "⬇️ Download quotation",
-            data=st.session_state.dell_output,
-            file_name=st.session_state.dell_filename,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-
+        except Exception as e:
+            st.error("❌ Error occurred:")
+            st.text(traceback.format_exc())
  
 
 st.markdown("""
