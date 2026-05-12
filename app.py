@@ -1929,21 +1929,20 @@ elif tool == "💻 Dell Quotation":
         horizontal=True,
     )
 
+    out_bytes = None
+    output_name = "Dell_Quotation.xlsx"
+
     if st.button("Generate Dell Quotation"):
         if not uploaded:
             st.warning("Please upload a file.")
         else:
             input_bytes = uploaded.read()
-            output_name = "Dell_Quotation.xlsx"
 
             with st.spinner("Generating..."):
                 try:
-                    st.write("Detecting template...")
                     template_type = detect_dell_template(input_bytes)
-                    st.write(f"Template type: {template_type}")
 
                     if template_type == "extended_services":
-                        st.write("Generating extended services quote...")
                         out_bytes = generate_dell_extended_services_quote(
                             input_excel_bytes=input_bytes,
                             margin_percent=margin_percent,
@@ -1952,7 +1951,6 @@ elif tool == "💻 Dell Quotation":
                             input_excel_bytes=input_bytes,
                         )
                     else:
-                        st.write("Generating standard quote...")
                         out_bytes = generate_dell_quote(
                             input_excel_bytes=input_bytes,
                             margin_percent=margin_percent,
@@ -1962,19 +1960,13 @@ elif tool == "💻 Dell Quotation":
                             input_excel_bytes=input_bytes,
                             currency_code=currency_code,
                         )
-                    st.write("Generation complete.")
 
                 except Exception as e:
                     st.error(f"Generation failed: {e}")
                     st.stop()
 
-            st.write("Post-generation check:", {
-                "has_out_bytes": out_bytes is not None,
-                "size": len(out_bytes) if out_bytes else 0,
-                "output_name": output_name,
-            })
-
             if out_bytes:
+                st.success("Generation complete ✅")
                 st.download_button(
                     "⬇️ Download quotation",
                     data=out_bytes,
@@ -1983,8 +1975,6 @@ elif tool == "💻 Dell Quotation":
                     key="dell_quote_download",
                     on_click=lambda: update_usage(f"Dell Quotation Tool ({currency_code})", team),
                 )
-
-                st.success("Done ✅")
                 st.info(f"Generated file: {output_name}")
             else:
                 st.error("Generation produced no output. Please check the input file.")
