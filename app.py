@@ -1930,51 +1930,45 @@ elif tool == "💻 Dell Quotation":
         horizontal=True,
     )
 
-    # ✅ STORE FILE IN SESSION (CRITICAL FIX)
     if uploaded:
-        st.session_state["dell_file"] = uploaded.read()
+        input_bytes = uploaded.read()
 
-    # ✅ RUN ONLY IF STORED
-    if "dell_file" in st.session_state:
-        try:
-            input_bytes = st.session_state["dell_file"]
+        if st.button("🚀 Generate Quote"):
+            try:
+                template_type = detect_dell_template(input_bytes)
 
-            template_type = detect_dell_template(input_bytes)
+                if template_type == "extended_services":
+                    out_bytes = generate_dell_extended_services_quote(
+                        input_excel_bytes=input_bytes,
+                        margin_percent=margin_percent,
+                    )
+                    output_name = build_dell_extended_services_output_filename(input_bytes)
 
-            if template_type == "extended_services":
-                out_bytes = generate_dell_extended_services_quote(
-                    input_excel_bytes=input_bytes,
-                    margin_percent=margin_percent,
-                )
-                output_name = build_dell_extended_services_output_filename(input_bytes)
+                else:
+                    out_bytes = generate_dell_quote(
+                        input_excel_bytes=input_bytes,
+                        margin_percent=margin_percent,
+                        currency_code=currency_code,
+                    )
+                    output_name = build_dell_output_filename(
+                        input_excel_bytes=input_bytes,
+                        currency_code=currency_code,
+                    )
 
-            else:
-                out_bytes = generate_dell_quote(
-                    input_excel_bytes=input_bytes,
-                    margin_percent=margin_percent,
-                    currency_code=currency_code,
-                )
-                output_name = build_dell_output_filename(
-                    input_excel_bytes=input_bytes,
-                    currency_code=currency_code,
-                )
+                if out_bytes:
+                    st.success("✅ Quotation ready")
 
-            if out_bytes:
-                st.success("✅ Quotation ready")
+                    st.download_button(
+                        "⬇️ Download quotation",
+                        data=out_bytes,
+                        file_name=output_name,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+                else:
+                    st.error("❌ Output empty")
 
-                st.download_button(
-                    "⬇️ Download quotation",
-                    data=out_bytes,
-                    file_name=output_name,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
-
-            else:
-                st.error("❌ Output is empty")
-
-        except Exception as e:
-            st.error("❌ Error:")
-            st.text(traceback.format_exc())
+            except Exception:
+                st.error(traceback.format_exc())
  
 
 st.markdown("""
