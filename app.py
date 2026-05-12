@@ -1973,7 +1973,7 @@ elif tool == "💻 Dell Quotation":
             file_name=st.session_state["dell_filename"],
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
-``
+
  
 
 st.markdown("""
