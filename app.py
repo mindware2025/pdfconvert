@@ -1963,6 +1963,7 @@ elif tool == "💻 Dell Quotation":
                     st.error(f"Generation failed: {e}")
                     st.stop()
 
+            st.write(f"Generation successful. File size: {len(out_bytes)} bytes")
             st.download_button(
                 "⬇️ Download quotation",
                 data=out_bytes,
