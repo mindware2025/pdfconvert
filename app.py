@@ -1934,65 +1934,71 @@ elif tool == "💻 Dell Quotation":
         key="dell_currency"
     )
 
-    # ✅ INIT STATE ONCE
-    if "dell_output" not in st.session_state:
+    # ✅ Track inputs
+    current_inputs = (
+        currency_code,
+        margin_percent,
+        uploaded.name if uploaded else None
+    )
+
+    # ✅ Init state
+    if "dell_last_inputs" not in st.session_state:
+        st.session_state.dell_last_inputs = None
         st.session_state.dell_output = None
         st.session_state.dell_filename = None
 
     if uploaded:
         st.success("✅ File ready")
 
-        # ✅ IMPORTANT: use getvalue (NOT read)
         input_bytes = uploaded.getvalue()
 
-        if st.button("🚀 Generate Quote", key="generate_dell"):
+        # ✅ Auto-generate only if inputs changed
+        if st.session_state.dell_last_inputs != current_inputs:
 
-            try:
-                template_type = detect_dell_template(input_bytes)
+            with st.spinner("⚙️ Generating quotation..."):
 
-                if template_type == "extended_services":
-                    out_bytes = generate_dell_extended_services_quote(
-                        input_excel_bytes=input_bytes,
-                        margin_percent=margin_percent,
-                    )
-                    output_name = build_dell_extended_services_output_filename(input_bytes)
+                try:
+                    template_type = detect_dell_template(input_bytes)
 
-                else:
-                    out_bytes = generate_dell_quote(
-                        input_excel_bytes=input_bytes,
-                        margin_percent=margin_percent,
-                        currency_code=currency_code,
-                    )
-                    output_name = build_dell_output_filename(
-                        input_excel_bytes=input_bytes,
-                        currency_code=currency_code,
-                    )
+                    if template_type == "extended_services":
+                        out_bytes = generate_dell_extended_services_quote(
+                            input_excel_bytes=input_bytes,
+                            margin_percent=margin_percent,
+                        )
+                        output_name = build_dell_extended_services_output_filename(input_bytes)
 
-                # ✅ STORE OUTPUT
-                st.session_state.dell_output = out_bytes
-                st.session_state.dell_filename = output_name
+                    else:
+                        out_bytes = generate_dell_quote(
+                            input_excel_bytes=input_bytes,
+                            margin_percent=margin_percent,
+                            currency_code=currency_code,
+                        )
+                        output_name = build_dell_output_filename(
+                            input_excel_bytes=input_bytes,
+                            currency_code=currency_code,
+                        )
 
-                st.success("✅ Quote generated")
+                    # ✅ Save
+                    st.session_state.dell_output = out_bytes
+                    st.session_state.dell_filename = output_name
+                    st.session_state.dell_last_inputs = current_inputs
 
-                # ✅ FORCE rerun so UI refreshes properly
-                st.rerun()
+                except Exception:
+                    import traceback
+                    st.error(traceback.format_exc())
 
-            except Exception:
-                import traceback
-                st.error(traceback.format_exc())
+        # ✅ Always show download if available
+        if st.session_state.get("dell_output"):
+            st.success("✅ Quotation ready")
 
-    # ✅ ALWAYS SHOW DOWNLOAD IF EXISTS
-    if st.session_state.get("dell_output"):
+            st.download_button(
+                label="⬇️ Download quotation",
+                data=st.session_state.dell_output,
+                file_name=st.session_state.dell_filename,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_dell"
+            )
 
-        st.success("✅ Ready to download")
-
-        st.download_button(
-            label="⬇️ Download quotation",
-            data=st.session_state.dell_output,
-            file_name=st.session_state.dell_filename,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="download_dell"
-        )
  
 
 st.markdown("""
