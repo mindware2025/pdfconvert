@@ -1953,7 +1953,13 @@ elif tool == "💻 Dell Quotation":
         input_bytes = uploaded.getvalue()
 
         # ✅ Auto-generate only if inputs changed
-        if st.session_state.dell_last_inputs != current_inputs:
+        
+        if (
+            
+             st.session_state.dell_output is None
+             or st.session_state.dell_last_inputs != current_inputs
+             ):
+
 
             with st.spinner("⚙️ Generating quotation..."):
 
