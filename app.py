@@ -1967,6 +1967,8 @@ elif tool == "💻 Dell Quotation":
 
             if out_bytes:
                 st.success("Generation complete ✅")
+                st.info(f"Generated file: {output_name} ({len(out_bytes)} bytes)")
+                st.write("If you still don't see the download button, scroll down a bit — it should appear right below this message.")
                 st.download_button(
                     "⬇️ Download quotation",
                     data=out_bytes,
@@ -1975,7 +1977,6 @@ elif tool == "💻 Dell Quotation":
                     key="dell_quote_download",
                     on_click=lambda: update_usage(f"Dell Quotation Tool ({currency_code})", team),
                 )
-                st.info(f"Generated file: {output_name}")
             else:
                 st.error("Generation produced no output. Please check the input file.")
  
