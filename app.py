@@ -1936,7 +1936,7 @@ elif tool == "💻 Dell Quotation":
     if "dell_output_name" not in st.session_state:
         st.session_state.dell_output_name = None
 
-    # BUTTON TO GENERATE
+    # Generate button
     if st.button("🚀 Generate Quotation"):
 
         if uploaded is None:
@@ -1958,9 +1958,8 @@ elif tool == "💻 Dell Quotation":
                         margin_percent=margin_percent,
                     )
 
-                    output_name = build_dell_extended_services_output_filename(
-                        input_bytes
-                    )
+                    # TEMP hardcoded filename
+                    output_name = "Dell_Extended_Quotation.xlsx"
 
                 else:
 
@@ -1970,16 +1969,23 @@ elif tool == "💻 Dell Quotation":
                         currency_code=currency_code,
                     )
 
-                    output_name = build_dell_output_filename(
-                        input_excel_bytes=input_bytes,
-                        currency_code=currency_code,
-                    )
+                    # TEMP hardcoded filename
+                    output_name = "Dell_Quotation.xlsx"
 
-                # Convert BytesIO if needed
+                # DEBUGGING
+                st.write("TYPE:", type(out_bytes))
+
                 if isinstance(out_bytes, io.BytesIO):
+                    st.write("WAS BytesIO")
                     out_bytes = out_bytes.getvalue()
 
-                # STORE RESULT
+                if isinstance(out_bytes, bytes):
+                    st.write("VALID BYTES")
+                    st.write("SIZE:", len(out_bytes))
+                else:
+                    st.write("NOT BYTES")
+
+                # Store in session state
                 st.session_state.dell_output_bytes = out_bytes
                 st.session_state.dell_output_name = output_name
 
@@ -1988,8 +1994,10 @@ elif tool == "💻 Dell Quotation":
             except Exception:
                 st.error(traceback.format_exc())
 
-    # DOWNLOAD SECTION SEPARATE
+    # DOWNLOAD SECTION
     if st.session_state.dell_output_bytes is not None:
+
+        st.write("DOWNLOAD SECTION REACHED")
 
         st.download_button(
             label="⬇️ Download quotation",
