@@ -1940,60 +1940,78 @@ elif tool == "💻 Dell Quotation":
             st.error(f"Unable to read uploaded file: {e}")
             input_bytes = None
 
+    output_bytes = st.session_state.get("dell_quote_out_bytes")
+    output_name = st.session_state.get("dell_quote_output_name")
+    generation_key = st.session_state.get("dell_quote_generation_key")
+
     if uploaded is not None and input_bytes is not None:
-        st.write("File uploaded, starting detection")
-        st.write("Uploaded file:", getattr(uploaded, 'name', 'unknown'), "size:", len(input_bytes))
+        file_hash = hashlib.md5(input_bytes).hexdigest()
+        current_generation_key = f"{file_hash}-{currency_code}-{margin_percent}"
 
-        with st.spinner("Generating Dell quotation..."):
-            try:
-                template_type = detect_dell_template(input_bytes)
-                st.write(f"Template type: {template_type}")
+        if generation_key != current_generation_key or output_bytes is None:
+            with st.spinner("Generating Dell quotation..."):
+                try:
+                    template_type = detect_dell_template(input_bytes)
+                    st.write(f"Template type: {template_type}")
 
-                if template_type == "extended_services":
-                    raw_output = generate_dell_extended_services_quote(
-                        input_excel_bytes=input_bytes,
-                        margin_percent=margin_percent,
-                    )
-                    output_name = build_dell_extended_services_output_filename(
-                        input_excel_bytes=input_bytes,
-                    )
-                else:
-                    raw_output = generate_dell_quote(
-                        input_excel_bytes=input_bytes,
-                        margin_percent=margin_percent,
-                        currency_code=currency_code,
-                    )
-                    output_name = build_dell_output_filename(
-                        input_excel_bytes=input_bytes,
-                        currency_code=currency_code,
-                    )
+                    if template_type == "extended_services":
+                        raw_output = generate_dell_extended_services_quote(
+                            input_excel_bytes=input_bytes,
+                            margin_percent=margin_percent,
+                        )
+                        output_name = build_dell_extended_services_output_filename(
+                            input_excel_bytes=input_bytes,
+                        )
+                    else:
+                        raw_output = generate_dell_quote(
+                            input_excel_bytes=input_bytes,
+                            margin_percent=margin_percent,
+                            currency_code=currency_code,
+                        )
+                        output_name = build_dell_output_filename(
+                            input_excel_bytes=input_bytes,
+                            currency_code=currency_code,
+                        )
 
-                if raw_output is None:
-                    raise ValueError("Dell generation returned None.")
+                    if raw_output is None:
+                        raise ValueError("Dell generation returned None.")
 
-                if isinstance(raw_output, (bytes, bytearray)):
-                    out_bytes = bytes(raw_output)
-                elif hasattr(raw_output, "getvalue"):
-                    out_bytes = raw_output.getvalue()
-                else:
-                    raise TypeError(f"Unexpected Dell output type: {type(raw_output)}")
+                    if isinstance(raw_output, (bytes, bytearray)):
+                        out_bytes = bytes(raw_output)
+                    elif hasattr(raw_output, "getvalue"):
+                        out_bytes = raw_output.getvalue()
+                    else:
+                        raise TypeError(f"Unexpected Dell output type: {type(raw_output)}")
 
-                if not out_bytes:
-                    raise ValueError("Generated output is empty.")
+                    if not out_bytes:
+                        raise ValueError("Generated output is empty.")
 
-                st.success("Dell quotation generated successfully.")
-                st.download_button(
-                    "⬇️ Download quotation",
-                    data=out_bytes,
-                    file_name=output_name,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="dell_quote_download",
-                )
+                    st.session_state["dell_quote_out_bytes"] = out_bytes
+                    st.session_state["dell_quote_output_name"] = output_name
+                    st.session_state["dell_quote_generation_key"] = current_generation_key
+                    output_bytes = out_bytes
+                    st.success("Dell quotation generated successfully.")
 
-            except Exception as e:
-                st.error(f"Generation failed: {e}")
-                st.text_area("Traceback", traceback.format_exc(), height=240)
+                except Exception as e:
+                    st.session_state.pop("dell_quote_out_bytes", None)
+                    st.session_state.pop("dell_quote_output_name", None)
+                    st.session_state.pop("dell_quote_generation_key", None)
+                    st.error(f"Generation failed: {e}")
+                    st.text_area("Traceback", traceback.format_exc(), height=240)
+
+        if output_bytes is not None and output_name:
+            st.download_button(
+                "⬇️ Download quotation",
+                data=output_bytes,
+                file_name=output_name,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dell_quote_download",
+            )
     else:
+        # Clear stale Dell output state if upload is removed
+        st.session_state.pop("dell_quote_out_bytes", None)
+        st.session_state.pop("dell_quote_output_name", None)
+        st.session_state.pop("dell_quote_generation_key", None)
         st.info("Upload your Dell BOQ Excel or PDF to generate and download immediately.")
  
 
