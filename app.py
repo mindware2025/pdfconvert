@@ -8,6 +8,7 @@ import zipfile
 import streamlit as st
 import pandas as pd
 import io
+import traceback
 from datetime import datetime
 from openpyxl.styles import PatternFill
 from openpyxl import Workbook, load_workbook
@@ -1960,6 +1961,7 @@ elif tool == "💻 Dell Quotation":
         else:
             input_bytes = uploaded.getvalue()
             st.write("File uploaded, starting detection")
+            st.write("Uploaded file:", getattr(uploaded, 'name', 'unknown'), "size:", getattr(uploaded, 'size', 'unknown'))
 
             with st.spinner("Generating..."):
                 try:
@@ -1967,7 +1969,7 @@ elif tool == "💻 Dell Quotation":
                     st.write(f"Template type: {template_type}")
 
                     if template_type == "extended_services":
-                        out_bytes = generate_dell_extended_services_quote(
+                        raw_output = generate_dell_extended_services_quote(
                             input_excel_bytes=input_bytes,
                             margin_percent=margin_percent,
                         )
@@ -1975,7 +1977,7 @@ elif tool == "💻 Dell Quotation":
                             input_excel_bytes=input_bytes,
                         )
                     else:
-                        out_bytes = generate_dell_quote(
+                        raw_output = generate_dell_quote(
                             input_excel_bytes=input_bytes,
                             margin_percent=margin_percent,
                             currency_code=currency_code,
@@ -1984,6 +1986,16 @@ elif tool == "💻 Dell Quotation":
                             input_excel_bytes=input_bytes,
                             currency_code=currency_code,
                         )
+
+                    if raw_output is None:
+                        raise ValueError("Dell generation returned None.")
+
+                    if isinstance(raw_output, (bytes, bytearray)):
+                        out_bytes = bytes(raw_output)
+                    elif hasattr(raw_output, "getvalue"):
+                        out_bytes = raw_output.getvalue()
+                    else:
+                        raise TypeError(f"Unexpected Dell output type: {type(raw_output)}")
 
                     if out_bytes and len(out_bytes) > 0:
                         st.session_state.dell_quote_out_bytes = out_bytes
@@ -2006,8 +2018,9 @@ elif tool == "💻 Dell Quotation":
                 except Exception as e:
                     st.session_state.dell_quote_out_bytes = None
                     st.session_state.dell_quote_output_name = None
-                    st.session_state.dell_quote_debug = f"Generation exception: {e}"
+                    st.session_state.dell_quote_debug = traceback.format_exc()
                     st.error(f"Generation failed: {e}")
+                    st.text_area("Traceback", st.session_state.dell_quote_debug, height=240)
 
     if st.session_state.dell_quote_out_bytes:
         st.success("Dell quotation is ready for download.")
