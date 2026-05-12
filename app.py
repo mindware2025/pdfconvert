@@ -1909,6 +1909,7 @@ elif tool == "🟥 Lenovo CNTS Tool - KSA":
         st.info("Upload Lenovo KSA credit note PDFs to begin.")
         
 elif tool == "💻 Dell Quotation":
+
     st.title("💼 Dell Quotation Tool")
 
     uploaded = st.file_uploader(
@@ -1930,49 +1931,40 @@ elif tool == "💻 Dell Quotation":
         horizontal=True,
     )
 
-    # ✅ INIT SESSION STORAGE
-    if "dell_output" not in st.session_state:
-        st.session_state["dell_output"] = None
-        st.session_state["dell_filename"] = None
+    if uploaded:
+        input_bytes = uploaded.getvalue()
 
-    if st.button("🚀 Generate Quote"):
-        if not uploaded:
-            st.warning("⚠️ Please upload a file first")
-            st.stop()
+        st.success("✅ File ready")
 
-        try:
-            # ✅ SAFE FILE READ
-            input_bytes = uploaded.getvalue()
+        if st.button("🚀 Generate Quote"):
 
-            template_type = detect_dell_template(input_bytes)
+            try:
+                template_type = detect_dell_template(input_bytes)
 
-            if template_type == "extended_services":
-                out_bytes = generate_dell_extended_services_quote(
-                    input_excel_bytes=input_bytes,
-                    margin_percent=margin_percent,
-                )
-                output_name = build_dell_extended_services_output_filename(input_bytes)
+                if template_type == "extended_services":
+                    out_bytes = generate_dell_extended_services_quote(
+                        input_excel_bytes=input_bytes,
+                        margin_percent=margin_percent,
+                    )
+                    output_name = build_dell_extended_services_output_filename(input_bytes)
+                else:
+                    out_bytes = generate_dell_quote(
+                        input_excel_bytes=input_bytes,
+                        margin_percent=margin_percent,
+                        currency_code=currency_code,
+                    )
+                    output_name = build_dell_output_filename(input_bytes, currency_code)
 
-            else:
-                out_bytes = generate_dell_quote(
-                    input_excel_bytes=input_bytes,
-                    margin_percent=margin_percent,
-                    currency_code=currency_code,
-                )
-                output_name = build_dell_output_filename(
-                    input_excel_bytes=input_bytes,
-                    currency_code=currency_code,
-                )
+                # ✅ Store result
+                st.session_state["dell_output"] = out_bytes
+                st.session_state["dell_filename"] = output_name
 
-            # ✅ STORE RESULT
-            st.session_state["dell_output"] = out_bytes
-            st.session_state["dell_filename"] = output_name
+            except Exception:
+                st.error(traceback.format_exc())
 
-        except Exception:
-            st.error(traceback.format_exc())
+    # ✅ ALWAYS render output if exists (like IBM UI rebuild)
+    if st.session_state.get("dell_output"):
 
-    # ✅ ALWAYS SHOW DOWNLOAD IF DATA EXISTS
-    if st.session_state["dell_output"]:
         st.success("✅ Quotation ready")
 
         st.download_button(
@@ -1981,6 +1973,7 @@ elif tool == "💻 Dell Quotation":
             file_name=st.session_state["dell_filename"],
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+``
  
 
 st.markdown("""
