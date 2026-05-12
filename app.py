@@ -1920,7 +1920,10 @@ elif tool == "💻 Dell Quotation":
 
     margin_percent = st.number_input(
         "Default Margin %",
-        0.0, 100.0, 5.0, 0.5
+        min_value=0.0,
+        max_value=100.0,
+        value=5.0,
+        step=0.5
     )
 
     currency_code = st.radio(
@@ -1929,25 +1932,30 @@ elif tool == "💻 Dell Quotation":
         horizontal=True
     )
 
-    # Initialize session state
+    # Session state init
     if "dell_output_bytes" not in st.session_state:
-        st.session_state.dell_output_bytes = None
+        st.session_state["dell_output_bytes"] = None
 
     if "dell_output_name" not in st.session_state:
-        st.session_state.dell_output_name = None
+        st.session_state["dell_output_name"] = None
 
-    # Generate button
-    if st.button("🚀 Generate Quotation"):
+    # GENERATE BUTTON
+    generate_clicked = st.button(
+        "🚀 Generate Quotation",
+        key="generate_dell_quote_btn"
+    )
+
+    if generate_clicked:
 
         if uploaded is None:
             st.warning("Please upload a file first.")
             st.stop()
 
-        input_bytes = uploaded.getvalue()
+        try:
 
-        with st.spinner("⚙️ Generating quotation..."):
+            input_bytes = uploaded.getvalue()
 
-            try:
+            with st.spinner("⚙️ Generating quotation..."):
 
                 template_type = detect_dell_template(input_bytes)
 
@@ -1958,8 +1966,9 @@ elif tool == "💻 Dell Quotation":
                         margin_percent=margin_percent,
                     )
 
-                    # TEMP hardcoded filename
-                    output_name = "Dell_Extended_Quotation.xlsx"
+                    output_name = build_dell_extended_services_output_filename(
+                        input_bytes
+                    )
 
                 else:
 
@@ -1969,42 +1978,36 @@ elif tool == "💻 Dell Quotation":
                         currency_code=currency_code,
                     )
 
-                    # TEMP hardcoded filename
-                    output_name = "Dell_Quotation.xlsx"
+                    output_name = build_dell_output_filename(
+                        input_excel_bytes=input_bytes,
+                        currency_code=currency_code,
+                    )
 
-                # DEBUGGING
-                st.write("TYPE:", type(out_bytes))
-
+                # IMPORTANT
                 if isinstance(out_bytes, io.BytesIO):
-                    st.write("WAS BytesIO")
                     out_bytes = out_bytes.getvalue()
 
-                if isinstance(out_bytes, bytes):
-                    st.write("VALID BYTES")
-                    st.write("SIZE:", len(out_bytes))
-                else:
-                    st.write("NOT BYTES")
+                # SAVE TO SESSION
+                st.session_state["dell_output_bytes"] = out_bytes
+                st.session_state["dell_output_name"] = output_name
 
-                # Store in session state
-                st.session_state.dell_output_bytes = out_bytes
-                st.session_state.dell_output_name = output_name
+            st.success("✅ Quotation generated successfully")
 
-                st.success("✅ Quotation generated successfully")
+        except Exception as e:
+            st.error(str(e))
+            st.exception(e)
 
-            except Exception:
-                st.error(traceback.format_exc())
+    # DOWNLOAD BUTTON
+    if st.session_state["dell_output_bytes"] is not None:
 
-    # DOWNLOAD SECTION
-    if st.session_state.dell_output_bytes is not None:
-
-        st.write("DOWNLOAD SECTION REACHED")
+        st.markdown("### 📥 Download File")
 
         st.download_button(
             label="⬇️ Download quotation",
-            data=st.session_state.dell_output_bytes,
-            file_name=st.session_state.dell_output_name,
+            data=st.session_state["dell_output_bytes"],
+            file_name=st.session_state["dell_output_name"],
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="dell_download_btn"
+            key="download_dell_quote"
         )
  
 
