@@ -1929,11 +1929,24 @@ elif tool == "💻 Dell Quotation":
         horizontal=True
     )
 
-    if uploaded is not None:
+    # Initialize session state
+    if "dell_output_bytes" not in st.session_state:
+        st.session_state.dell_output_bytes = None
+
+    if "dell_output_name" not in st.session_state:
+        st.session_state.dell_output_name = None
+
+    # BUTTON TO GENERATE
+    if st.button("🚀 Generate Quotation"):
+
+        if uploaded is None:
+            st.warning("Please upload a file first.")
+            st.stop()
 
         input_bytes = uploaded.getvalue()
 
         with st.spinner("⚙️ Generating quotation..."):
+
             try:
 
                 template_type = detect_dell_template(input_bytes)
@@ -1962,22 +1975,29 @@ elif tool == "💻 Dell Quotation":
                         currency_code=currency_code,
                     )
 
-                # IMPORTANT
+                # Convert BytesIO if needed
                 if isinstance(out_bytes, io.BytesIO):
                     out_bytes = out_bytes.getvalue()
 
-                st.success("✅ Quotation ready")
+                # STORE RESULT
+                st.session_state.dell_output_bytes = out_bytes
+                st.session_state.dell_output_name = output_name
 
-                st.download_button(
-                    label="⬇️ Download quotation",
-                    data=out_bytes,
-                    file_name=output_name,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="dell_download_btn"
-                )
+                st.success("✅ Quotation generated successfully")
 
             except Exception:
                 st.error(traceback.format_exc())
+
+    # DOWNLOAD SECTION SEPARATE
+    if st.session_state.dell_output_bytes is not None:
+
+        st.download_button(
+            label="⬇️ Download quotation",
+            data=st.session_state.dell_output_bytes,
+            file_name=st.session_state.dell_output_name,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dell_download_btn"
+        )
  
 
 st.markdown("""
