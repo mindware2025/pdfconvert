@@ -1929,14 +1929,12 @@ elif tool == "💻 Dell Quotation":
         horizontal=True,
     )
 
-    out_bytes = None
-    output_name = "Dell_Quotation.xlsx"
-
     if st.button("Generate Dell Quotation"):
         if not uploaded:
             st.warning("Please upload a file.")
         else:
             input_bytes = uploaded.read()
+            output_name = "Dell_Quotation.xlsx"
 
             with st.spinner("Generating..."):
                 try:
@@ -1965,20 +1963,14 @@ elif tool == "💻 Dell Quotation":
                     st.error(f"Generation failed: {e}")
                     st.stop()
 
-            if out_bytes:
-                st.success("Generation complete ✅")
-                st.info(f"Generated file: {output_name} ({len(out_bytes)} bytes)")
-                st.write("If you still don't see the download button, scroll down a bit — it should appear right below this message.")
-                st.download_button(
-                    "⬇️ Download quotation",
-                    data=out_bytes,
-                    file_name=output_name,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="dell_quote_download",
-                    on_click=lambda: update_usage(f"Dell Quotation Tool ({currency_code})", team),
-                )
-            else:
-                st.error("Generation produced no output. Please check the input file.")
+            st.download_button(
+                "⬇️ Download quotation",
+                data=out_bytes,
+                file_name=output_name,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+
+            st.success("Done ✅")
  
 
 st.markdown("""
