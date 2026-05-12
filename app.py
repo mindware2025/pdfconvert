@@ -1968,12 +1968,19 @@ elif tool == "💻 Dell Quotation":
                     st.error(f"Generation failed: {e}")
                     st.stop()
 
+            st.write("Post-generation check:", {
+                "has_out_bytes": out_bytes is not None,
+                "size": len(out_bytes) if out_bytes else 0,
+                "output_name": output_name,
+            })
+
             if out_bytes:
                 st.download_button(
                     "⬇️ Download quotation",
                     data=out_bytes,
                     file_name=output_name,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="dell_quote_download",
                     on_click=lambda: update_usage(f"Dell Quotation Tool ({currency_code})", team),
                 )
 
