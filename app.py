@@ -1936,6 +1936,8 @@ elif tool == "💻 Dell Quotation":
         st.session_state.dell_quote_out_bytes = None
     if "dell_quote_output_name" not in st.session_state:
         st.session_state.dell_quote_output_name = None
+    if "dell_quote_debug" not in st.session_state:
+        st.session_state.dell_quote_debug = ""
 
     current_uploaded_id = None
     if uploaded is not None:
@@ -1948,10 +1950,12 @@ elif tool == "💻 Dell Quotation":
         st.session_state.dell_quote_uploaded_id = current_uploaded_id
         st.session_state.dell_quote_out_bytes = None
         st.session_state.dell_quote_output_name = None
+        st.session_state.dell_quote_debug = "New upload detected. Ready to generate."
 
     if st.button("Generate Dell Quotation", key="dell_quote_generate"):
         if not uploaded:
             st.warning("Please upload a file.")
+            st.session_state.dell_quote_debug = "No file uploaded."
         else:
             input_bytes = uploaded.getvalue()
             st.write("File uploaded, starting detection")
@@ -1980,19 +1984,24 @@ elif tool == "💻 Dell Quotation":
                             currency_code=currency_code,
                         )
 
-                    st.write("Generation function returned")
-                    st.write("out_bytes type:", type(out_bytes), "len:", len(out_bytes) if out_bytes is not None else None)
                     if out_bytes:
                         st.session_state.dell_quote_out_bytes = out_bytes
                         st.session_state.dell_quote_output_name = output_name
+                        st.session_state.dell_quote_debug = (
+                            f"Generated successfully: {len(out_bytes)} bytes."
+                        )
                     else:
                         st.session_state.dell_quote_out_bytes = None
                         st.session_state.dell_quote_output_name = None
+                        st.session_state.dell_quote_debug = (
+                            "Generation returned empty bytes. Check the input file format."
+                        )
 
                 except Exception as e:
                     st.error(f"Generation failed: {e}")
                     st.session_state.dell_quote_out_bytes = None
                     st.session_state.dell_quote_output_name = None
+                    st.session_state.dell_quote_debug = f"Generation exception: {e}"
 
     if st.session_state.dell_quote_out_bytes:
         st.success("Dell quotation is ready for download.")
@@ -2004,8 +2013,10 @@ elif tool == "💻 Dell Quotation":
             key="dell_quote_download",
         )
         st.info("If you change the file, click Generate again to refresh the output.")
-    elif current_uploaded_id and not st.session_state.dell_quote_out_bytes:
+    else:
         st.info("Upload completed. Click Generate Dell Quotation to create and download the file.")
+        if st.session_state.dell_quote_debug:
+            st.write(f"Debug: {st.session_state.dell_quote_debug}")
  
 
 st.markdown("""
