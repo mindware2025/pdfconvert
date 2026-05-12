@@ -1930,8 +1930,24 @@ elif tool == "💻 Dell Quotation":
         horizontal=True,
     )
 
-    out_bytes = None
-    output_name = "Dell_Quotation.xlsx"
+    if "dell_quote_uploaded_id" not in st.session_state:
+        st.session_state.dell_quote_uploaded_id = None
+    if "dell_quote_out_bytes" not in st.session_state:
+        st.session_state.dell_quote_out_bytes = None
+    if "dell_quote_output_name" not in st.session_state:
+        st.session_state.dell_quote_output_name = None
+
+    current_uploaded_id = None
+    if uploaded is not None:
+        try:
+            current_uploaded_id = (uploaded.name, uploaded.size)
+        except Exception:
+            current_uploaded_id = (uploaded.name, None)
+
+    if st.session_state.dell_quote_uploaded_id != current_uploaded_id:
+        st.session_state.dell_quote_uploaded_id = current_uploaded_id
+        st.session_state.dell_quote_out_bytes = None
+        st.session_state.dell_quote_output_name = None
 
     if st.button("Generate Dell Quotation", key="dell_quote_generate"):
         if not uploaded:
@@ -1966,23 +1982,30 @@ elif tool == "💻 Dell Quotation":
 
                     st.write("Generation function returned")
                     st.write("out_bytes type:", type(out_bytes), "len:", len(out_bytes) if out_bytes is not None else None)
+                    if out_bytes:
+                        st.session_state.dell_quote_out_bytes = out_bytes
+                        st.session_state.dell_quote_output_name = output_name
+                    else:
+                        st.session_state.dell_quote_out_bytes = None
+                        st.session_state.dell_quote_output_name = None
 
                 except Exception as e:
                     st.error(f"Generation failed: {e}")
-                    out_bytes = None
+                    st.session_state.dell_quote_out_bytes = None
+                    st.session_state.dell_quote_output_name = None
 
-            if out_bytes:
-                st.write(f"Generation successful. File size: {len(out_bytes)} bytes")
-                st.download_button(
-                    "⬇️ Download quotation",
-                    data=out_bytes,
-                    file_name=output_name,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="dell_quote_download",
-                )
-                st.success("Done ✅")
-            else:
-                st.write("No output bytes were generated.")
+    if st.session_state.dell_quote_out_bytes:
+        st.success("Dell quotation is ready for download.")
+        st.download_button(
+            "⬇️ Download quotation",
+            data=st.session_state.dell_quote_out_bytes,
+            file_name=st.session_state.dell_quote_output_name or "Dell_Quotation.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dell_quote_download",
+        )
+        st.info("If you change the file, click Generate again to refresh the output.")
+    elif current_uploaded_id and not st.session_state.dell_quote_out_bytes:
+        st.info("Upload completed. Click Generate Dell Quotation to create and download the file.")
  
 
 st.markdown("""
