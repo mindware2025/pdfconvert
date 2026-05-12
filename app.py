@@ -1938,9 +1938,12 @@ elif tool == "💻 Dell Quotation":
 
             with st.spinner("Generating..."):
                 try:
+                    st.write("Detecting template...")
                     template_type = detect_dell_template(input_bytes)
+                    st.write(f"Template type: {template_type}")
 
                     if template_type == "extended_services":
+                        st.write("Generating extended services quote...")
                         out_bytes = generate_dell_extended_services_quote(
                             input_excel_bytes=input_bytes,
                             margin_percent=margin_percent,
@@ -1949,6 +1952,7 @@ elif tool == "💻 Dell Quotation":
                             input_excel_bytes=input_bytes,
                         )
                     else:
+                        st.write("Generating standard quote...")
                         out_bytes = generate_dell_quote(
                             input_excel_bytes=input_bytes,
                             margin_percent=margin_percent,
@@ -1958,6 +1962,7 @@ elif tool == "💻 Dell Quotation":
                             input_excel_bytes=input_bytes,
                             currency_code=currency_code,
                         )
+                    st.write("Generation complete.")
 
                 except Exception as e:
                     st.error(f"Generation failed: {e}")
