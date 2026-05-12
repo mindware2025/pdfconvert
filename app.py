@@ -1914,7 +1914,6 @@ elif tool == "💻 Dell Quotation":
     uploaded = st.file_uploader(
         "Upload Dell BOQ Excel or PDF",
         type=["xlsx", "xlsm", "xls", "pdf"],
-        accept_multiple_files=False,
     )
 
     margin_percent = st.number_input(
@@ -1931,11 +1930,15 @@ elif tool == "💻 Dell Quotation":
         horizontal=True,
     )
 
-    # ✅ AUTO RUN when file is uploaded
+    # ✅ STORE FILE IN SESSION (CRITICAL FIX)
     if uploaded:
-        input_bytes = uploaded.read()
+        st.session_state["dell_file"] = uploaded.read()
 
+    # ✅ RUN ONLY IF STORED
+    if "dell_file" in st.session_state:
         try:
+            input_bytes = st.session_state["dell_file"]
+
             template_type = detect_dell_template(input_bytes)
 
             if template_type == "extended_services":
@@ -1957,18 +1960,20 @@ elif tool == "💻 Dell Quotation":
                 )
 
             if out_bytes:
-                st.success("✅ Quotation generated")
+                st.success("✅ Quotation ready")
+
                 st.download_button(
                     "⬇️ Download quotation",
                     data=out_bytes,
                     file_name=output_name,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
+
             else:
                 st.error("❌ Output is empty")
 
         except Exception as e:
-            st.error("❌ Error occurred:")
+            st.error("❌ Error:")
             st.text(traceback.format_exc())
  
 
