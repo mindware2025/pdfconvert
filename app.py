@@ -1910,10 +1910,11 @@ elif tool == "💻 Dell Quotation":
     st.title("💼 Dell Quotation Tool")
 
     uploaded = st.file_uploader(
-    "Upload Dell BOQ Excel or PDF",
-    type=["xlsx", "xlsm", "xls", "pdf"],
-    accept_multiple_files=False,
-)
+        "Upload Dell BOQ Excel or PDF",
+        type=["xlsx", "xlsm", "xls", "pdf"],
+        accept_multiple_files=False,
+        key="dell_quote_upload",
+    )
 
     margin_percent = st.number_input(
         "Default Margin %",
@@ -1942,9 +1943,10 @@ elif tool == "💻 Dell Quotation":
             st.session_state.dell_out_bytes = None
             st.session_state.dell_generated = False
 
-    if st.button("Generate Dell Quotation"):
+    if st.button("Generate Dell Quotation", key="dell_quote_generate"):
         if not uploaded:
             st.warning("Please upload a file.")
+            st.session_state.dell_generated = False
         else:
             input_bytes = uploaded.getvalue()
             st.write("File uploaded, starting detection")
@@ -1977,13 +1979,12 @@ elif tool == "💻 Dell Quotation":
                     st.session_state.dell_out_bytes = out_bytes
                     st.session_state.dell_output_name = output_name
                     st.session_state.dell_generated = True
-                    st.success("Dell quotation generated successfully.")
-                    st.experimental_rerun()
 
                 except Exception as e:
                     st.error(f"Generation failed: {e}")
                     st.session_state.dell_generated = False
-                    st.stop()
+                    st.session_state.dell_out_bytes = None
+                    st.session_state.dell_output_name = "Dell_Quotation.xlsx"
 
     if st.session_state.dell_generated and st.session_state.dell_out_bytes:
         st.write(f"Generation successful. File size: {len(st.session_state.dell_out_bytes)} bytes")
