@@ -1938,21 +1938,38 @@ elif tool == "💻 Dell Quotation":
         st.session_state["dell_output_name"] = None
     if "dell_generation_done" not in st.session_state:
         st.session_state["dell_generation_done"] = False
+    if "dell_uploaded_hash" not in st.session_state:
+        st.session_state["dell_uploaded_hash"] = None
+    if "dell_uploaded_bytes" not in st.session_state:
+        st.session_state["dell_uploaded_bytes"] = None
     if "dell_last_uploaded_name" not in st.session_state:
         st.session_state["dell_last_uploaded_name"] = None
 
-    if uploaded is not None and st.session_state["dell_last_uploaded_name"] != uploaded.name:
-        st.session_state["dell_output_bytes"] = None
-        st.session_state["dell_output_name"] = None
-        st.session_state["dell_generation_done"] = False
-        st.session_state["dell_last_uploaded_name"] = uploaded.name
+    if uploaded is not None:
+        uploaded_bytes = uploaded.getvalue()
+        uploaded_hash = hashlib.sha256(uploaded_bytes).hexdigest()
+        if (
+            st.session_state["dell_last_uploaded_name"] != uploaded.name
+            or st.session_state["dell_uploaded_hash"] != uploaded_hash
+        ):
+            st.session_state["dell_output_bytes"] = None
+            st.session_state["dell_output_name"] = None
+            st.session_state["dell_generation_done"] = False
+            st.session_state["dell_uploaded_hash"] = uploaded_hash
+            st.session_state["dell_uploaded_bytes"] = uploaded_bytes
+            st.session_state["dell_last_uploaded_name"] = uploaded.name
+    else:
+        uploaded_bytes = st.session_state.get("dell_uploaded_bytes")
+
 
     if st.button("🚀 Generate Quotation", key="generate_dell_quote_btn"):
-        if uploaded is None:
+        if uploaded is None and st.session_state.get("dell_uploaded_bytes") is None:
             st.warning("Please upload a file first.")
         else:
             try:
-                input_bytes = uploaded.getvalue()
+                input_bytes = st.session_state.get("dell_uploaded_bytes") or uploaded.getvalue()
+                if input_bytes is None:
+                    raise ValueError("Uploaded file bytes are missing.")
                 with st.spinner("⚙️ Generating quotation..."):
                     template_type = detect_dell_template(input_bytes)
                     if template_type == "extended_services":
@@ -1967,7 +1984,7 @@ elif tool == "💻 Dell Quotation":
                             margin_percent=margin_percent,
                             currency_code=currency_code,
                         )
-                        output_name = f"{Path(uploaded.name).stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+                        output_name = f"{Path(st.session_state.get('dell_last_uploaded_name', uploaded.name if uploaded else 'quote')).stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 
                     if isinstance(out_bytes, io.BytesIO):
                         out_bytes = out_bytes.getvalue()
