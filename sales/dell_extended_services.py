@@ -356,7 +356,7 @@ def generate_dell_extended_services_quote(
     ws[f"F{header_row}"] = "Total Price (excluding vat)"
     ws[f"G{header_row}"] = "Margin"
 
-    header_fill = PatternFill(start_color="9BBB59", end_color="9BBB59", fill_type="solid")
+    header_fill = PatternFill(start_color="9BC2E6", end_color="9BC2E6", fill_type="solid")
     helper_header_fill = PatternFill(start_color="F4CCCC", end_color="F4CCCC", fill_type="solid")
     header_font = Font(bold=True, color="000000")
     border_thin = Border(
@@ -460,6 +460,7 @@ def generate_dell_extended_services_quote(
     }
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
+    ws.column_dimensions["G"].hidden = False
 
     out = BytesIO()
     wb.save(out)
