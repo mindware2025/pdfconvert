@@ -60,10 +60,15 @@ def _to_number(v):
 
 def _get_local_logo_path() -> Optional[str]:
     base_dir = Path(__file__).resolve().parent
-    for name in ("dell.png", "dell copy.png"):
-        candidate = base_dir / name
-        if candidate.exists():
-            return str(candidate)
+    candidate_dirs = [
+        base_dir,
+        base_dir.parent,
+    ]
+    for directory in candidate_dirs:
+        for name in ("dell.png", "dell copy.png", "dell_quote.png"):
+            candidate = directory / name
+            if candidate.exists():
+                return str(candidate)
     return None
 
 

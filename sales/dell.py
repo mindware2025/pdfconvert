@@ -225,9 +225,16 @@ def _pil_to_xl_image(pil_img):
 
 def _get_local_logo_path() -> Optional[str]:
     """Return the first available local logo path."""
-    for path in ("dell copy.png", "dell.png"):
-        if os.path.exists(path):
-            return path
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    candidate_dirs = [
+        base_dir,
+        os.path.dirname(base_dir),
+    ]
+    for directory in candidate_dirs:
+        for name in ("dell copy.png", "dell.png", "dell_quote.png"):
+            path = os.path.join(directory, name)
+            if os.path.exists(path):
+                return path
     return None
 
 def _extract_all_excel_quote_refs(ws, max_rows: int = 80):
