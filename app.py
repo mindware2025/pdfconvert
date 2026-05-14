@@ -1933,23 +1933,30 @@ elif tool == "💻 Dell Quotation":
     )
 
     # Session state init
+    if "dell_uploaded_bytes" not in st.session_state:
+        st.session_state["dell_uploaded_bytes"] = None
     if "dell_output_bytes" not in st.session_state:
         st.session_state["dell_output_bytes"] = None
     if "dell_output_name" not in st.session_state:
         st.session_state["dell_output_name"] = None
     if "dell_generation_done" not in st.session_state:
         st.session_state["dell_generation_done"] = False
+    if "dell_last_uploaded_name" not in st.session_state:
+        st.session_state["dell_last_uploaded_name"] = None
 
-    # Clear previously generated output whenever a new file is uploaded.
-    if uploaded is not None and st.session_state.get("dell_last_uploaded_name") != uploaded.name:
-        st.session_state["dell_output_bytes"] = None
-        st.session_state["dell_output_name"] = None
-        st.session_state["dell_generation_done"] = False
-        st.session_state["dell_last_uploaded_name"] = uploaded.name
+    if uploaded is not None:
+        if st.session_state.get("dell_last_uploaded_name") != uploaded.name:
+            st.session_state["dell_uploaded_bytes"] = uploaded.getvalue()
+            st.session_state["dell_output_bytes"] = None
+            st.session_state["dell_output_name"] = None
+            st.session_state["dell_generation_done"] = False
+            st.session_state["dell_last_uploaded_name"] = uploaded.name
+        elif st.session_state.get("dell_uploaded_bytes") is None:
+            st.session_state["dell_uploaded_bytes"] = uploaded.getvalue()
 
-    if uploaded is not None and not st.session_state.get("dell_generation_done", False):
+    if st.session_state.get("dell_uploaded_bytes") is not None and not st.session_state.get("dell_generation_done", False):
         try:
-            input_bytes = uploaded.getvalue()
+            input_bytes = st.session_state["dell_uploaded_bytes"]
 
             with st.spinner("⚙️ Generating quotation..."):
                 template_type = detect_dell_template(input_bytes)
@@ -1968,10 +1975,7 @@ elif tool == "💻 Dell Quotation":
                         margin_percent=margin_percent,
                         currency_code=currency_code,
                     )
-                    output_name = build_dell_output_filename(
-                        input_excel_bytes=input_bytes,
-                        currency_code=currency_code,
-                    )
+                    output_name = f"{Path(st.session_state['dell_last_uploaded_name']).stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 
                 if isinstance(out_bytes, io.BytesIO):
                     out_bytes = out_bytes.getvalue()
