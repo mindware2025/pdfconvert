@@ -1939,6 +1939,15 @@ elif tool == "💻 Dell Quotation":
     if "dell_output_name" not in st.session_state:
         st.session_state["dell_output_name"] = None
 
+    # Clear output when a new file is uploaded
+    if uploaded is not None and "dell_last_uploaded_name" not in st.session_state:
+        st.session_state["dell_last_uploaded_name"] = None
+    
+    if uploaded is not None and st.session_state.get("dell_last_uploaded_name") != uploaded.name:
+        st.session_state["dell_output_bytes"] = None
+        st.session_state["dell_output_name"] = None
+        st.session_state["dell_last_uploaded_name"] = uploaded.name
+
     # GENERATE BUTTON
     generate_clicked = st.button(
         "🚀 Generate Quotation",
@@ -1995,6 +2004,7 @@ elif tool == "💻 Dell Quotation":
                 st.session_state["dell_output_name"] = output_name
 
             st.success("✅ Quotation generated successfully")
+            st.rerun()
 
         except Exception as e:
             st.error(str(e))
@@ -2010,7 +2020,6 @@ elif tool == "💻 Dell Quotation":
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="download_dell_quote"
         )
- 
 
 st.markdown("""
 <footer style='text-align:center; margin-top:3rem; color:#1a73e8; font-size:20px; font-weight:bold; font-family: Google Sans, sans-serif;'>
