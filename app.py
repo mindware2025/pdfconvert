@@ -1932,17 +1932,19 @@ elif tool == "💻 Dell Quotation":
         horizontal=True
     )
 
+    # Session state init
     if "dell_output_bytes" not in st.session_state:
         st.session_state["dell_output_bytes"] = None
     if "dell_output_name" not in st.session_state:
         st.session_state["dell_output_name"] = None
-    if "dell_last_uploaded_name" not in st.session_state:
-        st.session_state["dell_last_uploaded_name"] = None
+    if "dell_generation_done" not in st.session_state:
+        st.session_state["dell_generation_done"] = False
 
     # Clear previously generated output whenever a new file is uploaded.
     if uploaded is not None and st.session_state.get("dell_last_uploaded_name") != uploaded.name:
         st.session_state["dell_output_bytes"] = None
         st.session_state["dell_output_name"] = None
+        st.session_state["dell_generation_done"] = False
         st.session_state["dell_last_uploaded_name"] = uploaded.name
 
     # GENERATE BUTTON
@@ -1999,25 +2001,25 @@ elif tool == "💻 Dell Quotation":
                 # SAVE TO SESSION
                 st.session_state["dell_output_bytes"] = out_bytes
                 st.session_state["dell_output_name"] = output_name
+                st.session_state["dell_generation_done"] = True
 
             st.success("✅ Quotation generated successfully")
-
-            # DOWNLOAD BUTTON - show immediately after generation
-            st.markdown("### 📥 Download File")
-            st.info(f"Your quotation is ready: **{st.session_state.get('dell_output_name', 'quotation.xlsx')}**")
-            st.download_button(
-                label="⬇️ Download quotation",
-                data=st.session_state.get("dell_output_bytes"),
-                file_name=st.session_state.get("dell_output_name", "quotation.xlsx"),
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="download_dell_quote"
-            )
 
         except Exception as e:
             st.error(str(e))
             st.exception(e)
 
-    # No need for separate download section since it's shown after generation
+    # DOWNLOAD BUTTON - show if generation was done
+    if st.session_state.get("dell_generation_done", False):
+        st.markdown("### 📥 Download File")
+        st.info(f"Your quotation is ready: **{st.session_state.get('dell_output_name', 'quotation.xlsx')}**")
+        st.download_button(
+            label="⬇️ Download quotation",
+            data=st.session_state.get("dell_output_bytes"),
+            file_name=st.session_state.get("dell_output_name", "quotation.xlsx"),
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="download_dell_quote"
+        )
 
 st.markdown("""
 <footer style='text-align:center; margin-top:3rem; color:#1a73e8; font-size:20px; font-weight:bold; font-family: Google Sans, sans-serif;'>
