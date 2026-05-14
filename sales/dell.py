@@ -9,6 +9,7 @@ from logging.handlers import RotatingFileHandler
 
 import openpyxl
 from openpyxl import Workbook
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter, column_index_from_string as colidx
 from openpyxl.drawing.image import Image as XLImage
@@ -77,7 +78,15 @@ def _cell_to_text(v, fallback=""):
         return fallback
     if isinstance(v, datetime):
         return v.strftime("%d/%m/%Y")
-    return str(v).strip()
+    return _sanitize_excel_text(str(v).strip())
+
+
+def _sanitize_excel_text(value: str) -> str:
+    """Remove characters that openpyxl cannot write into worksheet cells."""
+    if value is None:
+        return ""
+    text = ILLEGAL_CHARACTERS_RE.sub("", str(value))
+    return text[:32767]
 
 
 def _normalize_text(s: str) -> str:
@@ -2169,7 +2178,7 @@ def generate_dell_quote(
             part_number_from_config = part_numbers_by_item.get(str(sr_no), "")
             part_number_from_heading = _extract_part_number_from_description(item_headings_by_item.get(str(sr_no), ""))
             part_number = part_number_from_heading or part_number_from_config
-            ws[f"B{row_ptr}"] = part_number
+            ws[f"B{row_ptr}"] = _sanitize_excel_text(part_number)
             logger.debug(
                 "Part number for item %s resolved to '%s' (heading='%s', config='%s', pricing_description='%s')",
                 sr_no,
@@ -2178,7 +2187,7 @@ def generate_dell_quote(
                 part_number_from_config,
                 desc_text,
             )
-        ws[f"{desc_col}{row_ptr}"] = desc_text
+        ws[f"{desc_col}{row_ptr}"] = _sanitize_excel_text(desc_text)
         ws[f"{qty_col}{row_ptr}"] = qty_val
 
         # Helper columns keep the original unit price and per-unit adjustment.
@@ -2289,7 +2298,7 @@ def generate_dell_quote(
     for line in notes:
         footer_end_col = 8 if currency_code == "AED" else 6
         ws.merge_cells(start_row=footer_row, start_column=2, end_row=footer_row, end_column=footer_end_col)
-        ws.cell(footer_row, 2).value = line
+        ws.cell(footer_row, 2).value = _sanitize_excel_text(line)
         ws.cell(footer_row, 2).alignment = Alignment(wrap_text=True, vertical="top")
         footer_row += 1
 
@@ -2424,19 +2433,19 @@ def generate_dell_quote(
                 details = service_fields_by_item.get(item_key, {})
                 ws2[f"A{r2}"] = display_item_no
                 ws2[f"B{r2}"] = ""
-                ws2[f"C{r2}"] = heading
+                ws2[f"C{r2}"] = _sanitize_excel_text(heading)
                 if show_sku_col:
-                    ws2[f"D{r2}"] = part_numbers_by_item.get(item_key, "")
-                    ws2[f"E{r2}"] = details.get("service_tag", "")
-                    ws2[f"F{r2}"] = details.get("service_start_date", "")
-                    ws2[f"G{r2}"] = details.get("service_end_date", "")
-                    ws2[f"H{r2}"] = qty_by_item.get(item_key, "")
+                    ws2[f"D{r2}"] = _sanitize_excel_text(part_numbers_by_item.get(item_key, ""))
+                    ws2[f"E{r2}"] = _sanitize_excel_text(details.get("service_tag", ""))
+                    ws2[f"F{r2}"] = _sanitize_excel_text(details.get("service_start_date", ""))
+                    ws2[f"G{r2}"] = _sanitize_excel_text(details.get("service_end_date", ""))
+                    ws2[f"H{r2}"] = _sanitize_excel_text(qty_by_item.get(item_key, ""))
                     cols = ("A", "B", "C", "D", "E", "F", "G", "H")
                 else:
-                    ws2[f"D{r2}"] = details.get("service_tag", "")
-                    ws2[f"E{r2}"] = details.get("service_start_date", "")
-                    ws2[f"F{r2}"] = details.get("service_end_date", "")
-                    ws2[f"G{r2}"] = qty_by_item.get(item_key, "")
+                    ws2[f"D{r2}"] = _sanitize_excel_text(details.get("service_tag", ""))
+                    ws2[f"E{r2}"] = _sanitize_excel_text(details.get("service_start_date", ""))
+                    ws2[f"F{r2}"] = _sanitize_excel_text(details.get("service_end_date", ""))
+                    ws2[f"G{r2}"] = _sanitize_excel_text(qty_by_item.get(item_key, ""))
                     cols = ("A", "B", "C", "D", "E", "F", "G")
 
                 for col in cols:
@@ -2477,7 +2486,7 @@ def generate_dell_quote(
             r2 += 1
 
             ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=5)
-            ws2[f"A{r2}"] = item_heading
+            ws2[f"A{r2}"] = _sanitize_excel_text(item_heading)
             ws2[f"A{r2}"].font = Font(italic=True, color="1F497D")
             ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
             r2 += 1
@@ -2502,7 +2511,7 @@ def generate_dell_quote(
                     ws2[f"A{r2}"] = ""
                     end_col = 5 if show_sku_col else 4
                     ws2.merge_cells(start_row=r2, start_column=2, end_row=r2, end_column=end_col)
-                    ws2[f"B{r2}"] = module
+                    ws2[f"B{r2}"] = _sanitize_excel_text(module)
                     ws2[f"B{r2}"].font = Font(bold=True, color="1F1F1F")
                     ws2[f"B{r2}"].fill = section_fill
                     ws2[f"B{r2}"].alignment = Alignment(horizontal="left", vertical="center")
@@ -2513,14 +2522,14 @@ def generate_dell_quote(
                     continue
 
                 ws2[f"A{r2}"] = ""
-                ws2[f"B{r2}"] = module
-                ws2[f"C{r2}"] = dsc
+                ws2[f"B{r2}"] = _sanitize_excel_text(module)
+                ws2[f"C{r2}"] = _sanitize_excel_text(dsc)
                 if show_sku_col:
-                    ws2[f"D{r2}"] = sku
-                    ws2[f"E{r2}"] = qty
+                    ws2[f"D{r2}"] = _sanitize_excel_text(sku)
+                    ws2[f"E{r2}"] = _sanitize_excel_text(qty)
                     cols = ("A", "B", "C", "D", "E")
                 else:
-                    ws2[f"D{r2}"] = qty
+                    ws2[f"D{r2}"] = _sanitize_excel_text(qty)
                     cols = ("A", "B", "C", "D")
                 for col in cols:
                     ws2[f"{col}{r2}"].alignment = Alignment(vertical="top", wrap_text=True)

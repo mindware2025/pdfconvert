@@ -1940,6 +1940,8 @@ elif tool == "💻 Dell Quotation":
         st.session_state["dell_generation_done"] = False
     if "dell_generation_success" not in st.session_state:
         st.session_state["dell_generation_success"] = False
+    if "dell_last_error" not in st.session_state:
+        st.session_state["dell_last_error"] = None
     if "dell_uploaded_hash" not in st.session_state:
         st.session_state["dell_uploaded_hash"] = None
     if "dell_uploaded_bytes" not in st.session_state:
@@ -1958,6 +1960,7 @@ elif tool == "💻 Dell Quotation":
             st.session_state["dell_output_name"] = None
             st.session_state["dell_generation_done"] = False
             st.session_state["dell_generation_success"] = False
+            st.session_state["dell_last_error"] = None
             st.session_state["dell_uploaded_hash"] = uploaded_hash
             st.session_state["dell_uploaded_bytes"] = uploaded_bytes
             st.session_state["dell_last_uploaded_name"] = uploaded.name
@@ -1992,6 +1995,7 @@ elif tool == "💻 Dell Quotation":
                 "output_name": st.session_state.get("dell_output_name"),
                 "generation_done": st.session_state.get("dell_generation_done"),
                 "generation_success": st.session_state.get("dell_generation_success"),
+                "last_error": st.session_state.get("dell_last_error"),
                 "generate_clicked": generate_clicked,
             }
         )
@@ -2005,6 +2009,7 @@ elif tool == "💻 Dell Quotation":
             st.warning("Please upload a file first.")
         else:
             try:
+                st.session_state["dell_last_error"] = None
                 input_bytes = st.session_state.get("dell_uploaded_bytes") or uploaded.getvalue()
                 if input_bytes is None:
                     raise ValueError("Uploaded file bytes are missing.")
@@ -2038,6 +2043,7 @@ elif tool == "💻 Dell Quotation":
 
                 st.success("✅ Quotation generated successfully.")
             except Exception as e:
+                st.session_state["dell_last_error"] = str(e)
                 st.error(str(e))
                 st.exception(e)
 
