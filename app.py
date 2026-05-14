@@ -1981,6 +1981,21 @@ elif tool == "💻 Dell Quotation":
                 use_container_width=True
             )
 
+    with st.expander("Dell debug", expanded=True):
+        st.write(
+            {
+                "uploaded_name": st.session_state.get("dell_last_uploaded_name"),
+                "has_uploaded_bytes": bool(st.session_state.get("dell_uploaded_bytes")),
+                "uploaded_bytes_len": len(st.session_state.get("dell_uploaded_bytes") or b""),
+                "has_output_bytes": bool(st.session_state.get("dell_output_bytes")),
+                "output_bytes_len": len(st.session_state.get("dell_output_bytes") or b""),
+                "output_name": st.session_state.get("dell_output_name"),
+                "generation_done": st.session_state.get("dell_generation_done"),
+                "generation_success": st.session_state.get("dell_generation_success"),
+                "generate_clicked": generate_clicked,
+            }
+        )
+
     if st.session_state.get("dell_generation_success", False):
         st.success("✅ Quotation generated successfully! Download button is ready above.")
         st.session_state["dell_generation_success"] = False
@@ -2021,7 +2036,7 @@ elif tool == "💻 Dell Quotation":
                     st.session_state["dell_generation_done"] = True
                     st.session_state["dell_generation_success"] = True
 
-                st.rerun()
+                st.success("✅ Quotation generated successfully.")
             except Exception as e:
                 st.error(str(e))
                 st.exception(e)
