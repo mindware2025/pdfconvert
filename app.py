@@ -34,7 +34,7 @@ from extractors.freight_forwarder_processor import (
     process_freight_forwarder_pdfs,
 )
 from sales.dell_extended_services import generate_dell_extended_services_quote
-from sales.dell import build_dell_output_filename, generate_dell_quote
+from sales.dell import build_dell_output_filename, detect_dell_standard_variant, generate_dell_quote
 from sales.dell_extended_services import build_dell_extended_services_output_filename
 from sales.quotetemplate import detect_dell_template
 from utils.helpers import format_amount, format_invoice_date, format_month_year
@@ -1952,6 +1952,8 @@ elif tool == "💻 Dell Quotation":
         st.session_state["dell_last_currency_code"] = None
     if "dell_last_margin_percent" not in st.session_state:
         st.session_state["dell_last_margin_percent"] = None
+    if "dell_last_template_label" not in st.session_state:
+        st.session_state["dell_last_template_label"] = None
 
     if uploaded is not None:
         uploaded_bytes = uploaded.getvalue()
@@ -1965,6 +1967,7 @@ elif tool == "💻 Dell Quotation":
             st.session_state["dell_generation_done"] = False
             st.session_state["dell_generation_success"] = False
             st.session_state["dell_last_error"] = None
+            st.session_state["dell_last_template_label"] = None
             st.session_state["dell_uploaded_hash"] = uploaded_hash
             st.session_state["dell_uploaded_bytes"] = uploaded_bytes
             st.session_state["dell_last_uploaded_name"] = uploaded.name
@@ -1980,6 +1983,7 @@ elif tool == "💻 Dell Quotation":
         st.session_state["dell_generation_done"] = False
         st.session_state["dell_generation_success"] = False
         st.session_state["dell_last_error"] = None
+        st.session_state["dell_last_template_label"] = None
 
 
     col1, col2 = st.columns([1, 1])
@@ -1995,28 +1999,14 @@ elif tool == "💻 Dell Quotation":
                 file_name=st.session_state.get("dell_output_name", "quotation.xlsx"),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="download_dell_quote_top",
+                on_click=lambda: (
+                    update_usage(
+                        f"dell quotation-{st.session_state.get('dell_last_template_label', 'unknown')}-{st.session_state.get('dell_last_currency_code', currency_code)}",
+                        team,
+                    )
+                ),
                 use_container_width=True
             )
-
-    with st.expander("Dell debug", expanded=True):
-        st.write(
-            {
-                "uploaded_name": st.session_state.get("dell_last_uploaded_name"),
-                "has_uploaded_bytes": bool(st.session_state.get("dell_uploaded_bytes")),
-                "uploaded_bytes_len": len(st.session_state.get("dell_uploaded_bytes") or b""),
-                "has_output_bytes": bool(st.session_state.get("dell_output_bytes")),
-                "output_bytes_len": len(st.session_state.get("dell_output_bytes") or b""),
-                "output_name": st.session_state.get("dell_output_name"),
-                "generation_done": st.session_state.get("dell_generation_done"),
-                "generation_success": st.session_state.get("dell_generation_success"),
-                "last_error": st.session_state.get("dell_last_error"),
-                "selected_currency": currency_code,
-                "last_generated_currency": st.session_state.get("dell_last_currency_code"),
-                "selected_margin": margin_percent,
-                "last_generated_margin": st.session_state.get("dell_last_margin_percent"),
-                "generate_clicked": generate_clicked,
-            }
-        )
 
     if st.session_state.get("dell_generation_success", False):
         st.success("✅ Quotation generated successfully! Download button is ready above.")
@@ -2035,12 +2025,14 @@ elif tool == "💻 Dell Quotation":
                 with st.spinner("⚙️ Generating quotation..."):
                     template_type = detect_dell_template(input_bytes)
                     if template_type == "extended_services":
+                        template_label = "extended_services"
                         out_bytes = generate_dell_extended_services_quote(
                             input_excel_bytes=input_bytes,
                             margin_percent=margin_percent,
                         )
                         output_name = build_dell_extended_services_output_filename(input_bytes)
                     else:
+                        template_label = detect_dell_standard_variant(input_bytes)
                         out_bytes = generate_dell_quote(
                             input_excel_bytes=input_bytes,
                             margin_percent=margin_percent,
@@ -2063,6 +2055,7 @@ elif tool == "💻 Dell Quotation":
                     st.session_state["dell_generation_success"] = True
                     st.session_state["dell_last_currency_code"] = currency_code
                     st.session_state["dell_last_margin_percent"] = margin_percent
+                    st.session_state["dell_last_template_label"] = template_label
 
                 st.success("✅ Quotation generated successfully.")
             except Exception as e:
@@ -2078,6 +2071,12 @@ elif tool == "💻 Dell Quotation":
             file_name=st.session_state.get("dell_output_name", "quotation.xlsx"),
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="download_dell_quote_bottom",
+            on_click=lambda: (
+                update_usage(
+                    f"dell quotation-{st.session_state.get('dell_last_template_label', 'unknown')}-{st.session_state.get('dell_last_currency_code', currency_code)}",
+                    team,
+                )
+            ),
             use_container_width=True
         )
         st.caption(f"Prepared file: {st.session_state.get('dell_output_name', 'quotation.xlsx')}")

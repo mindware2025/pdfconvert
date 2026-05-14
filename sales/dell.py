@@ -1725,6 +1725,30 @@ CURRENCY_NUMBER_FORMATS = {
     "AED": '"AED" #,##0.00',
 }
 
+
+def detect_dell_standard_variant(input_excel_bytes: bytes) -> str:
+    """Return the standard Dell extraction variant used for this input."""
+    try:
+        if input_excel_bytes.lstrip().startswith(b"%PDF"):
+            return "pdf"
+
+        src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
+        src_ws = src_wb.active
+
+        if _is_grouped_config_template(src_ws):
+            return "grouped_config"
+
+        if _try_extract_items_from_pricing_summary(src_ws):
+            return "pricing_summary"
+
+        compact_items, _ = _extract_compact_quote_items_and_config(src_ws)
+        if compact_items:
+            return "compact"
+
+        return "generic"
+    except Exception:
+        return "unknown"
+
 def generate_dell_quote(
     input_excel_bytes: bytes,
     logo_bytes: Optional[bytes] = None,
