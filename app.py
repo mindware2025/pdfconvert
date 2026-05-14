@@ -108,10 +108,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
-
-# Runtime debug indicator: shows which app file is currently executing.
-st.caption(f"Running app file: {__file__}")
-
 # ----------- Constants -----------
 DEFAULTS = {
     "supp_code": "SDIG005",
@@ -1949,10 +1945,7 @@ elif tool == "💻 Dell Quotation":
         key="generate_dell_quote_btn"
     )
 
-    st.caption(f"Debug: generate_clicked={generate_clicked}, tool={tool}, team={team}")
-
     if generate_clicked:
-        st.caption("Debug: entered generate block")
 
         if uploaded is None:
             st.warning("Please upload a file first.")
@@ -2000,10 +1993,8 @@ elif tool == "💻 Dell Quotation":
                 # SAVE TO SESSION
                 st.session_state["dell_output_bytes"] = out_bytes
                 st.session_state["dell_output_name"] = output_name
-                st.caption(f"Debug: saved bytes={len(out_bytes)}, name={output_name}")
 
             st.success("✅ Quotation generated successfully")
-            st.info(f"Generated {len(out_bytes)} bytes. Download should appear below.")
 
         except Exception as e:
             st.error(str(e))
@@ -2011,7 +2002,6 @@ elif tool == "💻 Dell Quotation":
 
     # DOWNLOAD BUTTON
     if st.session_state["dell_output_bytes"] is not None:
-        st.caption("Debug: output bytes present, rendering download button")
         st.markdown("### 📥 Download File")
         st.download_button(
             label="⬇️ Download quotation",
@@ -2019,14 +2009,6 @@ elif tool == "💻 Dell Quotation":
             file_name=st.session_state["dell_output_name"],
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="download_dell_quote"
-        )
-    else:
-        st.info("Click Generate Quotation to create the Dell quote file.")
-
-    # Debug helper for Dell quote flow
-    if uploaded is not None:
-        st.caption(
-            f"Debug: upload present, bytes={len(st.session_state['dell_output_bytes']) if st.session_state['dell_output_bytes'] else 0}, file={st.session_state['dell_output_name']}"
         )
  
 
