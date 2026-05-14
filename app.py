@@ -1938,6 +1938,8 @@ elif tool == "💻 Dell Quotation":
         st.session_state["dell_output_name"] = None
     if "dell_generation_done" not in st.session_state:
         st.session_state["dell_generation_done"] = False
+    if "dell_generation_success" not in st.session_state:
+        st.session_state["dell_generation_success"] = False
     if "dell_uploaded_hash" not in st.session_state:
         st.session_state["dell_uploaded_hash"] = None
     if "dell_uploaded_bytes" not in st.session_state:
@@ -1955,6 +1957,7 @@ elif tool == "💻 Dell Quotation":
             st.session_state["dell_output_bytes"] = None
             st.session_state["dell_output_name"] = None
             st.session_state["dell_generation_done"] = False
+            st.session_state["dell_generation_success"] = False
             st.session_state["dell_uploaded_hash"] = uploaded_hash
             st.session_state["dell_uploaded_bytes"] = uploaded_bytes
             st.session_state["dell_last_uploaded_name"] = uploaded.name
@@ -1968,9 +1971,8 @@ elif tool == "💻 Dell Quotation":
         generate_clicked = st.button("🚀 Generate Quotation", key="generate_dell_quote_btn", use_container_width=True)
     
     with col2:
-        download_slot = st.empty()
         if st.session_state.get("dell_generation_done", False):
-            download_slot.download_button(
+            st.download_button(
                 label="⬇️ Download quotation",
                 data=st.session_state.get("dell_output_bytes"),
                 file_name=st.session_state.get("dell_output_name", "quotation.xlsx"),
@@ -1978,6 +1980,10 @@ elif tool == "💻 Dell Quotation":
                 key="download_dell_quote",
                 use_container_width=True
             )
+
+    if st.session_state.get("dell_generation_success", False):
+        st.success("✅ Quotation generated successfully! Download button is ready above.")
+        st.session_state["dell_generation_success"] = False
 
     if generate_clicked:
         if uploaded is None and st.session_state.get("dell_uploaded_bytes") is None:
@@ -2013,16 +2019,9 @@ elif tool == "💻 Dell Quotation":
                     st.session_state["dell_output_bytes"] = out_bytes
                     st.session_state["dell_output_name"] = output_name
                     st.session_state["dell_generation_done"] = True
-                    download_slot.download_button(
-                        label="⬇️ Download quotation",
-                        data=st.session_state["dell_output_bytes"],
-                        file_name=st.session_state["dell_output_name"],
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        key="download_dell_quote_ready",
-                        use_container_width=True
-                    )
+                    st.session_state["dell_generation_success"] = True
 
-                st.success("✅ Quotation generated successfully! Download button is ready above.")
+                st.rerun()
             except Exception as e:
                 st.error(str(e))
                 st.exception(e)
