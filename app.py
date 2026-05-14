@@ -943,7 +943,7 @@ elif team == "Sales":
     TOOL_OPTIONS = [
         "IBM Quotation",
         "MIBB Quotations",
-        "💻 Dell Quotation",
+        "💻 Dell Quotation"
     ]
 else:
     TOOL_OPTIONS = ["-- Select a tool --"]
@@ -1932,21 +1932,6 @@ elif tool == "💻 Dell Quotation":
         horizontal=True
     )
 
-    if "dell_output_bytes" not in st.session_state:
-        st.session_state["dell_output_bytes"] = None
-    if "dell_output_name" not in st.session_state:
-        st.session_state["dell_output_name"] = None
-    if "dell_generation_done" not in st.session_state:
-        st.session_state["dell_generation_done"] = False
-    if "dell_last_uploaded_name" not in st.session_state:
-        st.session_state["dell_last_uploaded_name"] = None
-
-    if uploaded is not None and st.session_state.get("dell_last_uploaded_name") != uploaded.name:
-        st.session_state["dell_output_bytes"] = None
-        st.session_state["dell_output_name"] = None
-        st.session_state["dell_generation_done"] = False
-        st.session_state["dell_last_uploaded_name"] = uploaded.name
-
     if st.button("🚀 Generate Quotation", key="generate_dell_quote_btn"):
         if uploaded is None:
             st.warning("Please upload a file first.")
@@ -1960,9 +1945,7 @@ elif tool == "💻 Dell Quotation":
                             input_excel_bytes=input_bytes,
                             margin_percent=margin_percent,
                         )
-                        output_name = build_dell_extended_services_output_filename(
-                            input_bytes
-                        )
+                        output_name = build_dell_extended_services_output_filename(input_bytes)
                     else:
                         out_bytes = generate_dell_quote(
                             input_excel_bytes=input_bytes,
@@ -1977,28 +1960,22 @@ elif tool == "💻 Dell Quotation":
                     if not out_bytes:
                         raise ValueError("Quotation generation completed but produced no file data.")
 
-                    st.session_state["dell_output_bytes"] = out_bytes
-                    st.session_state["dell_output_name"] = output_name
-                    st.session_state["dell_generation_done"] = True
-
-                st.success("✅ Quotation generated successfully")
+                    st.success("✅ Quotation generated successfully")
+                    st.markdown("### 📥 Download File")
+                    st.info(f"Your quotation is ready: **{output_name}**")
+                    st.download_button(
+                        label="⬇️ Download quotation",
+                        data=out_bytes,
+                        file_name=output_name,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="download_dell_quote"
+                    )
             except Exception as e:
                 st.error(str(e))
                 st.exception(e)
 
     if uploaded is None:
         st.info("Upload Dell BOQ Excel or PDF, then click Generate Quotation.")
-
-    if st.session_state.get("dell_generation_done", False):
-        st.markdown("### 📥 Download File")
-        st.info(f"Your quotation is ready: **{st.session_state.get('dell_output_name', 'quotation.xlsx')}**")
-        st.download_button(
-            label="⬇️ Download quotation",
-            data=st.session_state.get("dell_output_bytes"),
-            file_name=st.session_state.get("dell_output_name", "quotation.xlsx"),
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="download_dell_quote"
-        )
 
 st.markdown("""
 <footer style='text-align:center; margin-top:3rem; color:#1a73e8; font-size:20px; font-weight:bold; font-family: Google Sans, sans-serif;'>
