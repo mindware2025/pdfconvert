@@ -1932,17 +1932,14 @@ elif tool == "💻 Dell Quotation":
         horizontal=True
     )
 
-    # Session state init
     if "dell_output_bytes" not in st.session_state:
         st.session_state["dell_output_bytes"] = None
-
     if "dell_output_name" not in st.session_state:
         st.session_state["dell_output_name"] = None
-
-    # Clear output when a new file is uploaded
-    if uploaded is not None and "dell_last_uploaded_name" not in st.session_state:
+    if "dell_last_uploaded_name" not in st.session_state:
         st.session_state["dell_last_uploaded_name"] = None
-    
+
+    # Clear previously generated output whenever a new file is uploaded.
     if uploaded is not None and st.session_state.get("dell_last_uploaded_name") != uploaded.name:
         st.session_state["dell_output_bytes"] = None
         st.session_state["dell_output_name"] = None
@@ -2004,19 +2001,19 @@ elif tool == "💻 Dell Quotation":
                 st.session_state["dell_output_name"] = output_name
 
             st.success("✅ Quotation generated successfully")
-            st.rerun()
 
         except Exception as e:
             st.error(str(e))
             st.exception(e)
 
     # DOWNLOAD BUTTON
-    if st.session_state["dell_output_bytes"] is not None:
+    if st.session_state.get("dell_output_bytes") is not None:
         st.markdown("### 📥 Download File")
+        st.info(f"Your quotation is ready: **{st.session_state.get('dell_output_name', 'quotation.xlsx')}**")
         st.download_button(
             label="⬇️ Download quotation",
-            data=st.session_state["dell_output_bytes"],
-            file_name=st.session_state["dell_output_name"],
+            data=st.session_state.get("dell_output_bytes"),
+            file_name=st.session_state.get("dell_output_name", "quotation.xlsx"),
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="download_dell_quote"
         )
