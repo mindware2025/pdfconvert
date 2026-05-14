@@ -2002,21 +2002,22 @@ elif tool == "💻 Dell Quotation":
 
             st.success("✅ Quotation generated successfully")
 
+            # DOWNLOAD BUTTON - show immediately after generation
+            st.markdown("### 📥 Download File")
+            st.info(f"Your quotation is ready: **{st.session_state.get('dell_output_name', 'quotation.xlsx')}**")
+            st.download_button(
+                label="⬇️ Download quotation",
+                data=st.session_state.get("dell_output_bytes"),
+                file_name=st.session_state.get("dell_output_name", "quotation.xlsx"),
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_dell_quote"
+            )
+
         except Exception as e:
             st.error(str(e))
             st.exception(e)
 
-    # DOWNLOAD BUTTON
-    if st.session_state.get("dell_output_bytes") is not None:
-        st.markdown("### 📥 Download File")
-        st.info(f"Your quotation is ready: **{st.session_state.get('dell_output_name', 'quotation.xlsx')}**")
-        st.download_button(
-            label="⬇️ Download quotation",
-            data=st.session_state.get("dell_output_bytes"),
-            file_name=st.session_state.get("dell_output_name", "quotation.xlsx"),
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="download_dell_quote"
-        )
+    # No need for separate download section since it's shown after generation
 
 st.markdown("""
 <footer style='text-align:center; margin-top:3rem; color:#1a73e8; font-size:20px; font-weight:bold; font-family: Google Sans, sans-serif;'>
