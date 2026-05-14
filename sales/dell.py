@@ -1778,6 +1778,7 @@ def generate_dell_quote(
 
     # Missing consolidation fee should be treated as zero for both Excel and PDF uploads.
     consolidation_fee = 0.0
+    item_headings_by_item: Dict[str, str] = {}
     item_display_numbers_by_item: Dict[str, str] = {}
     service_fields_by_item: Dict[str, Dict[str, str]] = {}
     expiry_text = ""
@@ -1790,6 +1791,7 @@ def generate_dell_quote(
         logger.info("Parsed PDF quote: %d items, quote_ref=%s, date=%s", len(items), quote_ref_text, date_text)
         _log_items("PDF items", items)
         item_descs_order = [it[0] for it in items]
+        item_headings_by_item = {str(i + 1): items[i][0] for i in range(len(items))}
     else:
         src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
         src_ws = src_wb.active
