@@ -1939,6 +1939,9 @@ elif tool == "💻 Dell Quotation":
     if "dell_output_name" not in st.session_state:
         st.session_state["dell_output_name"] = None
 
+    if "dell_output_ready" not in st.session_state:
+        st.session_state["dell_output_ready"] = False
+
     # GENERATE BUTTON
     generate_clicked = st.button(
         "🚀 Generate Quotation",
@@ -1987,18 +1990,24 @@ elif tool == "💻 Dell Quotation":
                 if isinstance(out_bytes, io.BytesIO):
                     out_bytes = out_bytes.getvalue()
 
+                if not out_bytes:
+                    raise ValueError("Quotation generation completed but produced no file data.")
+
                 # SAVE TO SESSION
                 st.session_state["dell_output_bytes"] = out_bytes
                 st.session_state["dell_output_name"] = output_name
+                st.session_state["dell_output_ready"] = True
 
             st.success("✅ Quotation generated successfully")
+            st.info(f"Generated {len(out_bytes)} bytes. Download should appear below.")
 
         except Exception as e:
+            st.session_state["dell_output_ready"] = False
             st.error(str(e))
             st.exception(e)
 
     # DOWNLOAD BUTTON
-    if st.session_state["dell_output_bytes"] is not None:
+    if st.session_state["dell_output_ready"] and st.session_state["dell_output_bytes"] is not None:
 
         st.markdown("### 📥 Download File")
 
@@ -2009,6 +2018,10 @@ elif tool == "💻 Dell Quotation":
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="download_dell_quote"
         )
+    elif not st.session_state["dell_output_ready"] and st.session_state["dell_output_bytes"] is not None:
+        st.warning("Quotation file exists in session state, but download is not ready. Please refresh or try again.")
+    elif not st.session_state["dell_output_ready"]:
+        st.info("Click Generate Quotation to create the Dell quote file.")
  
 
 st.markdown("""
