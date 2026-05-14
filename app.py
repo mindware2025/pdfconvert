@@ -1912,25 +1912,28 @@ elif tool == "💻 Dell Quotation":
 
     st.title("💼 Dell Quotation Tool")
 
-    uploaded = st.file_uploader(
-        "Upload Dell BOQ Excel or PDF",
-        type=["xlsx", "xlsm", "xls", "pdf"],
-        key="dell_uploader"
-    )
+    with st.form("dell_quote_form"):
+        uploaded = st.file_uploader(
+            "Upload Dell BOQ Excel or PDF",
+            type=["xlsx", "xlsm", "xls", "pdf"],
+            key="dell_uploader"
+        )
 
-    margin_percent = st.number_input(
-        "Default Margin %",
-        min_value=0.0,
-        max_value=100.0,
-        value=5.0,
-        step=0.5
-    )
+        margin_percent = st.number_input(
+            "Default Margin %",
+            min_value=0.0,
+            max_value=100.0,
+            value=5.0,
+            step=0.5
+        )
 
-    currency_code = st.radio(
-        "Currency",
-        ["USD", "QAR", "AED"],
-        horizontal=True
-    )
+        currency_code = st.radio(
+            "Currency",
+            ["USD", "QAR", "AED"],
+            horizontal=True
+        )
+
+        generate_clicked = st.form_submit_button("🚀 Generate Quotation")
 
     # Session state init
     if "dell_output_bytes" not in st.session_state:
@@ -1946,12 +1949,6 @@ elif tool == "💻 Dell Quotation":
         st.session_state["dell_output_name"] = None
         st.session_state["dell_generation_done"] = False
         st.session_state["dell_last_uploaded_name"] = uploaded.name
-
-    # GENERATE BUTTON
-    generate_clicked = st.button(
-        "🚀 Generate Quotation",
-        key="generate_dell_quote_btn"
-    )
 
     if generate_clicked:
 
@@ -2005,21 +2002,19 @@ elif tool == "💻 Dell Quotation":
 
             st.success("✅ Quotation generated successfully")
 
+            st.markdown("### 📥 Download File")
+            st.info(f"Your quotation is ready: **{st.session_state.get('dell_output_name', 'quotation.xlsx')}**")
+            st.download_button(
+                label="⬇️ Download quotation",
+                data=st.session_state.get("dell_output_bytes"),
+                file_name=st.session_state.get("dell_output_name", "quotation.xlsx"),
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_dell_quote"
+            )
+
         except Exception as e:
             st.error(str(e))
             st.exception(e)
-
-    # DOWNLOAD BUTTON - show if generation was done
-    if st.session_state.get("dell_generation_done", False):
-        st.markdown("### 📥 Download File")
-        st.info(f"Your quotation is ready: **{st.session_state.get('dell_output_name', 'quotation.xlsx')}**")
-        st.download_button(
-            label="⬇️ Download quotation",
-            data=st.session_state.get("dell_output_bytes"),
-            file_name=st.session_state.get("dell_output_name", "quotation.xlsx"),
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="download_dell_quote"
-        )
 
 st.markdown("""
 <footer style='text-align:center; margin-top:3rem; color:#1a73e8; font-size:20px; font-weight:bold; font-family: Google Sans, sans-serif;'>
