@@ -1970,6 +1970,7 @@ elif tool == "💻 Dell Quotation":
                 input_bytes = st.session_state.get("dell_uploaded_bytes") or uploaded.getvalue()
                 if input_bytes is None:
                     raise ValueError("Uploaded file bytes are missing.")
+
                 with st.spinner("⚙️ Generating quotation..."):
                     template_type = detect_dell_template(input_bytes)
                     if template_type == "extended_services":
@@ -1996,7 +1997,7 @@ elif tool == "💻 Dell Quotation":
                     st.session_state["dell_output_name"] = output_name
                     st.session_state["dell_generation_done"] = True
 
-                    st.success("✅ Quotation generated successfully")
+                st.experimental_rerun()
             except Exception as e:
                 st.error(str(e))
                 st.exception(e)
