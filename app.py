@@ -1998,8 +1998,7 @@ elif tool == "💻 Dell Quotation":
                 st.session_state["dell_output_name"] = output_name
                 st.session_state["dell_output_ready"] = True
 
-            st.success("✅ Quotation generated successfully")
-            st.info(f"Generated {len(out_bytes)} bytes. Download should appear below.")
+            st.experimental_rerun()
 
         except Exception as e:
             st.session_state["dell_output_ready"] = False
