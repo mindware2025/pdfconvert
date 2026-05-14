@@ -1932,9 +1932,6 @@ elif tool == "💻 Dell Quotation":
         horizontal=True
     )
 
-    # Session state init
-    if "dell_uploaded_bytes" not in st.session_state:
-        st.session_state["dell_uploaded_bytes"] = None
     if "dell_output_bytes" not in st.session_state:
         st.session_state["dell_output_bytes"] = None
     if "dell_output_name" not in st.session_state:
@@ -1944,57 +1941,53 @@ elif tool == "💻 Dell Quotation":
     if "dell_last_uploaded_name" not in st.session_state:
         st.session_state["dell_last_uploaded_name"] = None
 
-    if uploaded is not None:
-        if st.session_state.get("dell_last_uploaded_name") != uploaded.name:
-            st.session_state["dell_uploaded_bytes"] = uploaded.getvalue()
-            st.session_state["dell_output_bytes"] = None
-            st.session_state["dell_output_name"] = None
-            st.session_state["dell_generation_done"] = False
-            st.session_state["dell_last_uploaded_name"] = uploaded.name
-        elif st.session_state.get("dell_uploaded_bytes") is None:
-            st.session_state["dell_uploaded_bytes"] = uploaded.getvalue()
+    if uploaded is not None and st.session_state.get("dell_last_uploaded_name") != uploaded.name:
+        st.session_state["dell_output_bytes"] = None
+        st.session_state["dell_output_name"] = None
+        st.session_state["dell_generation_done"] = False
+        st.session_state["dell_last_uploaded_name"] = uploaded.name
 
-    if st.session_state.get("dell_uploaded_bytes") is not None and not st.session_state.get("dell_generation_done", False):
-        try:
-            input_bytes = st.session_state["dell_uploaded_bytes"]
+    if st.button("🚀 Generate Quotation", key="generate_dell_quote_btn"):
+        if uploaded is None:
+            st.warning("Please upload a file first.")
+        else:
+            try:
+                input_bytes = uploaded.getvalue()
+                with st.spinner("⚙️ Generating quotation..."):
+                    template_type = detect_dell_template(input_bytes)
+                    if template_type == "extended_services":
+                        out_bytes = generate_dell_extended_services_quote(
+                            input_excel_bytes=input_bytes,
+                            margin_percent=margin_percent,
+                        )
+                        output_name = build_dell_extended_services_output_filename(
+                            input_bytes
+                        )
+                    else:
+                        out_bytes = generate_dell_quote(
+                            input_excel_bytes=input_bytes,
+                            margin_percent=margin_percent,
+                            currency_code=currency_code,
+                        )
+                        output_name = f"{Path(uploaded.name).stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 
-            with st.spinner("⚙️ Generating quotation..."):
-                template_type = detect_dell_template(input_bytes)
+                    if isinstance(out_bytes, io.BytesIO):
+                        out_bytes = out_bytes.getvalue()
 
-                if template_type == "extended_services":
-                    out_bytes = generate_dell_extended_services_quote(
-                        input_excel_bytes=input_bytes,
-                        margin_percent=margin_percent,
-                    )
-                    output_name = build_dell_extended_services_output_filename(
-                        input_bytes
-                    )
-                else:
-                    out_bytes = generate_dell_quote(
-                        input_excel_bytes=input_bytes,
-                        margin_percent=margin_percent,
-                        currency_code=currency_code,
-                    )
-                    output_name = f"{Path(st.session_state['dell_last_uploaded_name']).stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+                    if not out_bytes:
+                        raise ValueError("Quotation generation completed but produced no file data.")
 
-                if isinstance(out_bytes, io.BytesIO):
-                    out_bytes = out_bytes.getvalue()
+                    st.session_state["dell_output_bytes"] = out_bytes
+                    st.session_state["dell_output_name"] = output_name
+                    st.session_state["dell_generation_done"] = True
 
-                if not out_bytes:
-                    raise ValueError("Quotation generation completed but produced no file data.")
-
-                st.session_state["dell_output_bytes"] = out_bytes
-                st.session_state["dell_output_name"] = output_name
-                st.session_state["dell_generation_done"] = True
-
-            st.success("✅ Quotation generated successfully")
-
-        except Exception as e:
-            st.error(str(e))
-            st.exception(e)
+                st.success("✅ Quotation generated successfully")
+            except Exception as e:
+                st.error(str(e))
+                st.exception(e)
 
     if uploaded is None:
-        st.info("Upload Dell BOQ Excel or PDF to generate the quotation automatically.")
+        st.info("Upload Dell BOQ Excel or PDF, then click Generate Quotation.")
 
     if st.session_state.get("dell_generation_done", False):
         st.markdown("### 📥 Download File")
