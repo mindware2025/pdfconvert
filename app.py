@@ -1998,7 +1998,8 @@ elif tool == "💻 Dell Quotation":
                 st.session_state["dell_output_name"] = output_name
                 st.session_state["dell_output_ready"] = True
 
-            st.experimental_rerun()
+            st.success("✅ Quotation generated successfully")
+            st.info(f"Generated {len(out_bytes)} bytes. Download should appear below.")
 
         except Exception as e:
             st.session_state["dell_output_ready"] = False
@@ -2017,10 +2018,16 @@ elif tool == "💻 Dell Quotation":
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="download_dell_quote"
         )
-    elif not st.session_state["dell_output_ready"] and st.session_state["dell_output_bytes"] is not None:
+    elif uploaded is not None and st.session_state["dell_output_bytes"] is not None and not st.session_state["dell_output_ready"]:
         st.warning("Quotation file exists in session state, but download is not ready. Please refresh or try again.")
     elif not st.session_state["dell_output_ready"]:
         st.info("Click Generate Quotation to create the Dell quote file.")
+
+    # Debug helper for Dell quote flow
+    if uploaded is not None:
+        st.caption(
+            f"Debug: upload present, ready={st.session_state['dell_output_ready']}, bytes={len(st.session_state['dell_output_bytes']) if st.session_state['dell_output_bytes'] else 0}, file={st.session_state['dell_output_name']}"
+        )
  
 
 st.markdown("""
