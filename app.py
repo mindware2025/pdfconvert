@@ -1912,28 +1912,25 @@ elif tool == "💻 Dell Quotation":
 
     st.title("💼 Dell Quotation Tool")
 
-    with st.form("dell_quote_form"):
-        uploaded = st.file_uploader(
-            "Upload Dell BOQ Excel or PDF",
-            type=["xlsx", "xlsm", "xls", "pdf"],
-            key="dell_uploader"
-        )
+    uploaded = st.file_uploader(
+        "Upload Dell BOQ Excel or PDF",
+        type=["xlsx", "xlsm", "xls", "pdf"],
+        key="dell_uploader"
+    )
 
-        margin_percent = st.number_input(
-            "Default Margin %",
-            min_value=0.0,
-            max_value=100.0,
-            value=5.0,
-            step=0.5
-        )
+    margin_percent = st.number_input(
+        "Default Margin %",
+        min_value=0.0,
+        max_value=100.0,
+        value=5.0,
+        step=0.5
+    )
 
-        currency_code = st.radio(
-            "Currency",
-            ["USD", "QAR", "AED"],
-            horizontal=True
-        )
-
-        generate_clicked = st.form_submit_button("🚀 Generate Quotation")
+    currency_code = st.radio(
+        "Currency",
+        ["USD", "QAR", "AED"],
+        horizontal=True
+    )
 
     # Session state init
     if "dell_output_bytes" not in st.session_state:
@@ -1949,6 +1946,11 @@ elif tool == "💻 Dell Quotation":
         st.session_state["dell_output_name"] = None
         st.session_state["dell_generation_done"] = False
         st.session_state["dell_last_uploaded_name"] = uploaded.name
+
+    generate_clicked = st.button(
+        "🚀 Generate Quotation",
+        key="generate_dell_quote_btn"
+    )
 
     if generate_clicked:
 
