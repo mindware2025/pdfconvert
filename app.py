@@ -1962,7 +1962,23 @@ elif tool == "💻 Dell Quotation":
         uploaded_bytes = st.session_state.get("dell_uploaded_bytes")
 
 
-    if st.button("🚀 Generate Quotation", key="generate_dell_quote_btn"):
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        generate_clicked = st.button("🚀 Generate Quotation", key="generate_dell_quote_btn", use_container_width=True)
+    
+    with col2:
+        if st.session_state.get("dell_generation_done", False):
+            st.download_button(
+                label="⬇️ Download quotation",
+                data=st.session_state.get("dell_output_bytes"),
+                file_name=st.session_state.get("dell_output_name", "quotation.xlsx"),
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_dell_quote",
+                use_container_width=True
+            )
+
+    if generate_clicked:
         if uploaded is None and st.session_state.get("dell_uploaded_bytes") is None:
             st.warning("Please upload a file first.")
         else:
@@ -1997,24 +2013,13 @@ elif tool == "💻 Dell Quotation":
                     st.session_state["dell_output_name"] = output_name
                     st.session_state["dell_generation_done"] = True
 
-                st.experimental_rerun()
+                st.success("✅ Quotation generated successfully! Download button is ready above.")
             except Exception as e:
                 st.error(str(e))
                 st.exception(e)
 
-    if uploaded is None:
+    if uploaded is None and not st.session_state.get("dell_generation_done", False):
         st.info("Upload Dell BOQ Excel or PDF, then click Generate Quotation.")
-
-    if st.session_state.get("dell_generation_done", False):
-        st.markdown("### 📥 Download File")
-        st.info(f"Your quotation is ready: **{st.session_state.get('dell_output_name', 'quotation.xlsx')}**")
-        st.download_button(
-            label="⬇️ Download quotation",
-            data=st.session_state.get("dell_output_bytes"),
-            file_name=st.session_state.get("dell_output_name", "quotation.xlsx"),
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="download_dell_quote"
-        )
 
 st.markdown("""
 <footer style='text-align:center; margin-top:3rem; color:#1a73e8; font-size:20px; font-weight:bold; font-family: Google Sans, sans-serif;'>
