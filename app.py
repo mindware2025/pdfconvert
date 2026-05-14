@@ -1968,8 +1968,9 @@ elif tool == "💻 Dell Quotation":
         generate_clicked = st.button("🚀 Generate Quotation", key="generate_dell_quote_btn", use_container_width=True)
     
     with col2:
+        download_slot = st.empty()
         if st.session_state.get("dell_generation_done", False):
-            st.download_button(
+            download_slot.download_button(
                 label="⬇️ Download quotation",
                 data=st.session_state.get("dell_output_bytes"),
                 file_name=st.session_state.get("dell_output_name", "quotation.xlsx"),
@@ -2012,6 +2013,14 @@ elif tool == "💻 Dell Quotation":
                     st.session_state["dell_output_bytes"] = out_bytes
                     st.session_state["dell_output_name"] = output_name
                     st.session_state["dell_generation_done"] = True
+                    download_slot.download_button(
+                        label="⬇️ Download quotation",
+                        data=st.session_state["dell_output_bytes"],
+                        file_name=st.session_state["dell_output_name"],
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="download_dell_quote_ready",
+                        use_container_width=True
+                    )
 
                 st.success("✅ Quotation generated successfully! Download button is ready above.")
             except Exception as e:
