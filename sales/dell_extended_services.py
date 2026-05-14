@@ -6,6 +6,7 @@ import os
 import re
 import openpyxl
 from openpyxl import Workbook
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.drawing.image import Image as XLImage
 
@@ -15,7 +16,13 @@ AED_RATE = 3.68
 # ---------------- Helpers ----------------
 
 def _text(v):
-    return "" if v is None else str(v).strip()
+    return "" if v is None else _sanitize_excel_text(str(v).strip())
+
+
+def _sanitize_excel_text(value: str) -> str:
+    if value is None:
+        return ""
+    return ILLEGAL_CHARACTERS_RE.sub("", str(value))[:32767]
 
 
 def _sanitize_filename_part(value: str) -> str:
@@ -461,6 +468,80 @@ def generate_dell_extended_services_quote(
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
     ws.column_dimensions["G"].hidden = False
+
+    # ===== CONFIGURATION SHEET =====
+    ws2 = wb.create_sheet("Configuration")
+    ws2.sheet_view.showGridLines = False
+
+    config_headers = [
+        "Item #",
+        "Model",
+        "Service Contract Description",
+        "Asset",
+        "New Contract Start Date",
+        "Service Contract Expiration",
+        "Qty",
+    ]
+
+    config_header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+    config_body_fill = PatternFill(start_color="D9EAF7", end_color="D9EAF7", fill_type="solid")
+    thin_gray = Border(
+        left=Side(style="thin", color="DDDDDD"),
+        right=Side(style="thin", color="DDDDDD"),
+        top=Side(style="thin", color="DDDDDD"),
+        bottom=Side(style="thin", color="DDDDDD"),
+    )
+
+    for col_idx, header in enumerate(config_headers, start=1):
+        cell = ws2.cell(row=1, column=col_idx, value=header)
+        cell.font = Font(bold=True)
+        cell.fill = config_header_fill
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = border_thin
+
+    config_row = 2
+    item_no = 1
+    for row in rows:
+        model = row[2]
+        service_desc = row[10]
+        asset = row[0]
+        contract_start = row[12]
+        contract_expiration = row[9]
+        qty = _to_number(row[14])
+
+        if not service_desc or qty <= 0:
+            continue
+
+        values = [
+            str(item_no),
+            _sanitize_excel_text(model),
+            _sanitize_excel_text(service_desc),
+            _sanitize_excel_text(asset),
+            _sanitize_excel_text(contract_start),
+            _sanitize_excel_text(contract_expiration),
+            str(int(qty)) if float(qty).is_integer() else str(qty),
+        ]
+
+        for col_idx, value in enumerate(values, start=1):
+            cell = ws2.cell(row=config_row, column=col_idx, value=value)
+            cell.fill = config_body_fill
+            cell.border = thin_gray
+            cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+
+        config_row += 1
+        item_no += 1
+
+    config_widths = {
+        "A": 12,
+        "B": 20,
+        "C": 60,
+        "D": 22,
+        "E": 22,
+        "F": 24,
+        "G": 10,
+    }
+    for col, width in config_widths.items():
+        ws2.column_dimensions[col].width = width
 
     out = BytesIO()
     wb.save(out)
