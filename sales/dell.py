@@ -5,6 +5,7 @@ from typing import Optional, Dict, List, Tuple
 import logging
 import os
 import re
+import tempfile
 from logging.handlers import RotatingFileHandler
 
 import openpyxl
@@ -16,7 +17,7 @@ from openpyxl.drawing.image import Image as XLImage
 
 
 # ----------------- Logging -----------------
-_LOG_FILE = os.path.join(os.path.dirname(__file__), "dell_quote.log")
+_LOG_FILE = os.path.join(tempfile.gettempdir(), "mindware_dell_quote.log")
 
 
 def _get_logger():
