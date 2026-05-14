@@ -1948,6 +1948,10 @@ elif tool == "💻 Dell Quotation":
         st.session_state["dell_uploaded_bytes"] = None
     if "dell_last_uploaded_name" not in st.session_state:
         st.session_state["dell_last_uploaded_name"] = None
+    if "dell_last_currency_code" not in st.session_state:
+        st.session_state["dell_last_currency_code"] = None
+    if "dell_last_margin_percent" not in st.session_state:
+        st.session_state["dell_last_margin_percent"] = None
 
     if uploaded is not None:
         uploaded_bytes = uploaded.getvalue()
@@ -1966,6 +1970,16 @@ elif tool == "💻 Dell Quotation":
             st.session_state["dell_last_uploaded_name"] = uploaded.name
     else:
         uploaded_bytes = st.session_state.get("dell_uploaded_bytes")
+
+    if (
+        st.session_state.get("dell_last_currency_code") not in (None, currency_code)
+        or st.session_state.get("dell_last_margin_percent") not in (None, margin_percent)
+    ):
+        st.session_state["dell_output_bytes"] = None
+        st.session_state["dell_output_name"] = None
+        st.session_state["dell_generation_done"] = False
+        st.session_state["dell_generation_success"] = False
+        st.session_state["dell_last_error"] = None
 
 
     col1, col2 = st.columns([1, 1])
@@ -1996,6 +2010,10 @@ elif tool == "💻 Dell Quotation":
                 "generation_done": st.session_state.get("dell_generation_done"),
                 "generation_success": st.session_state.get("dell_generation_success"),
                 "last_error": st.session_state.get("dell_last_error"),
+                "selected_currency": currency_code,
+                "last_generated_currency": st.session_state.get("dell_last_currency_code"),
+                "selected_margin": margin_percent,
+                "last_generated_margin": st.session_state.get("dell_last_margin_percent"),
                 "generate_clicked": generate_clicked,
             }
         )
@@ -2028,7 +2046,10 @@ elif tool == "💻 Dell Quotation":
                             margin_percent=margin_percent,
                             currency_code=currency_code,
                         )
-                        output_name = f"{Path(st.session_state.get('dell_last_uploaded_name', uploaded.name if uploaded else 'quote')).stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+                        output_name = build_dell_output_filename(
+                            input_bytes,
+                            currency_code=currency_code,
+                        )
 
                     if isinstance(out_bytes, io.BytesIO):
                         out_bytes = out_bytes.getvalue()
@@ -2040,6 +2061,8 @@ elif tool == "💻 Dell Quotation":
                     st.session_state["dell_output_name"] = output_name
                     st.session_state["dell_generation_done"] = True
                     st.session_state["dell_generation_success"] = True
+                    st.session_state["dell_last_currency_code"] = currency_code
+                    st.session_state["dell_last_margin_percent"] = margin_percent
 
                 st.success("✅ Quotation generated successfully.")
             except Exception as e:
