@@ -108,6 +108,10 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# Runtime debug indicator: shows which app file is currently executing.
+st.caption(f"Running app file: {__file__}")
+
 # ----------- Constants -----------
 DEFAULTS = {
     "supp_code": "SDIG005",
