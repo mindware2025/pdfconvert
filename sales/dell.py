@@ -1897,15 +1897,16 @@ def generate_dell_quote(
                 item_headings_by_item = _extract_product_detail_headings(src_ws)
                 item_display_numbers_by_item = _extract_product_detail_display_numbers(src_ws)
             consolidation_fee = _extract_excel_consolidation_fee(src_ws)
+            shipping_fee = _extract_excel_shipping_fee(src_ws)
+            if shipping_fee:
+                logger.info(
+                    "%s: adding Excel shipping fee to consolidation fee (shipping=%s, consolidation_before=%s)",
+                    currency_code,
+                    shipping_fee,
+                    consolidation_fee,
+                )
+            consolidation_fee += shipping_fee
             if currency_code == "AED":
-                shipping_fee = _extract_excel_shipping_fee(src_ws)
-                if shipping_fee:
-                    logger.info(
-                        "AED: adding Excel shipping fee to consolidation fee (shipping=%s, consolidation_before=%s)",
-                        shipping_fee,
-                        consolidation_fee,
-                    )
-                consolidation_fee += shipping_fee
                 # If this template doesn't have a config table, we may still have service fields in Product Details.
                 if not config_rows:
                     service_fields_by_item = _extract_excel_service_fields(src_ws)
