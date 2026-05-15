@@ -1026,7 +1026,7 @@ def create_styled_excel(
     
     # Right block
     right_labels = [
-        "End User:", "Bid Number:", "Agreement Number:", "PA Site Number:", "",
+        "End User:", "Bid Number:", "Agreement Number:", "PA Site Number:", "IBM Opportunity Number:",
         "Select Territory:", "Government Entity (GOE):", "Payment Terms:"
     ]
     right_values = [
@@ -1034,7 +1034,7 @@ def create_styled_excel(
         header_info.get('Bid Number', ''),
         header_info.get('PA Agreement Number', ''),
         header_info.get('PA Site Number', ''),
-        "",
+        header_info.get('IBM Opportunity Number', ''),
         header_info.get('Select Territory', ''),
         header_info.get('Government Entity (GOE)', ''),
         "As aligned with Mindware"
@@ -1475,7 +1475,6 @@ def create_styled_excel_template2(
     
    
     
-    # Show IBM Opportunity Number next to Bid Number when available.
     bid_number_display = header_info.get('Bid Number', '')
     pa_site_display = header_info.get('PA Site Number', '')
     ibm_opportunity_number = header_info.get('IBM Opportunity Number', '').strip()
@@ -1486,15 +1485,10 @@ def create_styled_excel_template2(
             if desc_match:
                 ibm_opportunity_number = desc_match.group(1).strip()
                 break
-    if ibm_opportunity_number:
-        if bid_number_display:
-            bid_number_display = f"{bid_number_display} | IBM Opportunity Number: {ibm_opportunity_number}"
-        else:
-            bid_number_display = f"IBM Opportunity Number: {ibm_opportunity_number}"
     
     # Right block (EXACT COPY FROM TEMPLATE 1)
     right_labels = [
-        "End User:", "Bid Number:", "Agreement Number:", "PA Site Number:", "",
+        "End User:", "Bid Number:", "Agreement Number:", "PA Site Number:", "IBM Opportunity Number:",
         "Select Territory:", "Government Entity (GOE):", "Payment Terms:"
     ]
     right_values = [
@@ -1502,7 +1496,7 @@ def create_styled_excel_template2(
         bid_number_display,
         header_info.get('PA Agreement Number', ''),
         pa_site_display,
-        "",
+        ibm_opportunity_number,
         header_info.get('Select Territory', ''),
         header_info.get('Government Entity (GOE)', ''),
         "As aligned with Mindware"
