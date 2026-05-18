@@ -65,6 +65,8 @@ from claims_automation import (
     derive_defaults_from_source1,
 )
 import plotly.express as px
+from amal.processor import build_output_workbook as build_comm_generator_workbook
+from amal.processor import process_uploaded_pdfs as process_comm_generator_pdfs
 
 
 st.set_page_config(
@@ -876,6 +878,7 @@ if team == "Finance":
 elif team == "Operations":
     TOOL_OPTIONS = [
         "-- Select a tool --",
+        "Commercial Invoice & Packing List",
         "💻 Dell Invoice Extractor",
         "🧾 Cloud Invoice Tool",
         "📦 Barcode PDF Generator grouped",
@@ -1020,6 +1023,46 @@ elif tool == "📄 Claims Automation":
             )
         except Exception as e:
             st.error(f"Error: {e}")
+elif tool == "Commercial Invoice & Packing List":
+    st.title("Commercial Invoice & Packing List")
+    st.write(
+        "Upload the SOB PDF and the IBM PO / commercial invoice PDF to generate "
+        "an Excel workbook with `comm-inv` and `pack_list` sheets."
+    )
+
+    sob_file = st.file_uploader(
+        "Upload SOB PDF",
+        type=["pdf"],
+        key="comm_generator_sob_pdf",
+    )
+    ibm_file = st.file_uploader(
+        "Upload IBM PO / Commercial Invoice PDF",
+        type=["pdf"],
+        key="comm_generator_ibm_pdf",
+    )
+
+    if sob_file and ibm_file:
+        with st.spinner("Preparing workbook..."):
+            result = process_comm_generator_pdfs(sob_file, ibm_file)
+            workbook_bytes = build_comm_generator_workbook(result)
+
+        st.success("Workbook prepared successfully.")
+
+        if result.messages:
+            st.info("Current notes:")
+            for message in result.messages:
+                st.write(f"- {message}")
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        st.download_button(
+            label="Download Excel Workbook",
+            data=workbook_bytes.getvalue(),
+            file_name=f"output_{timestamp}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="comm_generator_download",
+        )
+    else:
+        st.caption("Both PDF files are required before workbook generation.")
 elif tool == "🧾 Cloud Invoice Tool":
     st.title("Cloud Invoice Tool")
     st.markdown(
