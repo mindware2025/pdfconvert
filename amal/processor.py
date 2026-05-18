@@ -104,6 +104,93 @@ def process_uploaded_pdfs(sob_file, ibm_file) -> ProcessingResult:
     )
 
 
+def process_uploaded_pairs(file_pairs: list[tuple]) -> ProcessingResult:
+    pair_results = [process_uploaded_pdfs(sob_file, ibm_file) for sob_file, ibm_file in file_pairs]
+    if not pair_results:
+        raise ValueError("At least one complete SOB + IBM pair is required.")
+
+    first_result = pair_results[0]
+    combined_comm_inv_items: list[dict] = []
+    combined_comm_inv_unmatched_items: list[dict] = []
+    combined_pack_list_items: list[dict] = []
+    combined_messages: list[str] = []
+
+    for pair_index, result in enumerate(pair_results, start=1):
+        combined_comm_inv_items.extend(result.comm_inv_items)
+        combined_comm_inv_unmatched_items.extend(result.comm_inv_unmatched_items)
+        combined_pack_list_items.extend(result.pack_list_items)
+        combined_messages.append(
+            f"Pair {pair_index}: {result.sob_filename} + {result.ibm_filename}"
+        )
+
+    comm_inv_fields = dict(first_result.comm_inv_fields)
+    comm_inv_fields["date"] = datetime.now().strftime("%d/%m/%Y")
+    comm_inv_fields["customer_po"] = join_distinct_values(
+        result.comm_inv_fields.get("customer_po", "") for result in pair_results
+    )
+    comm_inv_fields["commercial_invoice_no"] = join_distinct_values(
+        result.comm_inv_fields.get("commercial_invoice_no", "") for result in pair_results
+    )
+    comm_inv_fields["total_amount"] = round(
+        sum(item["amount"] for item in combined_comm_inv_items if isinstance(item.get("amount"), (int, float))),
+        2,
+    )
+    comm_inv_fields["total_in_words"] = ""
+
+    pack_list_fields = dict(first_result.pack_list_fields)
+    pack_list_fields["commercial_invoice_no"] = comm_inv_fields.get("commercial_invoice_no", "")
+    pack_list_fields["date"] = comm_inv_fields.get("date", "")
+    pack_list_fields["total_packages"] = round(
+        sum(item["package"] for item in combined_pack_list_items if isinstance(item.get("package"), (int, float))),
+        2,
+    )
+    pack_list_fields["total_gross_weight"] = round(
+        sum(item["gross_weight"] for item in combined_pack_list_items if isinstance(item.get("gross_weight"), (int, float))),
+        2,
+    )
+    pack_list_fields["total_qty"] = round(
+        sum(item["qty"] for item in combined_pack_list_items if isinstance(item.get("qty"), (int, float))),
+        2,
+    )
+
+    comm_inv_df = pd.DataFrame(
+        [
+            {
+                "source_file": result.ibm_filename,
+                "document_type": "commercial_invoice",
+                "status": "pending_structure",
+            }
+            for result in pair_results
+        ]
+    )
+
+    pack_list_df = pd.DataFrame(
+        [
+            {
+                "source_file": result.sob_filename,
+                "document_type": "sob",
+                "status": "pending_structure",
+            }
+            for result in pair_results
+        ]
+    )
+
+    return ProcessingResult(
+        sob_filename=", ".join(result.sob_filename for result in pair_results),
+        ibm_filename=", ".join(result.ibm_filename for result in pair_results),
+        sob_text="\n\n".join(result.sob_text for result in pair_results if result.sob_text),
+        ibm_text="\n\n".join(result.ibm_text for result in pair_results if result.ibm_text),
+        comm_inv_fields=comm_inv_fields,
+        comm_inv_items=combined_comm_inv_items,
+        comm_inv_unmatched_items=merge_unmatched_items(combined_comm_inv_unmatched_items),
+        pack_list_fields=pack_list_fields,
+        pack_list_items=combined_pack_list_items,
+        comm_inv_df=comm_inv_df,
+        pack_list_df=pack_list_df,
+        messages=combined_messages,
+    )
+
+
 def build_output_workbook(result: ProcessingResult) -> io.BytesIO:
     return create_workbook_bytes(
         comm_inv_fields=result.comm_inv_fields,
@@ -194,3 +281,34 @@ def merge_ibm_item_sources(pdf_items: list[dict], text_items: list[dict]) -> lis
         merged_items.append(merged_item)
 
     return merged_items
+
+
+def join_distinct_values(values) -> str:
+    seen: set[str] = set()
+    ordered_values: list[str] = []
+    for value in values:
+        clean_value = str(value).strip()
+        if not clean_value:
+            continue
+        normalized_value = clean_value.upper()
+        if normalized_value in seen:
+            continue
+        seen.add(normalized_value)
+        ordered_values.append(clean_value)
+    return " & ".join(ordered_values)
+
+
+def merge_unmatched_items(items: list[dict]) -> list[dict]:
+    grouped_items: dict[str, float] = {}
+    for item in items:
+        item_code = item.get("item_code", "")
+        amount = item.get("amount", 0.0)
+        if not item_code or not isinstance(amount, (int, float)):
+            continue
+        grouped_items[item_code] = round(grouped_items.get(item_code, 0.0) + amount, 2)
+
+    return [
+        {"item_code": item_code, "amount": amount}
+        for item_code, amount in grouped_items.items()
+        if amount != 0
+    ]

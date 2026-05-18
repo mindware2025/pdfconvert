@@ -1,11 +1,10 @@
 # Amal PDF to Excel
 
-This functionality is now integrated into the main project Streamlit app as the Operations tool `Comm Generator`.
+This functionality is integrated into the main project Streamlit app as the Operations tool `Commercial Invoice & Packing List`.
 
-It processes:
+It supports:
 
-- One `SOB` PDF
-- One IBM `PO` / `Commercial Invoice` PDF
+- One or more `SOB` PDF files paired with IBM `PO` / `Commercial Invoice` PDFs
 - One Excel workbook output with:
 - `comm-inv`
 - `pack_list`
@@ -22,9 +21,9 @@ streamlit run app.py
 Then open:
 
 - `Operations`
-- `Comm Generator`
+- `Commercial Invoice & Packing List`
 
 ## Notes
 
-- `amal/app.py` was removed because the feature now runs from the root app.
-- The processing logic remains in the `amal` module files such as `processor.py`, `ibm_parser.py`, `sob_parser.py`, and `workbook_builder.py`.
+- The standalone `amal/app.py` entrypoint is no longer needed and can be removed.
+- The processing logic lives in `processor.py`, `ibm_parser.py`, `sob_parser.py`, `pdf_utils.py`, and `workbook_builder.py`.

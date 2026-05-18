@@ -230,7 +230,16 @@ def fill_comm_inv_unmatched_items(worksheet, items: list[dict]) -> None:
         worksheet.cell(row=row, column=7).value = item.get("item_code", "")
         worksheet.cell(row=row, column=8).value = item.get("amount", "")
 
-    set_outer_border(worksheet, start_row - 1, start_row + len(items) - 1, 7, 8)
+    total_row = start_row + len(items)
+    worksheet.cell(row=total_row, column=7).value = "Total"
+    worksheet.cell(row=total_row, column=7).font = BOLD_FONT
+    worksheet.cell(row=total_row, column=8).value = round(
+        sum(item["amount"] for item in items if isinstance(item.get("amount"), (int, float))),
+        2,
+    )
+    worksheet.cell(row=total_row, column=8).font = BOLD_FONT
+
+    set_outer_border(worksheet, start_row - 1, total_row, 7, 8)
 
 
 def build_pack_list_sheet(worksheet) -> None:
