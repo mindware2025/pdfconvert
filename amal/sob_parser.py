@@ -29,8 +29,49 @@ def extract_block(text: str, start_marker: str, end_marker: str) -> str:
     return "\n".join(clean_lines).strip()
 
 
+def split_merged_contact_and_company(line: str) -> list[str]:
+    match = re.match(r"^(.*\d)([A-Z][A-Z '&().,/:-]{5,})$", line)
+    if not match:
+        return [line]
+
+    left = match.group(1).strip()
+    right = match.group(2).strip()
+    if not left or not right:
+        return [line]
+
+    return [left, right]
+
+
+def is_likely_company_line(line: str) -> bool:
+    candidate = line.strip()
+    if not candidate or "@" in candidate or any(char.isdigit() for char in candidate):
+        return False
+
+    letters_only = re.sub(r"[^A-Za-z]", "", candidate)
+    if len(letters_only) < 6:
+        return False
+
+    uppercase_ratio = sum(1 for char in letters_only if char.isupper()) / len(letters_only)
+    return uppercase_ratio >= 0.8
+
+
+def normalize_address_block(value: str) -> str:
+    lines = [line.strip() for line in value.splitlines() if line.strip()]
+    normalized_lines: list[str] = []
+    for line in lines:
+        if line == "TRN:NATRN:NA":
+            normalized_lines.append("TRN:NA")
+            continue
+        normalized_lines.append(line)
+    return "\n".join(normalized_lines).strip()
+
+
 def split_bill_to_ship_to(block: str) -> tuple[str, str]:
-    lines = [line.strip() for line in block.splitlines() if line.strip()]
+    raw_lines = [line.strip() for line in block.splitlines() if line.strip()]
+    lines: list[str] = []
+    for line in raw_lines:
+        lines.extend(split_merged_contact_and_company(line))
+
     if not lines:
         return "", ""
 
@@ -41,8 +82,20 @@ def split_bill_to_ship_to(block: str) -> tuple[str, str]:
             break
 
     if separator_index is None:
+        for index, line in enumerate(lines[1:], start=1):
+            if not is_likely_company_line(line):
+                continue
+
+            prior_lines = lines[:index]
+            if any("@" in prior_line for prior_line in prior_lines) or sum(
+                any(char.isdigit() for char in prior_line) for prior_line in prior_lines
+            ) >= 2:
+                separator_index = index
+                break
+
+    if separator_index is None:
         midpoint = max(1, len(lines) // 2)
-        return "\n".join(lines[:midpoint]), "\n".join(lines[midpoint:])
+        return normalize_address_block("\n".join(lines[:midpoint])), normalize_address_block("\n".join(lines[midpoint:]))
 
     bill_to_lines = lines[:separator_index]
     ship_to_lines = lines[separator_index:]
@@ -50,7 +103,13 @@ def split_bill_to_ship_to(block: str) -> tuple[str, str]:
         cleaned_first_line = re.sub(r"^.*?(GROUPEMENT INTERBANCAIRE)", r"\1", ship_to_lines[0], flags=re.I)
         ship_to_lines[0] = cleaned_first_line
 
-    return "\n".join(bill_to_lines).strip(), "\n".join(ship_to_lines).strip()
+    bill_to = normalize_address_block("\n".join(bill_to_lines))
+    ship_to = normalize_address_block("\n".join(ship_to_lines))
+
+    if "TRN:NA" not in bill_to and block.replace(" ", "").upper().count("TRN:NA") >= 2:
+        bill_to = f"{bill_to}\nTRN:NA".strip()
+
+    return bill_to, ship_to
 
 
 def extract_comm_inv_fields_from_sob(sob_text: str) -> dict:

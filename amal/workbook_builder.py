@@ -43,6 +43,30 @@ def set_outer_border(worksheet, start_row: int, end_row: int, start_col: int, en
             worksheet.cell(row=row, column=col).border = THIN_BORDER
 
 
+def get_comm_inv_footer_rows(item_count: int) -> tuple[int, int, int]:
+    visible_item_count = max(item_count, 6)
+    freight_row = 18 + visible_item_count
+    total_row = freight_row + 1
+    total_in_words_row = freight_row + 3
+    return freight_row, total_row, total_in_words_row
+
+
+def to_number_if_possible(value):
+    if isinstance(value, (int, float)):
+        return value
+    if not isinstance(value, str):
+        return value
+
+    candidate = value.replace(",", "").strip()
+    if not candidate:
+        return ""
+
+    try:
+        return float(candidate)
+    except ValueError:
+        return value
+
+
 def build_comm_inv_sheet(worksheet) -> None:
     worksheet.title = "comm-inv"
 
@@ -159,7 +183,9 @@ def build_comm_inv_sheet(worksheet) -> None:
     worksheet["G27"].alignment = CENTER
 
 
-def fill_comm_inv_sheet(worksheet, fields: dict) -> None:
+def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
+    freight_row, total_row, total_in_words_row = get_comm_inv_footer_rows(item_count)
+
     worksheet["A5"] = f"Payment Term: {fields.get('payment_term', '')}"
     worksheet["A6"] = f"Inco Terms: {fields.get('inco_terms', '')}"
     worksheet["A7"] = f"Customer PO: {fields.get('customer_po', '')}"
@@ -177,14 +203,14 @@ def fill_comm_inv_sheet(worksheet, fields: dict) -> None:
     worksheet["E9"].alignment = TOP_LEFT
 
     if fields.get("freight_charges", "") != "":
-        worksheet["H24"] = fields.get("freight_charges", "")
+        worksheet.cell(row=freight_row, column=8).value = to_number_if_possible(fields.get("freight_charges", ""))
 
-    if fields.get("total_amount", "") != "":
-        worksheet["H25"] = fields.get("total_amount", "")
+    item_end_row = 17 + max(item_count, 6)
+    worksheet.cell(row=total_row, column=8).value = f"=SUM(H18:H{item_end_row})+H{freight_row}"
 
     if fields.get("total_in_words", "") != "":
-        worksheet["A27"] = f"Total in Words : {fields.get('total_in_words', '')}"
-        worksheet["A27"].alignment = TOP_LEFT
+        worksheet.cell(row=total_in_words_row, column=1).value = f"Total in Words : {fields.get('total_in_words', '')}"
+        worksheet.cell(row=total_in_words_row, column=1).alignment = TOP_LEFT
 
 
 def ensure_comm_inv_item_rows(worksheet, item_count: int) -> None:
@@ -431,8 +457,8 @@ def create_workbook_bytes(
 
     comm_sheet = workbook.active
     build_comm_inv_sheet(comm_sheet)
-    fill_comm_inv_sheet(comm_sheet, comm_inv_fields)
     fill_comm_inv_items(comm_sheet, comm_inv_items)
+    fill_comm_inv_sheet(comm_sheet, comm_inv_fields, len(comm_inv_items))
     fill_comm_inv_unmatched_items(comm_sheet, comm_inv_unmatched_items)
 
     pack_sheet = workbook.create_sheet("pack_list")

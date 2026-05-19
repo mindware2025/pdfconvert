@@ -135,7 +135,9 @@ def process_uploaded_pairs(file_pairs: list[tuple]) -> ProcessingResult:
         sum(item["amount"] for item in combined_comm_inv_items if isinstance(item.get("amount"), (int, float))),
         2,
     )
-    comm_inv_fields["total_in_words"] = ""
+    comm_inv_fields["total_in_words"] = join_distinct_values(
+        result.comm_inv_fields.get("total_in_words", "") for result in pair_results
+    )
 
     pack_list_fields = dict(first_result.pack_list_fields)
     pack_list_fields["commercial_invoice_no"] = comm_inv_fields.get("commercial_invoice_no", "")
