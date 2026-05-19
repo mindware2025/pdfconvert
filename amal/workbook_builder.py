@@ -69,19 +69,46 @@ def count_display_lines(value: str) -> int:
     return len([line for line in str(value).splitlines() if line.strip()]) or 1
 
 
+# Approximate character capacity per address column block
+BILL_TO_CHARS = 38    # cols A-D (~21+36+16+11 char widths)
+SHIP_TO_CHARS = 26    # cols E-F (~15+14)
+SUPPLIER_CHARS = 30   # cols G-H (~22+16)
+
+
+def estimate_wrapped_lines(text: str, col_width_chars: int) -> int:
+    """Count visual lines after word-wrap for a block of text in a merged cell."""
+    if not text:
+        return 1
+    total = 0
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            total += 1
+        else:
+            total += max(1, -(-len(line) // col_width_chars))  # ceiling div
+    return total or 1
+
+
+def estimate_desc_row_height(desc: str, col_width_chars: int = 36) -> int:
+    """Return row height in pts sufficient to show full desc text."""
+    wrapped = estimate_wrapped_lines(desc, col_width_chars)
+    return max(15, wrapped * 15)
+
+
 def compute_address_rows(bill_to: str, ship_to: str) -> int:
     lines = max(
-        count_display_lines(bill_to),
-        count_display_lines(ship_to),
-        count_display_lines(SUPPLIER_TEXT),
+        estimate_wrapped_lines(bill_to, BILL_TO_CHARS),
+        estimate_wrapped_lines(ship_to, SHIP_TO_CHARS),
+        estimate_wrapped_lines(SUPPLIER_TEXT, SUPPLIER_CHARS),
     )
     return max(lines, ADDRESS_MIN_ROWS)
 
 
 def set_merged_block_row_heights(worksheet, start_row: int, end_row: int, total_lines: int) -> None:
-    line_count = max(total_lines, end_row - start_row + 1)
-    total_height = max(26 * (end_row - start_row + 1), line_count * 15)
-    base_height = total_height / (end_row - start_row + 1)
+    num_rows = end_row - start_row + 1
+    # Each line needs ~15 pts; spread evenly across the merged rows
+    total_height = max(num_rows * 15, total_lines * 15)
+    base_height = total_height / num_rows
     for row in range(start_row, end_row + 1):
         worksheet.row_dimensions[row].height = base_height
 
@@ -286,8 +313,8 @@ def fill_comm_inv_items(worksheet, items: list[dict], address_rows: int) -> None
     for offset, item in enumerate(items):
         row = items_start + offset
         desc_val = str(item.get("desc", ""))
-        long_desc = "\n" in desc_val or len(desc_val) > 45
-        worksheet.row_dimensions[row].height = 34 if long_desc else 22
+        needs_wrap = "\n" in desc_val or len(desc_val) > 36
+        worksheet.row_dimensions[row].height = estimate_desc_row_height(desc_val)
 
         def w(col, value, align):
             c = worksheet.cell(row=row, column=col)
@@ -296,7 +323,7 @@ def fill_comm_inv_items(worksheet, items: list[dict], address_rows: int) -> None
             c.border = THIN_BORDER
 
         w(1, item.get("item_code", ""), LEFT)
-        w(2, item.get("desc", ""), TOP_LEFT if long_desc else LEFT)
+        w(2, item.get("desc", ""), TOP_LEFT if needs_wrap else LEFT)
         w(3, item.get("case_no", ""), CENTER)
         w(4, item.get("origin", ""), CENTER)
         w(5, item.get("hs_code", ""), CENTER)
@@ -478,8 +505,8 @@ def fill_pack_list_items(worksheet, items: list[dict], address_rows: int) -> Non
     for offset, item in enumerate(items):
         row = items_start + offset
         desc_val = str(item.get("desc", ""))
-        long_desc = "\n" in desc_val or len(desc_val) > 45
-        worksheet.row_dimensions[row].height = 34 if long_desc else 22
+        needs_wrap = "\n" in desc_val or len(desc_val) > 36
+        worksheet.row_dimensions[row].height = estimate_desc_row_height(desc_val)
 
         def w(col, value, align):
             c = worksheet.cell(row=row, column=col)
@@ -488,7 +515,7 @@ def fill_pack_list_items(worksheet, items: list[dict], address_rows: int) -> Non
             c.border = THIN_BORDER
 
         w(1, item.get("item_code", ""), LEFT)
-        w(2, item.get("desc", ""), TOP_LEFT if long_desc else LEFT)
+        w(2, item.get("desc", ""), TOP_LEFT if needs_wrap else LEFT)
         w(3, item.get("case_no", ""), CENTER)
         w(4, item.get("origin", ""), CENTER)
         w(5, item.get("hs_code", ""), CENTER)
