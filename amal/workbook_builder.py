@@ -95,22 +95,29 @@ def estimate_desc_row_height(desc: str, col_width_chars: int = 36) -> int:
     return max(15, wrapped * 15)
 
 
+def count_actual_lines(text: str) -> int:
+    """Count non-empty lines in a block of text — no wrapping simulation."""
+    if not text:
+        return 1
+    return len([line for line in text.splitlines() if line.strip()]) or 1
+
+
 def compute_address_rows(bill_to: str, ship_to: str) -> int:
     lines = max(
-        estimate_wrapped_lines(bill_to, BILL_TO_CHARS),
-        estimate_wrapped_lines(ship_to, SHIP_TO_CHARS),
-        estimate_wrapped_lines(SUPPLIER_TEXT, SUPPLIER_CHARS),
+        count_actual_lines(bill_to),
+        count_actual_lines(ship_to),
+        count_actual_lines(SUPPLIER_TEXT),
     )
     return max(lines, ADDRESS_MIN_ROWS)
 
 
 def set_merged_block_row_heights(worksheet, start_row: int, end_row: int, total_lines: int) -> None:
     num_rows = end_row - start_row + 1
-    # Each line needs ~15 pts; spread evenly across the merged rows
-    total_height = max(num_rows * 15, total_lines * 15)
-    base_height = total_height / num_rows
+    LINE_HEIGHT = 18  # pts per line — enough for normal font
+    total_height = max(num_rows * LINE_HEIGHT, total_lines * LINE_HEIGHT)
+    per_row = total_height / num_rows
     for row in range(start_row, end_row + 1):
-        worksheet.row_dimensions[row].height = base_height
+        worksheet.row_dimensions[row].height = per_row
 
 
 def get_layout(address_rows: int, item_count: int) -> dict:
@@ -123,7 +130,7 @@ def get_layout(address_rows: int, item_count: int) -> dict:
     freight_row = items_end + 1
     total_row = freight_row + 1
     net_total_row = total_row + 1
-    words_row = net_total_row + 2   # one blank gap row between net total and words
+    words_row = net_total_row + 2   # gap kept for layout compatibility
     return {
         "addr_start": addr_start,
         "addr_end": addr_end,
@@ -145,7 +152,7 @@ def build_comm_inv_static(worksheet) -> None:
     """Write static structure: title, purple bars, rows 5-8 shells."""
     worksheet.title = "comm-inv"
 
-    widths = {"A": 21, "B": 36, "C": 16, "D": 11, "E": 15, "F": 14, "G": 22, "H": 16}
+    widths = {"A": 21, "B": 42, "C": 16, "D": 11, "E": 22, "F": 18, "G": 22, "H": 16}
     for col, w in widths.items():
         worksheet.column_dimensions[col].width = w
 
@@ -233,7 +240,12 @@ def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
     c.font = BOLD_FONT
     c.alignment = TOP_LEFT
 
-    set_merged_block_row_heights(worksheet, addr_s, addr_e, address_rows)
+    content_lines = max(
+        count_actual_lines(bill_to),
+        count_actual_lines(ship_to),
+        count_actual_lines(SUPPLIER_TEXT),
+    )
+    set_merged_block_row_heights(worksheet, addr_s, addr_e, content_lines)
 
     # Column headers row — immediately after address block
     hdr = L["header_row"]
@@ -272,18 +284,6 @@ def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
     worksheet.cell(row=tr, column=8).border = THIN_BORDER
     worksheet.cell(row=tr, column=8).value = f"=SUM(H{L['items_start']}:H{L['items_end']})+H{fr}"
 
-    nr = L["net_total_row"]
-    worksheet.merge_cells(start_row=nr, start_column=1, end_row=nr, end_column=6)
-    apply_border_to_range(worksheet, nr, nr, 1, 8)
-    worksheet.cell(row=nr, column=7).value = "Net Total"
-    worksheet.cell(row=nr, column=7).font = BOLD_FONT
-    worksheet.cell(row=nr, column=7).alignment = RIGHT
-    worksheet.cell(row=nr, column=7).border = THIN_BORDER
-    worksheet.cell(row=nr, column=8).font = BOLD_FONT
-    worksheet.cell(row=nr, column=8).alignment = RIGHT
-    worksheet.cell(row=nr, column=8).border = THIN_BORDER
-    worksheet.cell(row=nr, column=8).value = f"=H{tr}"
-
     wr = L["words_row"]
     worksheet.row_dimensions[wr - 1].height = 6  # small blank gap
     worksheet.merge_cells(start_row=wr, start_column=1, end_row=wr + 1, end_column=6)
@@ -310,9 +310,11 @@ def fill_comm_inv_items(worksheet, items: list[dict], address_rows: int) -> None
     L = get_layout(address_rows, len(items))
     items_start = L["items_start"]
 
+    max_desc_len = len("Desc")  # minimum = header width
     for offset, item in enumerate(items):
         row = items_start + offset
         desc_val = str(item.get("desc", "")).replace("\n", " ").strip()
+        max_desc_len = max(max_desc_len, len(desc_val))
         worksheet.row_dimensions[row].height = 15
 
         def w(col, value, align):
@@ -329,6 +331,9 @@ def fill_comm_inv_items(worksheet, items: list[dict], address_rows: int) -> None
         w(6, item.get("qty", ""), CENTER)
         w(7, item.get("unit_price", ""), RIGHT)
         w(8, item.get("amount", ""), RIGHT)
+
+    # auto-fit col B to longest description + small padding
+    worksheet.column_dimensions["B"].width = max_desc_len + 2
 
     # ensure borders on all item rows even if items list is empty
     apply_border_to_range(worksheet, L["items_start"], L["items_end"], 1, 8)
@@ -376,8 +381,17 @@ def fill_comm_inv_unmatched_items(worksheet, items: list[dict], address_rows: in
 
     apply_border_to_range(worksheet, hdr, other_total_row, 6, 8)
 
-    # Update Net Total to include unmatched SOB items
-    worksheet.cell(row=net_total_row, column=8).value = f"=H{total_row}+H{other_total_row}"
+    # Net Total row — right after SOB table total
+    net_total_display_row = other_total_row + 1
+    worksheet.cell(row=net_total_display_row, column=7).value = "Net Total"
+    worksheet.cell(row=net_total_display_row, column=7).font = BOLD_FONT
+    worksheet.cell(row=net_total_display_row, column=7).alignment = RIGHT
+    worksheet.cell(row=net_total_display_row, column=7).border = THIN_BORDER
+    worksheet.cell(row=net_total_display_row, column=8).value = f"=H{total_row}+H{other_total_row}"
+    worksheet.cell(row=net_total_display_row, column=8).font = BOLD_FONT
+    worksheet.cell(row=net_total_display_row, column=8).alignment = RIGHT
+    worksheet.cell(row=net_total_display_row, column=8).border = THIN_BORDER
+    apply_border_to_range(worksheet, net_total_display_row, net_total_display_row, 6, 8)
 
 
 # ---------------------------------------------------------------------------
