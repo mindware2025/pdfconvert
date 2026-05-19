@@ -21,7 +21,7 @@ def parse_decimal(value: str) -> float:
 
 def split_item_and_hs(body: str) -> tuple[str, str, str]:
     slash_match = re.match(
-        r"^(?P<part>.+?\s/\s)(?P<serial>[A-Z0-9]{7,21})(?:\s+(?P<hs_code>\d{6,14}))?\s+(?P<description>.*)$",
+        r"^(?P<part>.+?\s/\s)(?P<serial>[A-Z0-9]{7,21}?)(?P<hs_code>\d{6,14})?(?P<description>.*)$",
         body,
     )
     if slash_match:
