@@ -101,8 +101,7 @@ def normalize_address_block(value: str) -> str:
     lines = [line.strip() for line in value.splitlines() if line.strip()]
     normalized_lines: list[str] = []
     for line in lines:
-        if line == "TRN:NATRN:NA":
-            normalized_lines.append("TRN:NA")
+        if line in {"TRN:NATRN:NA", "TRN:NA"}:
             continue
         normalized_lines.append(line)
     return "\n".join(normalized_lines).strip()
@@ -147,9 +146,6 @@ def split_bill_to_ship_to(block: str) -> tuple[str, str]:
 
     bill_to = normalize_address_block("\n".join(bill_to_lines))
     ship_to = normalize_address_block("\n".join(ship_to_lines))
-
-    if "TRN:NA" not in bill_to and block.replace(" ", "").upper().count("TRN:NA") >= 2:
-        bill_to = f"{bill_to}\nTRN:NA".strip()
 
     return bill_to, ship_to
 
