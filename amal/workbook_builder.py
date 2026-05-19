@@ -82,6 +82,11 @@ def count_display_lines(value: str) -> int:
     return len([line for line in str(value).splitlines() if line.strip()]) or 1
 
 
+def safe_unmerge(worksheet, cell_range: str) -> None:
+    if cell_range in {str(rng) for rng in worksheet.merged_cells.ranges}:
+        worksheet.unmerge_cells(cell_range)
+
+
 def build_comm_inv_sheet(worksheet) -> None:
     worksheet.title = "comm-inv"
 
@@ -201,6 +206,9 @@ def build_comm_inv_sheet(worksheet) -> None:
 def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
     freight_row, total_row, total_in_words_row = get_comm_inv_footer_rows(item_count)
 
+    for merge_range in ("F24:G24", "A25:F25", "A26:H26", "A27:F29", "G27:H29"):
+        safe_unmerge(worksheet, merge_range)
+
     for cell_ref in ("F24", "G25", "A26", "G27"):
         worksheet[cell_ref] = None
 
@@ -242,6 +250,13 @@ def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
     worksheet.cell(row=total_in_words_row - 1, column=1).value = "Total in Words :"
     worksheet.cell(row=total_in_words_row - 1, column=1).font = BOLD_FONT
 
+    worksheet.merge_cells(start_row=total_in_words_row, start_column=1, end_row=total_in_words_row + 2, end_column=6)
+    worksheet.merge_cells(start_row=total_in_words_row, start_column=7, end_row=total_in_words_row + 2, end_column=8)
+    set_outer_border(worksheet, total_in_words_row, total_in_words_row + 2, 1, 8)
+    worksheet.cell(row=total_in_words_row, column=7).value = "Mindware FZ LLC"
+    worksheet.cell(row=total_in_words_row, column=7).font = BOLD_FONT
+    worksheet.cell(row=total_in_words_row, column=7).alignment = CENTER
+
     if fields.get("freight_charges", "") != "":
         worksheet.cell(row=freight_row, column=8).value = to_number_if_possible(fields.get("freight_charges", ""))
 
@@ -249,7 +264,7 @@ def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
     worksheet.cell(row=total_row, column=8).value = f"=SUM(H18:H{item_end_row})+H{freight_row}"
 
     if fields.get("total_in_words", "") != "":
-        worksheet.cell(row=total_in_words_row, column=1).value = f"Total in Words : {fields.get('total_in_words', '')}"
+        worksheet.cell(row=total_in_words_row, column=1).value = fields.get("total_in_words", "")
         worksheet.cell(row=total_in_words_row, column=1).alignment = TOP_LEFT
 
 
@@ -282,11 +297,12 @@ def fill_comm_inv_items(worksheet, items: list[dict]) -> None:
         worksheet.cell(row=row, column=8).value = item.get("amount", "")
 
 
-def fill_comm_inv_unmatched_items(worksheet, items: list[dict]) -> None:
+def fill_comm_inv_unmatched_items(worksheet, items: list[dict], item_count: int) -> None:
     if not items:
         return
 
-    start_row = 31
+    _, _, total_in_words_row = get_comm_inv_footer_rows(item_count)
+    start_row = total_in_words_row + 5
     worksheet.cell(row=start_row - 1, column=7).value = "Other SOB Items"
     worksheet.cell(row=start_row - 1, column=7).font = BOLD_FONT
     worksheet.cell(row=start_row - 1, column=8).value = "Amount"
@@ -507,7 +523,7 @@ def create_workbook_bytes(
     build_comm_inv_sheet(comm_sheet)
     fill_comm_inv_items(comm_sheet, comm_inv_items)
     fill_comm_inv_sheet(comm_sheet, comm_inv_fields, len(comm_inv_items))
-    fill_comm_inv_unmatched_items(comm_sheet, comm_inv_unmatched_items)
+    fill_comm_inv_unmatched_items(comm_sheet, comm_inv_unmatched_items, len(comm_inv_items))
 
     pack_sheet = workbook.create_sheet("pack_list")
     build_pack_list_sheet(pack_sheet)
