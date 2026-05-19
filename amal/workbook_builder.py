@@ -24,7 +24,7 @@ SUPPLIER_TEXT = (
     "VAT TRN No : 100019912300003"
 )
 
-ADDRESS_MIN_ROWS = 2
+ADDRESS_MIN_ROWS = 8
 
 
 def style_range(worksheet, cell_range: str, fill=None, font=None, border=None, alignment=None) -> None:
@@ -312,9 +312,8 @@ def fill_comm_inv_items(worksheet, items: list[dict], address_rows: int) -> None
 
     for offset, item in enumerate(items):
         row = items_start + offset
-        desc_val = str(item.get("desc", ""))
-        needs_wrap = "\n" in desc_val or len(desc_val) > 36
-        worksheet.row_dimensions[row].height = estimate_desc_row_height(desc_val)
+        desc_val = str(item.get("desc", "")).replace("\n", " ").strip()
+        worksheet.row_dimensions[row].height = 15
 
         def w(col, value, align):
             c = worksheet.cell(row=row, column=col)
@@ -323,7 +322,7 @@ def fill_comm_inv_items(worksheet, items: list[dict], address_rows: int) -> None
             c.border = THIN_BORDER
 
         w(1, item.get("item_code", ""), LEFT)
-        w(2, item.get("desc", ""), TOP_LEFT if needs_wrap else LEFT)
+        w(2, desc_val, LEFT)
         w(3, item.get("case_no", ""), CENTER)
         w(4, item.get("origin", ""), CENTER)
         w(5, item.get("hs_code", ""), CENTER)
@@ -343,7 +342,7 @@ def fill_comm_inv_unmatched_items(worksheet, items: list[dict], address_rows: in
     net_total_row = L["net_total_row"]
     total_row = L["total_row"]
     words_row = L["words_row"]
-    start_row = words_row + 4
+    start_row = words_row + 3
 
     hdr = start_row - 1
     for col, label in [(6, "SOB No"), (7, "Other SOB Items"), (8, "Amount")]:
@@ -504,9 +503,8 @@ def fill_pack_list_items(worksheet, items: list[dict], address_rows: int) -> Non
 
     for offset, item in enumerate(items):
         row = items_start + offset
-        desc_val = str(item.get("desc", ""))
-        needs_wrap = "\n" in desc_val or len(desc_val) > 36
-        worksheet.row_dimensions[row].height = estimate_desc_row_height(desc_val)
+        desc_val = str(item.get("desc", "")).replace("\n", " ").strip()
+        worksheet.row_dimensions[row].height = 15
 
         def w(col, value, align):
             c = worksheet.cell(row=row, column=col)
@@ -515,7 +513,7 @@ def fill_pack_list_items(worksheet, items: list[dict], address_rows: int) -> Non
             c.border = THIN_BORDER
 
         w(1, item.get("item_code", ""), LEFT)
-        w(2, item.get("desc", ""), TOP_LEFT if needs_wrap else LEFT)
+        w(2, desc_val, LEFT)
         w(3, item.get("case_no", ""), CENTER)
         w(4, item.get("origin", ""), CENTER)
         w(5, item.get("hs_code", ""), CENTER)
