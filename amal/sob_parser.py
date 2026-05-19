@@ -283,7 +283,7 @@ def map_ibm_items_to_sob(ibm_items: list[dict], sob_items: list[dict]) -> tuple[
         description = ""
         if exact_match:
             description = exact_match["description"]
-        elif prefix_matches and not ibm_item.get("mibb_description"):
+        elif prefix_matches:
             description = prefix_matches[0]["description"]
         elif ibm_item.get("mibb_description"):
             description = ibm_item.get("mibb_description", "")
