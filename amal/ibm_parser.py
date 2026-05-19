@@ -7,7 +7,7 @@ CASE_NO_PATTERN = re.compile(r"^(970[A-Z0-9]{10})(.*)$")
 ROW_START_PATTERN = re.compile(r"^\d+\s+\S+")
 ITEM_ROW_START_PATTERN = re.compile(r"^\d+\s+\S+\s+970[A-Z0-9]{10}")
 TAIL_PATTERN = re.compile(
-    r"^(?P<body>.+?)(?P<coo>[A-Z]{2})\s+(?P<qty>\d+(?:\.\d+)?)\s+(?P<unit_price>[\d,]+(?:\.\d+)?)\s+(?P<total_price>[\d,]+(?:\.\d+)?)$"
+    r"^(?P<body>.+)(?P<coo>[A-Z]{2})\s+(?P<qty>\d+(?:\.\d+)?)\s+(?P<unit_price>[\d,]+(?:\.\d+)?)\s+(?P<total_price>[\d,]+(?:\.\d+)?)$"
 )
 
 
