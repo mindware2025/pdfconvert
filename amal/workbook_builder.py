@@ -44,12 +44,13 @@ def set_outer_border(worksheet, start_row: int, end_row: int, start_col: int, en
             worksheet.cell(row=row, column=col).border = THIN_BORDER
 
 
-def get_comm_inv_footer_rows(item_count: int) -> tuple[int, int, int]:
+def get_comm_inv_footer_rows(item_count: int) -> tuple[int, int, int, int]:
     visible_item_count = max(item_count, 1)
     freight_row = 18 + visible_item_count
     total_row = freight_row + 1
-    total_in_words_row = freight_row + 3
-    return freight_row, total_row, total_in_words_row
+    net_total_row = freight_row + 2
+    total_in_words_row = freight_row + 4
+    return freight_row, total_row, net_total_row, total_in_words_row
 
 
 def to_number_if_possible(value):
@@ -182,7 +183,7 @@ def build_comm_inv_sheet(worksheet) -> None:
 
 
 def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
-    freight_row, total_row, total_in_words_row = get_comm_inv_footer_rows(item_count)
+    freight_row, total_row, net_total_row, total_in_words_row = get_comm_inv_footer_rows(item_count)
 
     worksheet["A5"] = f"Payment Term: {fields.get('payment_term', '')}"
     worksheet["A6"] = f"Inco Terms: {fields.get('inco_terms', '')}"
@@ -218,6 +219,11 @@ def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
     worksheet.cell(row=total_row, column=7).value = "Total Amount"
     worksheet.cell(row=total_row, column=7).alignment = CENTER
 
+    worksheet.merge_cells(start_row=net_total_row, start_column=1, end_row=net_total_row, end_column=6)
+    worksheet.cell(row=net_total_row, column=7).value = "Net Total"
+    worksheet.cell(row=net_total_row, column=7).font = BOLD_FONT
+    worksheet.cell(row=net_total_row, column=7).alignment = CENTER
+
     worksheet.merge_cells(start_row=total_in_words_row - 1, start_column=1, end_row=total_in_words_row - 1, end_column=8)
     worksheet.cell(row=total_in_words_row - 1, column=1).value = "Total in Words :"
     worksheet.cell(row=total_in_words_row - 1, column=1).font = BOLD_FONT
@@ -234,6 +240,7 @@ def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
 
     item_end_row = 17 + max(item_count, 1)
     worksheet.cell(row=total_row, column=8).value = f"=SUM(H18:H{item_end_row})+H{freight_row}"
+    worksheet.cell(row=net_total_row, column=8).value = f"=H{total_row}"
 
     if fields.get("total_in_words", "") != "":
         worksheet.cell(row=total_in_words_row, column=1).value = fields.get("total_in_words", "")
@@ -273,7 +280,7 @@ def fill_comm_inv_unmatched_items(worksheet, items: list[dict], item_count: int)
     if not items:
         return
 
-    _, _, total_in_words_row = get_comm_inv_footer_rows(item_count)
+    _, main_total_row, net_total_row, total_in_words_row = get_comm_inv_footer_rows(item_count)
     start_row = total_in_words_row + 5
     worksheet.cell(row=start_row - 1, column=6).value = "SOB No"
     worksheet.cell(row=start_row - 1, column=6).font = BOLD_FONT
@@ -288,13 +295,15 @@ def fill_comm_inv_unmatched_items(worksheet, items: list[dict], item_count: int)
         worksheet.cell(row=row, column=7).value = item.get("item_code", "")
         worksheet.cell(row=row, column=8).value = item.get("amount", "")
 
-    total_row = start_row + len(items)
-    worksheet.cell(row=total_row, column=7).value = "Total"
-    worksheet.cell(row=total_row, column=7).font = BOLD_FONT
-    worksheet.cell(row=total_row, column=8).value = f"=SUM(H{start_row}:H{total_row - 1})"
-    worksheet.cell(row=total_row, column=8).font = BOLD_FONT
+    other_total_row = start_row + len(items)
+    worksheet.cell(row=other_total_row, column=7).value = "Total"
+    worksheet.cell(row=other_total_row, column=7).font = BOLD_FONT
+    worksheet.cell(row=other_total_row, column=8).value = f"=SUM(H{start_row}:H{other_total_row - 1})"
+    worksheet.cell(row=other_total_row, column=8).font = BOLD_FONT
 
-    set_outer_border(worksheet, start_row - 1, total_row, 6, 8)
+    worksheet.cell(row=net_total_row, column=8).value = f"=H{main_total_row}+H{other_total_row}"
+
+    set_outer_border(worksheet, start_row - 1, other_total_row, 6, 8)
 
 
 def build_pack_list_sheet(worksheet) -> None:
