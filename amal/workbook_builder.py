@@ -10,8 +10,9 @@ WHITE_BOLD_FONT = Font(color="FFFFFF", bold=True)
 BOLD_FONT = Font(bold=True)
 THIN_SIDE = Side(style="thin", color="000000")
 THIN_BORDER = Border(left=THIN_SIDE, right=THIN_SIDE, top=THIN_SIDE, bottom=THIN_SIDE)
-CENTER = Alignment(horizontal="center", vertical="center")
-LEFT = Alignment(horizontal="left", vertical="center")
+CENTER = Alignment(horizontal="center", vertical="center", wrap_text=False)
+LEFT = Alignment(horizontal="left", vertical="center", wrap_text=False)
+RIGHT = Alignment(horizontal="right", vertical="center", wrap_text=False)
 TOP_LEFT = Alignment(horizontal="left", vertical="top", wrap_text=True)
 TOP_CENTER = Alignment(horizontal="center", vertical="top", wrap_text=True)
 
@@ -38,10 +39,15 @@ def style_range(worksheet, cell_range: str, fill=None, font=None, border=None, a
                 cell.alignment = alignment
 
 
-def set_outer_border(worksheet, start_row: int, end_row: int, start_col: int, end_col: int) -> None:
+def apply_border_to_range(worksheet, start_row: int, end_row: int, start_col: int, end_col: int) -> None:
+    """Apply THIN_BORDER to every cell in the given range."""
     for row in range(start_row, end_row + 1):
         for col in range(start_col, end_col + 1):
             worksheet.cell(row=row, column=col).border = THIN_BORDER
+
+
+# Keep old name as alias for backward compatibility
+set_outer_border = apply_border_to_range
 
 
 def get_comm_inv_footer_rows(item_count: int) -> tuple[int, int, int, int]:
@@ -103,67 +109,65 @@ def build_comm_inv_sheet(worksheet) -> None:
         2: 28,
         4: 18,
         8: 18,
-        9: 22,
-        10: 22,
-        11: 22,
-        12: 22,
-        13: 22,
-        14: 22,
-        15: 22,
-        16: 22,
-        17: 30,
     }.items():
         worksheet.row_dimensions[row].height = height
 
+    # Row 2: Title
     worksheet.merge_cells("A2:H2")
     worksheet["A2"] = "Commercial Invoice"
     worksheet["A2"].font = Font(bold=True, size=16)
     worksheet["A2"].alignment = CENTER
 
+    # Row 4: Purple divider bar
     worksheet.merge_cells("A4:H4")
     style_range(worksheet, "A4:H4", fill=PURPLE_FILL, border=THIN_BORDER)
 
-    worksheet["A5"] = "Payment Term:"
-    worksheet["A6"] = "Inco Terms:"
-    worksheet["A7"] = "Customer PO:"
-    for cell in ("A5", "A6", "A7"):
-        worksheet[cell].font = BOLD_FONT
+    # Rows 5-7: Payment/IncoTerms/CustomerPO  |  Invoice No / Date / Currency
+    for row in (5, 6, 7):
+        worksheet.row_dimensions[row].height = 18
 
     worksheet.merge_cells("A5:F5")
     worksheet.merge_cells("A6:F6")
     worksheet.merge_cells("A7:F7")
-    set_outer_border(worksheet, 5, 7, 1, 6)
+    apply_border_to_range(worksheet, 5, 7, 1, 6)
 
     worksheet.merge_cells("G5:H5")
     worksheet.merge_cells("G6:H6")
     worksheet.merge_cells("G7:H7")
-    set_outer_border(worksheet, 5, 7, 7, 8)
+    apply_border_to_range(worksheet, 5, 7, 7, 8)
 
-    worksheet["G5"] = "Commercial Invoice No :"
-    worksheet["G6"] = "Date :"
-    worksheet["G7"] = "Currency:"
-    for cell in ("G5", "G6", "G7"):
-        worksheet[cell].font = BOLD_FONT
-        worksheet[cell].alignment = TOP_LEFT
+    for cell_addr in ("A5", "A6", "A7"):
+        worksheet[cell_addr].font = BOLD_FONT
+        worksheet[cell_addr].alignment = LEFT
 
+    for cell_addr in ("G5", "G6", "G7"):
+        worksheet[cell_addr].font = BOLD_FONT
+        worksheet[cell_addr].alignment = LEFT
+
+    # Row 8: Bill To / Ship To / Supplier header
+    worksheet.merge_cells("A8:D8")
+    worksheet.merge_cells("E8:F8")
+    worksheet.merge_cells("G8:H8")
     worksheet["A8"] = "Bill To"
     worksheet["E8"] = "Ship To"
     worksheet["G8"] = "Supplier"
     style_range(worksheet, "A8:H8", fill=PURPLE_FILL, font=WHITE_BOLD_FONT, border=THIN_BORDER)
+    worksheet["A8"].alignment = LEFT
+    worksheet["E8"].alignment = LEFT
+    worksheet["G8"].alignment = LEFT
 
-    worksheet.merge_cells("A8:D8")
-    worksheet.merge_cells("E8:F8")
-    worksheet.merge_cells("G8:H8")
-
+    # Rows 9-16: Address blocks
     worksheet.merge_cells("A9:D16")
     worksheet.merge_cells("E9:F16")
     worksheet.merge_cells("G9:H16")
-    set_outer_border(worksheet, 9, 16, 1, 8)
+    apply_border_to_range(worksheet, 9, 16, 1, 8)
 
     worksheet["G9"] = SUPPLIER_TEXT
     worksheet["G9"].font = BOLD_FONT
     worksheet["G9"].alignment = TOP_LEFT
 
+    # Row 17: Column headers
+    worksheet.row_dimensions[17].height = 22
     headers = ["Item Code", "Desc", "Case#", "Origin", "HS Code", "Qty", "Unit Price", "Amount"]
     for index, header in enumerate(headers, start=1):
         cell = worksheet.cell(row=17, column=index)
@@ -173,30 +177,28 @@ def build_comm_inv_sheet(worksheet) -> None:
         cell.border = THIN_BORDER
         cell.alignment = LEFT if header in {"Item Code", "Desc"} else CENTER
 
-    set_outer_border(worksheet, 18, 23, 1, 8)
-
-    set_outer_border(worksheet, 24, 24, 1, 8)
-
-    set_outer_border(worksheet, 25, 25, 1, 8)
-
-    set_outer_border(worksheet, 27, 29, 1, 8)
+    # NOTE: item rows, footer rows are built dynamically in fill_comm_inv_items / fill_comm_inv_sheet
 
 
 def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
     freight_row, total_row, net_total_row, total_in_words_row = get_comm_inv_footer_rows(item_count)
 
+    # --- Rows 5-7: header info ---
     worksheet["A5"] = f"Payment Term: {fields.get('payment_term', '')}"
     worksheet["A6"] = f"Inco Terms: {fields.get('inco_terms', '')}"
     worksheet["A7"] = f"Customer PO: {fields.get('customer_po', '')}"
-    for cell in ("A5", "A6", "A7"):
-        worksheet[cell].font = BOLD_FONT
+    for cell_addr in ("A5", "A6", "A7"):
+        worksheet[cell_addr].font = BOLD_FONT
+        worksheet[cell_addr].alignment = LEFT
 
     worksheet["G5"] = f"Commercial Invoice No : {fields.get('commercial_invoice_no', '')}"
-    worksheet["G6"] = f"Date : {fields.get('date', '')}"
+    worksheet["G6"] = f"Date: {fields.get('date', '')}"
     worksheet["G7"] = f"Currency: {fields.get('currency', '')}"
-    for cell in ("G5", "G6", "G7"):
-        worksheet[cell].alignment = TOP_LEFT
+    for cell_addr in ("G5", "G6", "G7"):
+        worksheet[cell_addr].font = BOLD_FONT
+        worksheet[cell_addr].alignment = LEFT
 
+    # --- Address blocks ---
     worksheet["A9"] = fields.get("bill_to", "")
     worksheet["A9"].alignment = TOP_LEFT
 
@@ -210,41 +212,73 @@ def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
     )
     set_merged_block_row_heights(worksheet, 9, 16, address_block_lines)
 
-    worksheet.merge_cells(start_row=freight_row, start_column=6, end_row=freight_row, end_column=7)
-    worksheet.cell(row=freight_row, column=6).value = "Freight Charges"
-    worksheet.cell(row=freight_row, column=6).font = BOLD_FONT
-    worksheet.cell(row=freight_row, column=6).alignment = CENTER
-
-    worksheet.merge_cells(start_row=total_row, start_column=1, end_row=total_row, end_column=6)
-    worksheet.cell(row=total_row, column=7).value = "Total Amount"
-    worksheet.cell(row=total_row, column=7).alignment = CENTER
-
-    worksheet.merge_cells(start_row=net_total_row, start_column=1, end_row=net_total_row, end_column=6)
-    worksheet.cell(row=net_total_row, column=7).value = "Net Total"
-    worksheet.cell(row=net_total_row, column=7).font = BOLD_FONT
-    worksheet.cell(row=net_total_row, column=7).alignment = CENTER
-
-    worksheet.merge_cells(start_row=total_in_words_row - 1, start_column=1, end_row=total_in_words_row - 1, end_column=8)
-    worksheet.cell(row=total_in_words_row - 1, column=1).value = "Total in Words :"
-    worksheet.cell(row=total_in_words_row - 1, column=1).font = BOLD_FONT
-
-    worksheet.merge_cells(start_row=total_in_words_row, start_column=1, end_row=total_in_words_row + 2, end_column=6)
-    worksheet.merge_cells(start_row=total_in_words_row, start_column=7, end_row=total_in_words_row + 2, end_column=8)
-    set_outer_border(worksheet, total_in_words_row, total_in_words_row + 2, 1, 8)
-    worksheet.cell(row=total_in_words_row, column=7).value = "Mindware FZ LLC"
-    worksheet.cell(row=total_in_words_row, column=7).font = BOLD_FONT
-    worksheet.cell(row=total_in_words_row, column=7).alignment = CENTER
+    # --- Freight Charges row ---
+    # Col G = "Freight Charges" label (right-aligned bold), Col H = value
+    worksheet.cell(row=freight_row, column=7).value = "Freight Charges"
+    worksheet.cell(row=freight_row, column=7).font = BOLD_FONT
+    worksheet.cell(row=freight_row, column=7).alignment = RIGHT
+    worksheet.cell(row=freight_row, column=7).border = THIN_BORDER
+    # merge cols 1-6 for freight row (empty/label span)
+    worksheet.merge_cells(start_row=freight_row, start_column=1, end_row=freight_row, end_column=6)
+    apply_border_to_range(worksheet, freight_row, freight_row, 1, 6)
+    worksheet.cell(row=freight_row, column=8).border = THIN_BORDER
+    worksheet.cell(row=freight_row, column=8).alignment = RIGHT
 
     if fields.get("freight_charges", "") != "":
         worksheet.cell(row=freight_row, column=8).value = to_number_if_possible(fields.get("freight_charges", ""))
 
+    # --- Total Amount row ---
+    worksheet.merge_cells(start_row=total_row, start_column=1, end_row=total_row, end_column=6)
+    apply_border_to_range(worksheet, total_row, total_row, 1, 6)
+    worksheet.cell(row=total_row, column=7).value = "Total Amount"
+    worksheet.cell(row=total_row, column=7).font = BOLD_FONT
+    worksheet.cell(row=total_row, column=7).alignment = RIGHT
+    worksheet.cell(row=total_row, column=7).border = THIN_BORDER
+    worksheet.cell(row=total_row, column=8).border = THIN_BORDER
+    worksheet.cell(row=total_row, column=8).alignment = RIGHT
+    worksheet.cell(row=total_row, column=8).font = BOLD_FONT
+
     item_end_row = 17 + max(item_count, 1)
     worksheet.cell(row=total_row, column=8).value = f"=SUM(H18:H{item_end_row})+H{freight_row}"
+
+    # --- Net Total row (yellow fill) ---
+    worksheet.merge_cells(start_row=net_total_row, start_column=1, end_row=net_total_row, end_column=6)
+    apply_border_to_range(worksheet, net_total_row, net_total_row, 1, 6)
+    worksheet.cell(row=net_total_row, column=7).value = "Net Total"
+    worksheet.cell(row=net_total_row, column=7).font = BOLD_FONT
+    worksheet.cell(row=net_total_row, column=7).alignment = RIGHT
+    worksheet.cell(row=net_total_row, column=7).border = THIN_BORDER
+    worksheet.cell(row=net_total_row, column=8).font = BOLD_FONT
+    worksheet.cell(row=net_total_row, column=8).border = THIN_BORDER
+    worksheet.cell(row=net_total_row, column=8).alignment = RIGHT
     worksheet.cell(row=net_total_row, column=8).value = f"=H{total_row}"
 
+    # --- Blank separator row (total_in_words_row - 1) ---
+    worksheet.row_dimensions[total_in_words_row - 1].height = 8
+
+    # --- Total in Words row ---
+    worksheet.merge_cells(
+        start_row=total_in_words_row, start_column=1, end_row=total_in_words_row + 1, end_column=6
+    )
+    apply_border_to_range(worksheet, total_in_words_row, total_in_words_row + 1, 1, 6)
+
     if fields.get("total_in_words", "") != "":
-        worksheet.cell(row=total_in_words_row, column=1).value = fields.get("total_in_words", "")
-        worksheet.cell(row=total_in_words_row, column=1).alignment = TOP_LEFT
+        words_text = f"Total in Words : {fields.get('total_in_words', '')}"
+        worksheet.cell(row=total_in_words_row, column=1).value = words_text
+    else:
+        worksheet.cell(row=total_in_words_row, column=1).value = "Total in Words :"
+
+    worksheet.cell(row=total_in_words_row, column=1).font = BOLD_FONT
+    worksheet.cell(row=total_in_words_row, column=1).alignment = TOP_LEFT
+
+    # --- Mindware FZ LLC signature block ---
+    worksheet.merge_cells(
+        start_row=total_in_words_row, start_column=7, end_row=total_in_words_row + 1, end_column=8
+    )
+    apply_border_to_range(worksheet, total_in_words_row, total_in_words_row + 1, 7, 8)
+    worksheet.cell(row=total_in_words_row, column=7).value = "Mindware FZ LLC"
+    worksheet.cell(row=total_in_words_row, column=7).font = BOLD_FONT
+    worksheet.cell(row=total_in_words_row, column=7).alignment = CENTER
 
 
 def ensure_comm_inv_item_rows(worksheet, item_count: int) -> None:
@@ -256,7 +290,7 @@ def ensure_comm_inv_item_rows(worksheet, item_count: int) -> None:
         worksheet.insert_rows(footer_start_row, item_count - default_item_rows)
 
     item_end_row = item_start_row + max(item_count, default_item_rows) - 1
-    set_outer_border(worksheet, item_start_row, item_end_row, 1, 8)
+    apply_border_to_range(worksheet, item_start_row, item_end_row, 1, 8)
 
 
 def fill_comm_inv_items(worksheet, items: list[dict]) -> None:
@@ -264,16 +298,56 @@ def fill_comm_inv_items(worksheet, items: list[dict]) -> None:
 
     for offset, item in enumerate(items):
         row = 18 + offset
-        worksheet.cell(row=row, column=1).value = item.get("item_code", "")
-        worksheet.cell(row=row, column=2).value = item.get("desc", "")
-        worksheet.cell(row=row, column=2).alignment = TOP_LEFT
-        worksheet.row_dimensions[row].height = 34 if "\n" in str(item.get("desc", "")) or len(str(item.get("desc", ""))) > 45 else 22
-        worksheet.cell(row=row, column=3).value = item.get("case_no", "")
-        worksheet.cell(row=row, column=4).value = item.get("origin", "")
-        worksheet.cell(row=row, column=5).value = item.get("hs_code", "")
-        worksheet.cell(row=row, column=6).value = item.get("qty", "")
-        worksheet.cell(row=row, column=7).value = item.get("unit_price", "")
-        worksheet.cell(row=row, column=8).value = item.get("amount", "")
+
+        # Item Code (col A) — left aligned
+        c = worksheet.cell(row=row, column=1)
+        c.value = item.get("item_code", "")
+        c.alignment = LEFT
+        c.border = THIN_BORDER
+
+        # Desc (col B) — left aligned, wrap if long
+        c = worksheet.cell(row=row, column=2)
+        c.value = item.get("desc", "")
+        desc_val = str(item.get("desc", ""))
+        c.alignment = TOP_LEFT if ("\n" in desc_val or len(desc_val) > 45) else LEFT
+        c.border = THIN_BORDER
+        worksheet.row_dimensions[row].height = 34 if "\n" in desc_val or len(desc_val) > 45 else 22
+
+        # Case# (col C) — center
+        c = worksheet.cell(row=row, column=3)
+        c.value = item.get("case_no", "")
+        c.alignment = CENTER
+        c.border = THIN_BORDER
+
+        # Origin (col D) — center
+        c = worksheet.cell(row=row, column=4)
+        c.value = item.get("origin", "")
+        c.alignment = CENTER
+        c.border = THIN_BORDER
+
+        # HS Code (col E) — center
+        c = worksheet.cell(row=row, column=5)
+        c.value = item.get("hs_code", "")
+        c.alignment = CENTER
+        c.border = THIN_BORDER
+
+        # Qty (col F) — center
+        c = worksheet.cell(row=row, column=6)
+        c.value = item.get("qty", "")
+        c.alignment = CENTER
+        c.border = THIN_BORDER
+
+        # Unit Price (col G) — right
+        c = worksheet.cell(row=row, column=7)
+        c.value = item.get("unit_price", "")
+        c.alignment = RIGHT
+        c.border = THIN_BORDER
+
+        # Amount (col H) — right
+        c = worksheet.cell(row=row, column=8)
+        c.value = item.get("amount", "")
+        c.alignment = RIGHT
+        c.border = THIN_BORDER
 
 
 def fill_comm_inv_unmatched_items(worksheet, items: list[dict], item_count: int) -> None:
@@ -281,29 +355,49 @@ def fill_comm_inv_unmatched_items(worksheet, items: list[dict], item_count: int)
         return
 
     _, main_total_row, net_total_row, total_in_words_row = get_comm_inv_footer_rows(item_count)
-    start_row = total_in_words_row + 5
-    worksheet.cell(row=start_row - 1, column=6).value = "SOB No"
-    worksheet.cell(row=start_row - 1, column=6).font = BOLD_FONT
-    worksheet.cell(row=start_row - 1, column=7).value = "Other SOB Items"
-    worksheet.cell(row=start_row - 1, column=7).font = BOLD_FONT
-    worksheet.cell(row=start_row - 1, column=8).value = "Amount"
-    worksheet.cell(row=start_row - 1, column=8).font = BOLD_FONT
+    start_row = total_in_words_row + 4
+
+    # Header row
+    hdr_row = start_row - 1
+    worksheet.cell(row=hdr_row, column=6).value = "SOB No"
+    worksheet.cell(row=hdr_row, column=6).font = BOLD_FONT
+    worksheet.cell(row=hdr_row, column=6).border = THIN_BORDER
+    worksheet.cell(row=hdr_row, column=6).alignment = CENTER
+    worksheet.cell(row=hdr_row, column=7).value = "Other SOB Items"
+    worksheet.cell(row=hdr_row, column=7).font = BOLD_FONT
+    worksheet.cell(row=hdr_row, column=7).border = THIN_BORDER
+    worksheet.cell(row=hdr_row, column=7).alignment = CENTER
+    worksheet.cell(row=hdr_row, column=8).value = "Amount"
+    worksheet.cell(row=hdr_row, column=8).font = BOLD_FONT
+    worksheet.cell(row=hdr_row, column=8).border = THIN_BORDER
+    worksheet.cell(row=hdr_row, column=8).alignment = CENTER
 
     for offset, item in enumerate(items):
         row = start_row + offset
         worksheet.cell(row=row, column=6).value = item.get("sob_reference", "")
+        worksheet.cell(row=row, column=6).border = THIN_BORDER
+        worksheet.cell(row=row, column=6).alignment = CENTER
         worksheet.cell(row=row, column=7).value = item.get("item_code", "")
+        worksheet.cell(row=row, column=7).border = THIN_BORDER
+        worksheet.cell(row=row, column=7).alignment = LEFT
         worksheet.cell(row=row, column=8).value = item.get("amount", "")
+        worksheet.cell(row=row, column=8).border = THIN_BORDER
+        worksheet.cell(row=row, column=8).alignment = RIGHT
 
     other_total_row = start_row + len(items)
     worksheet.cell(row=other_total_row, column=7).value = "Total"
     worksheet.cell(row=other_total_row, column=7).font = BOLD_FONT
+    worksheet.cell(row=other_total_row, column=7).border = THIN_BORDER
+    worksheet.cell(row=other_total_row, column=7).alignment = RIGHT
     worksheet.cell(row=other_total_row, column=8).value = f"=SUM(H{start_row}:H{other_total_row - 1})"
     worksheet.cell(row=other_total_row, column=8).font = BOLD_FONT
+    worksheet.cell(row=other_total_row, column=8).border = THIN_BORDER
+    worksheet.cell(row=other_total_row, column=8).alignment = RIGHT
 
+    # Net Total in H{net_total_row} now sums main total + other total
     worksheet.cell(row=net_total_row, column=8).value = f"=H{main_total_row}+H{other_total_row}"
 
-    set_outer_border(worksheet, start_row - 1, other_total_row, 6, 8)
+    apply_border_to_range(worksheet, hdr_row, other_total_row, 6, 8)
 
 
 def build_pack_list_sheet(worksheet) -> None:
@@ -326,15 +420,6 @@ def build_pack_list_sheet(worksheet) -> None:
         2: 28,
         4: 18,
         7: 18,
-        8: 24,
-        9: 24,
-        10: 24,
-        11: 24,
-        12: 24,
-        13: 24,
-        14: 24,
-        15: 24,
-        16: 28,
     }.items():
         worksheet.row_dimensions[row].height = height
 
@@ -349,12 +434,14 @@ def build_pack_list_sheet(worksheet) -> None:
     worksheet.merge_cells("A5:E6")
     worksheet.merge_cells("F5:H5")
     worksheet.merge_cells("F6:H6")
-    set_outer_border(worksheet, 5, 6, 1, 8)
+    apply_border_to_range(worksheet, 5, 6, 1, 8)
 
     worksheet["F5"] = "No. :"
     worksheet["F6"] = "Date :"
     worksheet["F5"].font = BOLD_FONT
     worksheet["F6"].font = BOLD_FONT
+    worksheet["F5"].alignment = LEFT
+    worksheet["F6"].alignment = LEFT
 
     worksheet["A7"] = "Bill To"
     worksheet["C7"] = "Ship To"
@@ -364,16 +451,21 @@ def build_pack_list_sheet(worksheet) -> None:
     worksheet.merge_cells("A7:B7")
     worksheet.merge_cells("C7:E7")
     worksheet.merge_cells("F7:H7")
+    worksheet["A7"].alignment = LEFT
+    worksheet["C7"].alignment = LEFT
+    worksheet["F7"].alignment = LEFT
 
     worksheet.merge_cells("A8:B15")
     worksheet.merge_cells("C8:E15")
     worksheet.merge_cells("F8:H15")
-    set_outer_border(worksheet, 8, 15, 1, 8)
+    apply_border_to_range(worksheet, 8, 15, 1, 8)
 
     worksheet["F8"] = SUPPLIER_TEXT
     worksheet["F8"].font = BOLD_FONT
     worksheet["F8"].alignment = TOP_LEFT
 
+    # Row 16: column headers
+    worksheet.row_dimensions[16].height = 22
     headers = ["Item Code", "Desc", "Case#", "Origin", "HS Code", "Qty", "Weight", "Package"]
     for index, header in enumerate(headers, start=1):
         cell = worksheet.cell(row=16, column=index)
@@ -383,21 +475,25 @@ def build_pack_list_sheet(worksheet) -> None:
         cell.border = THIN_BORDER
         cell.alignment = LEFT if header in {"Item Code", "Desc"} else CENTER
 
-    set_outer_border(worksheet, 17, 18, 1, 8)
-    worksheet["E19"] = "Total"
-    worksheet["E19"].alignment = CENTER
-    worksheet["E19"].font = BOLD_FONT
-    set_outer_border(worksheet, 19, 19, 6, 8)
+    # Placeholder item rows + total row built dynamically
+    apply_border_to_range(worksheet, 17, 18, 1, 8)
 
-    set_outer_border(worksheet, 21, 22, 2, 4)
+    # Total row placeholder
+    worksheet.cell(row=19, column=5).value = "Total"
+    worksheet.cell(row=19, column=5).alignment = CENTER
+    worksheet.cell(row=19, column=5).font = BOLD_FONT
+    apply_border_to_range(worksheet, 19, 19, 6, 8)
+
+    # Summary section placeholder
+    apply_border_to_range(worksheet, 21, 22, 2, 4)
     worksheet["B21"] = "Total No of Cases"
     worksheet["B22"] = "Total Gross Weight"
     worksheet["B21"].font = BOLD_FONT
     worksheet["B22"].font = BOLD_FONT
 
-    set_outer_border(worksheet, 24, 25, 2, 4)
+    apply_border_to_range(worksheet, 24, 25, 2, 4)
     worksheet["B24"] = "CASE #"
-    worksheet["D24"] = "Dimesion In Cms"
+    worksheet["D24"] = "Dimension In Cms"
     worksheet["B24"].font = BOLD_FONT
     worksheet["D24"].font = BOLD_FONT
 
@@ -417,10 +513,10 @@ def ensure_pack_list_rows(worksheet, item_count: int) -> tuple[int, int]:
     case_header_row = summary_start + 3
     case_data_start = case_header_row + 1
 
-    set_outer_border(worksheet, 17, total_row - 1, 1, 8)
-    set_outer_border(worksheet, total_row, total_row, 6, 8)
-    set_outer_border(worksheet, summary_start, summary_start + 1, 2, 4)
-    set_outer_border(worksheet, case_header_row, case_header_row, 2, 4)
+    apply_border_to_range(worksheet, 17, total_row - 1, 1, 8)
+    apply_border_to_range(worksheet, total_row, total_row, 6, 8)
+    apply_border_to_range(worksheet, summary_start, summary_start + 1, 2, 4)
+    apply_border_to_range(worksheet, case_header_row, case_header_row, 2, 4)
     return total_row, case_data_start
 
 
@@ -435,7 +531,11 @@ def fill_pack_list_sheet(worksheet, fields: dict) -> None:
         worksheet,
         8,
         15,
-        max(count_display_lines(fields.get("bill_to", "")), count_display_lines(fields.get("ship_to", "")), count_display_lines(SUPPLIER_TEXT)),
+        max(
+            count_display_lines(fields.get("bill_to", "")),
+            count_display_lines(fields.get("ship_to", "")),
+            count_display_lines(SUPPLIER_TEXT),
+        ),
     )
     worksheet["D21"] = fields.get("total_packages", "")
     worksheet["D22"] = fields.get("total_gross_weight", "")
@@ -446,16 +546,48 @@ def fill_pack_list_items(worksheet, items: list[dict]) -> None:
 
     for offset, item in enumerate(items):
         row = 17 + offset
-        worksheet.cell(row=row, column=1).value = item.get("item_code", "")
-        worksheet.cell(row=row, column=2).value = item.get("desc", "")
-        worksheet.cell(row=row, column=2).alignment = TOP_LEFT
-        worksheet.row_dimensions[row].height = 34 if "\n" in str(item.get("desc", "")) or len(str(item.get("desc", ""))) > 45 else 22
-        worksheet.cell(row=row, column=3).value = item.get("case_no", "")
-        worksheet.cell(row=row, column=4).value = item.get("origin", "")
-        worksheet.cell(row=row, column=5).value = item.get("hs_code", "")
-        worksheet.cell(row=row, column=6).value = item.get("qty", "")
-        worksheet.cell(row=row, column=7).value = item.get("gross_weight", "")
-        worksheet.cell(row=row, column=8).value = item.get("package", "")
+        desc_val = str(item.get("desc", ""))
+
+        c = worksheet.cell(row=row, column=1)
+        c.value = item.get("item_code", "")
+        c.alignment = LEFT
+        c.border = THIN_BORDER
+
+        c = worksheet.cell(row=row, column=2)
+        c.value = item.get("desc", "")
+        c.alignment = TOP_LEFT if ("\n" in desc_val or len(desc_val) > 45) else LEFT
+        c.border = THIN_BORDER
+        worksheet.row_dimensions[row].height = 34 if "\n" in desc_val or len(desc_val) > 45 else 22
+
+        c = worksheet.cell(row=row, column=3)
+        c.value = item.get("case_no", "")
+        c.alignment = CENTER
+        c.border = THIN_BORDER
+
+        c = worksheet.cell(row=row, column=4)
+        c.value = item.get("origin", "")
+        c.alignment = CENTER
+        c.border = THIN_BORDER
+
+        c = worksheet.cell(row=row, column=5)
+        c.value = item.get("hs_code", "")
+        c.alignment = CENTER
+        c.border = THIN_BORDER
+
+        c = worksheet.cell(row=row, column=6)
+        c.value = item.get("qty", "")
+        c.alignment = CENTER
+        c.border = THIN_BORDER
+
+        c = worksheet.cell(row=row, column=7)
+        c.value = item.get("gross_weight", "")
+        c.alignment = RIGHT
+        c.border = THIN_BORDER
+
+        c = worksheet.cell(row=row, column=8)
+        c.value = item.get("package", "")
+        c.alignment = CENTER
+        c.border = THIN_BORDER
 
     qty_total = round(
         sum(item["qty"] for item in items if isinstance(item.get("qty"), (int, float))),
@@ -470,17 +602,45 @@ def fill_pack_list_items(worksheet, items: list[dict]) -> None:
         2,
     )
 
-    worksheet.cell(row=total_row, column=6).value = qty_total
-    worksheet.cell(row=total_row, column=7).value = weight_total
-    worksheet.cell(row=total_row, column=8).value = package_total
+    # Total row styling
+    total_label_cell = worksheet.cell(row=total_row, column=5)
+    total_label_cell.value = "Total"
+    total_label_cell.alignment = CENTER
+    total_label_cell.font = BOLD_FONT
+    total_label_cell.border = THIN_BORDER
+
+    c = worksheet.cell(row=total_row, column=6)
+    c.value = qty_total
+    c.alignment = CENTER
+    c.font = BOLD_FONT
+    c.border = THIN_BORDER
+
+    c = worksheet.cell(row=total_row, column=7)
+    c.value = weight_total
+    c.alignment = RIGHT
+    c.font = BOLD_FONT
+    c.border = THIN_BORDER
+
+    c = worksheet.cell(row=total_row, column=8)
+    c.value = package_total
+    c.alignment = CENTER
+    c.font = BOLD_FONT
+    c.border = THIN_BORDER
 
     for offset, item in enumerate(items):
         row = case_data_start + offset
-        worksheet.cell(row=row, column=2).value = item.get("case_no", "")
-        worksheet.cell(row=row, column=4).value = item.get("dimensions_cm", "")
+        c = worksheet.cell(row=row, column=2)
+        c.value = item.get("case_no", "")
+        c.border = THIN_BORDER
+        c.alignment = CENTER
+
+        c = worksheet.cell(row=row, column=4)
+        c.value = item.get("dimensions_cm", "")
+        c.border = THIN_BORDER
+        c.alignment = CENTER
 
     if items:
-        set_outer_border(worksheet, case_data_start, case_data_start + len(items) - 1, 2, 4)
+        apply_border_to_range(worksheet, case_data_start, case_data_start + len(items) - 1, 2, 4)
 
 
 def write_dataframe_to_sheet(worksheet, df: pd.DataFrame) -> None:
