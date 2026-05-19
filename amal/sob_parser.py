@@ -18,6 +18,14 @@ def extract_inline_value(text: str, label: str, next_labels: list[str] | None = 
     return normalize_whitespace(match.group(1))
 
 
+def extract_money_value(text: str, label: str) -> str:
+    pattern = rf"(?m)^\s*{re.escape(label)}\s*:\s*([\d,]+(?:\.\d+)?)\s*$"
+    match = re.search(pattern, text)
+    if not match:
+        return ""
+    return match.group(1).strip()
+
+
 def extract_block(text: str, start_marker: str, end_marker: str) -> str:
     pattern = rf"{re.escape(start_marker)}\s*(.*?)(?={re.escape(end_marker)})"
     match = re.search(pattern, text, flags=re.S)
@@ -31,6 +39,13 @@ def extract_block(text: str, start_marker: str, end_marker: str) -> str:
 
 def split_merged_contact_and_company(line: str) -> list[str]:
     match = re.match(r"^(.*\d)([A-Z][A-Z '&().,/:-]{5,})$", line)
+    if match:
+        left = match.group(1).strip()
+        right = match.group(2).strip()
+        if left and right:
+            return [left, right]
+
+    match = re.match(r"^(.*\d)([A-Z][A-Za-z].+)$", line)
     if not match:
         return [line]
 
@@ -39,13 +54,33 @@ def split_merged_contact_and_company(line: str) -> list[str]:
     if not left or not right:
         return [line]
 
-    return [left, right]
+    upper_right = f" {right.upper()}"
+    company_markers = (" SA", " LLC", " LTD", " TRANSIT", " BANK", " COMPANY", " INTERNATIONAL")
+    if any(marker in upper_right for marker in company_markers):
+        return [left, right]
+
+    return [line]
 
 
 def is_likely_company_line(line: str) -> bool:
     candidate = line.strip()
     if not candidate or "@" in candidate or any(char.isdigit() for char in candidate):
         return False
+
+    upper_candidate = candidate.upper()
+    company_markers = (
+        " BANK",
+        " SA",
+        " LLC",
+        " LTD",
+        " TRANSIT",
+        " LOGISTICS",
+        " GROUP",
+        " COMPANY",
+        " INTERNATIONAL",
+    )
+    if any(marker in f" {upper_candidate}" for marker in company_markers):
+        return True
 
     letters_only = re.sub(r"[^A-Za-z]", "", candidate)
     if len(letters_only) < 6:
@@ -122,7 +157,8 @@ def extract_comm_inv_fields_from_sob(sob_text: str) -> dict:
         "customer_po": extract_inline_value(sob_text, "Customer PO", ["Remarks"]),
         "commercial_invoice_no": extract_inline_value(sob_text, "Order No", ["Order Date"]),
         "currency": extract_inline_value(sob_text, "Currency", ["Customer PO"]),
-        "freight_charges": extract_inline_value(sob_text, "Freight Charges ®", ["VAT"]),
+        "freight_charges": extract_inline_value(sob_text, "Freight Charges Ž", ["VAT"]),
+        "sob_total": extract_money_value(sob_text, "Total"),
         "total_in_words": extract_inline_value(sob_text, "Amount in Words", ["Bank Details"]),
         "bill_to": bill_to,
         "ship_to": ship_to,
