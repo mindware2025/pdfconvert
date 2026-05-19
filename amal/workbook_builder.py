@@ -82,11 +82,6 @@ def count_display_lines(value: str) -> int:
     return len([line for line in str(value).splitlines() if line.strip()]) or 1
 
 
-def safe_unmerge(worksheet, cell_range: str) -> None:
-    if cell_range in {str(rng) for rng in worksheet.merged_cells.ranges}:
-        worksheet.unmerge_cells(cell_range)
-
-
 def build_comm_inv_sheet(worksheet) -> None:
     worksheet.title = "comm-inv"
 
@@ -179,38 +174,15 @@ def build_comm_inv_sheet(worksheet) -> None:
 
     set_outer_border(worksheet, 18, 23, 1, 8)
 
-    worksheet.merge_cells("F24:G24")
-    worksheet["F24"] = "Freight Charges"
-    worksheet["F24"].font = BOLD_FONT
-    worksheet["F24"].alignment = CENTER
     set_outer_border(worksheet, 24, 24, 1, 8)
 
-    worksheet.merge_cells("A25:F25")
-    worksheet["G25"] = "Total Amount"
-    worksheet["G25"].alignment = CENTER
     set_outer_border(worksheet, 25, 25, 1, 8)
 
-    worksheet.merge_cells("A26:H26")
-    worksheet["A26"] = "Total in Words :"
-    worksheet["A26"].font = BOLD_FONT
-
-    worksheet.merge_cells("A27:F29")
-    worksheet.merge_cells("G27:H29")
     set_outer_border(worksheet, 27, 29, 1, 8)
-
-    worksheet["G27"] = "Mindware FZ LLC"
-    worksheet["G27"].font = BOLD_FONT
-    worksheet["G27"].alignment = CENTER
 
 
 def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
     freight_row, total_row, total_in_words_row = get_comm_inv_footer_rows(item_count)
-
-    for merge_range in ("F24:G24", "A25:F25", "A26:H26", "A27:F29", "G27:H29"):
-        safe_unmerge(worksheet, merge_range)
-
-    for cell_ref in ("F24", "G25", "A26", "G27"):
-        worksheet[cell_ref] = None
 
     worksheet["A5"] = f"Payment Term: {fields.get('payment_term', '')}"
     worksheet["A6"] = f"Inco Terms: {fields.get('inco_terms', '')}"
