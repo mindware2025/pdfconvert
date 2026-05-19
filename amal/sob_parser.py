@@ -26,6 +26,13 @@ def extract_money_value(text: str, label: str) -> str:
     return match.group(1).strip()
 
 
+def extract_freight_charges_value(text: str) -> str:
+    match = re.search(r"Freight Charges[^\d\r\n]*:\s*([\d,]+(?:\.\d+)?)", text, flags=re.I)
+    if not match:
+        return ""
+    return match.group(1).strip()
+
+
 def extract_block(text: str, start_marker: str, end_marker: str) -> str:
     pattern = rf"{re.escape(start_marker)}\s*(.*?)(?={re.escape(end_marker)})"
     match = re.search(pattern, text, flags=re.S)
@@ -157,7 +164,7 @@ def extract_comm_inv_fields_from_sob(sob_text: str) -> dict:
         "customer_po": extract_inline_value(sob_text, "Customer PO", ["Remarks"]),
         "commercial_invoice_no": extract_inline_value(sob_text, "Order No", ["Order Date"]),
         "currency": extract_inline_value(sob_text, "Currency", ["Customer PO"]),
-        "freight_charges": extract_inline_value(sob_text, "Freight Charges Ž", ["VAT"]),
+        "freight_charges": extract_freight_charges_value(sob_text),
         "sob_total": extract_money_value(sob_text, "Total"),
         "total_in_words": extract_inline_value(sob_text, "Amount in Words", ["Bank Details"]),
         "bill_to": bill_to,
@@ -285,7 +292,7 @@ def map_ibm_items_to_sob(ibm_items: list[dict], sob_items: list[dict]) -> tuple[
         is_parts_for_item = bool(ibm_item.get("parts_for_item_code"))
         if is_parts_for_item:
             amount = 0.0
-            description = ibm_item.get("mibb_description", "")
+            description = ""
         else:
             amount = round(sum(sob_item["total"] for sob_item in prefix_matches), 2)
             for sob_item in prefix_matches:

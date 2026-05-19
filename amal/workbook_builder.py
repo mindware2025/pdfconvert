@@ -13,6 +13,7 @@ THIN_BORDER = Border(left=THIN_SIDE, right=THIN_SIDE, top=THIN_SIDE, bottom=THIN
 CENTER = Alignment(horizontal="center", vertical="center")
 LEFT = Alignment(horizontal="left", vertical="center")
 TOP_LEFT = Alignment(horizontal="left", vertical="top", wrap_text=True)
+TOP_CENTER = Alignment(horizontal="center", vertical="top", wrap_text=True)
 
 SUPPLIER_TEXT = (
     "Mindware Fz LLC\n"
@@ -44,7 +45,7 @@ def set_outer_border(worksheet, start_row: int, end_row: int, start_col: int, en
 
 
 def get_comm_inv_footer_rows(item_count: int) -> tuple[int, int, int]:
-    visible_item_count = max(item_count, 6)
+    visible_item_count = max(item_count, 1)
     freight_row = 18 + visible_item_count
     total_row = freight_row + 1
     total_in_words_row = freight_row + 3
@@ -67,18 +68,32 @@ def to_number_if_possible(value):
         return value
 
 
+def set_merged_block_row_heights(worksheet, start_row: int, end_row: int, total_lines: int) -> None:
+    line_count = max(total_lines, end_row - start_row + 1)
+    total_height = max(26 * (end_row - start_row + 1), line_count * 24)
+    base_height = total_height / (end_row - start_row + 1)
+    for row in range(start_row, end_row + 1):
+        worksheet.row_dimensions[row].height = base_height
+
+
+def count_display_lines(value: str) -> int:
+    if not value:
+        return 1
+    return len([line for line in str(value).splitlines() if line.strip()]) or 1
+
+
 def build_comm_inv_sheet(worksheet) -> None:
     worksheet.title = "comm-inv"
 
     widths = {
-        "A": 22,
-        "B": 44,
+        "A": 21,
+        "B": 36,
         "C": 16,
         "D": 11,
-        "E": 10.5,
-        "F": 9,
-        "G": 10,
-        "H": 9.5,
+        "E": 15,
+        "F": 14,
+        "G": 15,
+        "H": 16,
     }
     for column, width in widths.items():
         worksheet.column_dimensions[column].width = width
@@ -128,7 +143,7 @@ def build_comm_inv_sheet(worksheet) -> None:
     worksheet["G7"] = "Currency:"
     for cell in ("G5", "G6", "G7"):
         worksheet[cell].font = BOLD_FONT
-        worksheet[cell].alignment = CENTER
+        worksheet[cell].alignment = TOP_LEFT
 
     worksheet["A8"] = "Bill To"
     worksheet["E8"] = "Ship To"
@@ -186,6 +201,9 @@ def build_comm_inv_sheet(worksheet) -> None:
 def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
     freight_row, total_row, total_in_words_row = get_comm_inv_footer_rows(item_count)
 
+    for cell_ref in ("F24", "G25", "A26", "G27"):
+        worksheet[cell_ref] = None
+
     worksheet["A5"] = f"Payment Term: {fields.get('payment_term', '')}"
     worksheet["A6"] = f"Inco Terms: {fields.get('inco_terms', '')}"
     worksheet["A7"] = f"Customer PO: {fields.get('customer_po', '')}"
@@ -195,6 +213,8 @@ def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
     worksheet["G5"] = f"Commercial Invoice No : {fields.get('commercial_invoice_no', '')}"
     worksheet["G6"] = f"Date : {fields.get('date', '')}"
     worksheet["G7"] = f"Currency: {fields.get('currency', '')}"
+    for cell in ("G5", "G6", "G7"):
+        worksheet[cell].alignment = TOP_LEFT
 
     worksheet["A9"] = fields.get("bill_to", "")
     worksheet["A9"].alignment = TOP_LEFT
@@ -202,10 +222,30 @@ def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
     worksheet["E9"] = fields.get("ship_to", "")
     worksheet["E9"].alignment = TOP_LEFT
 
+    address_block_lines = max(
+        count_display_lines(fields.get("bill_to", "")),
+        count_display_lines(fields.get("ship_to", "")),
+        count_display_lines(SUPPLIER_TEXT),
+    )
+    set_merged_block_row_heights(worksheet, 9, 16, address_block_lines)
+
+    worksheet.merge_cells(start_row=freight_row, start_column=6, end_row=freight_row, end_column=7)
+    worksheet.cell(row=freight_row, column=6).value = "Freight Charges"
+    worksheet.cell(row=freight_row, column=6).font = BOLD_FONT
+    worksheet.cell(row=freight_row, column=6).alignment = CENTER
+
+    worksheet.merge_cells(start_row=total_row, start_column=1, end_row=total_row, end_column=6)
+    worksheet.cell(row=total_row, column=7).value = "Total Amount"
+    worksheet.cell(row=total_row, column=7).alignment = CENTER
+
+    worksheet.merge_cells(start_row=total_in_words_row - 1, start_column=1, end_row=total_in_words_row - 1, end_column=8)
+    worksheet.cell(row=total_in_words_row - 1, column=1).value = "Total in Words :"
+    worksheet.cell(row=total_in_words_row - 1, column=1).font = BOLD_FONT
+
     if fields.get("freight_charges", "") != "":
         worksheet.cell(row=freight_row, column=8).value = to_number_if_possible(fields.get("freight_charges", ""))
 
-    item_end_row = 17 + max(item_count, 6)
+    item_end_row = 17 + max(item_count, 1)
     worksheet.cell(row=total_row, column=8).value = f"=SUM(H18:H{item_end_row})+H{freight_row}"
 
     if fields.get("total_in_words", "") != "":
@@ -215,7 +255,7 @@ def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
 
 def ensure_comm_inv_item_rows(worksheet, item_count: int) -> None:
     item_start_row = 18
-    default_item_rows = 6
+    default_item_rows = 1
     footer_start_row = 24
 
     if item_count > default_item_rows:
@@ -233,6 +273,7 @@ def fill_comm_inv_items(worksheet, items: list[dict]) -> None:
         worksheet.cell(row=row, column=1).value = item.get("item_code", "")
         worksheet.cell(row=row, column=2).value = item.get("desc", "")
         worksheet.cell(row=row, column=2).alignment = TOP_LEFT
+        worksheet.row_dimensions[row].height = 34 if "\n" in str(item.get("desc", "")) or len(str(item.get("desc", ""))) > 45 else 22
         worksheet.cell(row=row, column=3).value = item.get("case_no", "")
         worksheet.cell(row=row, column=4).value = item.get("origin", "")
         worksheet.cell(row=row, column=5).value = item.get("hs_code", "")
@@ -272,14 +313,14 @@ def build_pack_list_sheet(worksheet) -> None:
     worksheet.title = "pack_list"
 
     widths = {
-        "A": 22,
-        "B": 49,
-        "C": 17,
+        "A": 21,
+        "B": 34,
+        "C": 15,
         "D": 15,
-        "E": 17,
-        "F": 11.5,
-        "G": 10,
-        "H": 9,
+        "E": 15,
+        "F": 14,
+        "G": 13,
+        "H": 10,
     }
     for column, width in widths.items():
         worksheet.column_dimensions[column].width = width
@@ -393,6 +434,12 @@ def fill_pack_list_sheet(worksheet, fields: dict) -> None:
     worksheet["C8"] = "='comm-inv'!E9"
     worksheet["A8"].alignment = TOP_LEFT
     worksheet["C8"].alignment = TOP_LEFT
+    set_merged_block_row_heights(
+        worksheet,
+        8,
+        15,
+        max(count_display_lines(fields.get("bill_to", "")), count_display_lines(fields.get("ship_to", "")), count_display_lines(SUPPLIER_TEXT)),
+    )
     worksheet["D21"] = fields.get("total_packages", "")
     worksheet["D22"] = fields.get("total_gross_weight", "")
 
@@ -405,6 +452,7 @@ def fill_pack_list_items(worksheet, items: list[dict]) -> None:
         worksheet.cell(row=row, column=1).value = item.get("item_code", "")
         worksheet.cell(row=row, column=2).value = item.get("desc", "")
         worksheet.cell(row=row, column=2).alignment = TOP_LEFT
+        worksheet.row_dimensions[row].height = 34 if "\n" in str(item.get("desc", "")) or len(str(item.get("desc", ""))) > 45 else 22
         worksheet.cell(row=row, column=3).value = item.get("case_no", "")
         worksheet.cell(row=row, column=4).value = item.get("origin", "")
         worksheet.cell(row=row, column=5).value = item.get("hs_code", "")
