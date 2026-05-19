@@ -129,6 +129,9 @@ def process_uploaded_pdfs(sob_file, ibm_file) -> ProcessingResult:
     case_details = extract_case_details_from_ibm_text(ibm_text)
     sob_items = extract_sob_line_items(sob_text)
     comm_inv_items, comm_inv_unmatched_items = map_ibm_items_to_sob(ibm_items, sob_items)
+    sob_reference = Path(str(sob_file.name)).stem
+    for item in comm_inv_unmatched_items:
+        item["sob_reference"] = sob_reference
     total_amount = round(
         sum(item["amount"] for item in comm_inv_items if isinstance(item.get("amount"), (int, float))),
         2,
@@ -407,16 +410,18 @@ def join_distinct_values(values) -> str:
 
 
 def merge_unmatched_items(items: list[dict]) -> list[dict]:
-    grouped_items: dict[str, float] = {}
+    grouped_items: dict[tuple[str, str], float] = {}
     for item in items:
+        sob_reference = item.get("sob_reference", "")
         item_code = item.get("item_code", "")
         amount = item.get("amount", 0.0)
         if not item_code or not isinstance(amount, (int, float)):
             continue
-        grouped_items[item_code] = round(grouped_items.get(item_code, 0.0) + amount, 2)
+        key = (sob_reference, item_code)
+        grouped_items[key] = round(grouped_items.get(key, 0.0) + amount, 2)
 
     return [
-        {"item_code": item_code, "amount": amount}
-        for item_code, amount in grouped_items.items()
+        {"sob_reference": sob_reference, "item_code": item_code, "amount": amount}
+        for (sob_reference, item_code), amount in grouped_items.items()
         if amount != 0
     ]

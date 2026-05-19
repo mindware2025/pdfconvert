@@ -157,6 +157,7 @@ def extract_item_rows_from_ibm_text(ibm_text: str) -> list[dict]:
         parsed = parse_item_row(item_text)
         if parsed:
             if parts_for_value and "/" not in parsed["item_code"]:
+                parsed["original_item_code"] = parsed["item_code"]
                 parsed["item_code"] = parts_for_value
                 parsed["parts_for_item_code"] = parts_for_value
             parsed_items.append(parsed)
@@ -213,6 +214,7 @@ def extract_item_rows_from_ibm_pdf(uploaded_file) -> list[dict]:
                         "order_no": cells[1],
                         "case_no": cells[2],
                         "item_code": item_code,
+                        "original_item_code": cells[3],
                         "hs_code": cells[4],
                         "mibb_description": cells[5],
                         "origin": cells[6],

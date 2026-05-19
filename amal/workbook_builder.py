@@ -275,6 +275,8 @@ def fill_comm_inv_unmatched_items(worksheet, items: list[dict], item_count: int)
 
     _, _, total_in_words_row = get_comm_inv_footer_rows(item_count)
     start_row = total_in_words_row + 5
+    worksheet.cell(row=start_row - 1, column=6).value = "SOB No"
+    worksheet.cell(row=start_row - 1, column=6).font = BOLD_FONT
     worksheet.cell(row=start_row - 1, column=7).value = "Other SOB Items"
     worksheet.cell(row=start_row - 1, column=7).font = BOLD_FONT
     worksheet.cell(row=start_row - 1, column=8).value = "Amount"
@@ -282,19 +284,17 @@ def fill_comm_inv_unmatched_items(worksheet, items: list[dict], item_count: int)
 
     for offset, item in enumerate(items):
         row = start_row + offset
+        worksheet.cell(row=row, column=6).value = item.get("sob_reference", "")
         worksheet.cell(row=row, column=7).value = item.get("item_code", "")
         worksheet.cell(row=row, column=8).value = item.get("amount", "")
 
     total_row = start_row + len(items)
     worksheet.cell(row=total_row, column=7).value = "Total"
     worksheet.cell(row=total_row, column=7).font = BOLD_FONT
-    worksheet.cell(row=total_row, column=8).value = round(
-        sum(item["amount"] for item in items if isinstance(item.get("amount"), (int, float))),
-        2,
-    )
+    worksheet.cell(row=total_row, column=8).value = f"=SUM(H{start_row}:H{total_row - 1})"
     worksheet.cell(row=total_row, column=8).font = BOLD_FONT
 
-    set_outer_border(worksheet, start_row - 1, total_row, 7, 8)
+    set_outer_border(worksheet, start_row - 1, total_row, 6, 8)
 
 
 def build_pack_list_sheet(worksheet) -> None:

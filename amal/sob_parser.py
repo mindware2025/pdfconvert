@@ -273,12 +273,13 @@ def map_ibm_items_to_sob(ibm_items: list[dict], sob_items: list[dict]) -> tuple[
     for ibm_item in ibm_items:
         base_code = ibm_item.get("item_code", "").split("/")[0].strip()
         base_normalized = normalize_item_code(base_code)
+        has_serial_suffix = "/" in ibm_item.get("item_code", "")
         prefix_matches = [
             sob_item
             for sob_item in sob_items
             if sob_item["normalized_item_code"].startswith(base_normalized)
         ]
-        exact_match = next(
+        exact_match = None if has_serial_suffix else next(
             (sob_item for sob_item in sob_items if sob_item["normalized_item_code"] == base_normalized),
             None,
         )
@@ -286,13 +287,15 @@ def map_ibm_items_to_sob(ibm_items: list[dict], sob_items: list[dict]) -> tuple[
         description = ""
         if exact_match:
             description = exact_match["description"]
-        elif prefix_matches:
+        elif prefix_matches and not ibm_item.get("mibb_description"):
             description = prefix_matches[0]["description"]
+        elif ibm_item.get("mibb_description"):
+            description = ibm_item.get("mibb_description", "")
 
         is_parts_for_item = bool(ibm_item.get("parts_for_item_code"))
         if is_parts_for_item:
             amount = 0.0
-            description = ""
+            description = ibm_item.get("original_item_code", "")
         else:
             amount = round(sum(sob_item["total"] for sob_item in prefix_matches), 2)
             for sob_item in prefix_matches:
