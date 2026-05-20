@@ -183,6 +183,22 @@ def normalize_item_code(value: str) -> str:
     return re.sub(r"[^A-Z0-9]", "", value.upper())
 
 
+def split_sob_item_code_and_description(body: str) -> tuple[str, str]:
+    compact_match = re.match(r"^(?P<digits>\d{6,8})(?P<desc>[A-Z].*)$", body)
+    if compact_match:
+        item_code = compact_match.group("digits").strip()
+        description = normalize_whitespace(compact_match.group("desc"))
+        return item_code, description
+
+    body_match = re.match(r"^(?P<item_code>[A-Z0-9-]+)(?P<description>.*)$", body)
+    if not body_match:
+        return "", ""
+
+    item_code = body_match.group("item_code").strip()
+    description = normalize_whitespace(body_match.group("description"))
+    return item_code, description
+
+
 def get_group_code(item_code: str) -> str:
     if item_code.upper().startswith("HS-IBM"):
         return "HS-IBM"
@@ -245,12 +261,9 @@ def parse_sob_line_item(row_text: str) -> dict | None:
         return None
 
     body = tail_match.group("body")
-    body_match = re.match(r"^(?P<item_code>[A-Z0-9-]+)(?P<description>.*)$", body)
-    if not body_match:
+    item_code, description = split_sob_item_code_and_description(body)
+    if not item_code:
         return None
-
-    item_code = body_match.group("item_code").strip()
-    description = normalize_whitespace(body_match.group("description"))
 
     return {
         "line_no": match.group("line_no"),

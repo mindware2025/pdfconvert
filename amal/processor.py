@@ -382,11 +382,12 @@ def merge_ibm_item_sources(pdf_items: list[dict], text_items: list[dict]) -> lis
         text_item = text_lookup.get(key, {})
         merged_item = dict(pdf_item)
 
-        if text_item.get("item_code"):
+        has_confident_text_split = bool(text_item.get("hs_code") or text_item.get("mibb_description"))
+        if text_item.get("item_code") and has_confident_text_split:
             merged_item["item_code"] = text_item["item_code"]
         if text_item.get("parts_for_item_code"):
             merged_item["parts_for_item_code"] = text_item["parts_for_item_code"]
-        if text_item.get("mibb_description") and not merged_item.get("mibb_description"):
+        if text_item.get("mibb_description"):
             merged_item["mibb_description"] = text_item["mibb_description"]
 
         merged_items.append(merged_item)

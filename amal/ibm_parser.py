@@ -20,7 +20,39 @@ def parse_decimal(value: str) -> float:
     return float(value.replace(",", "").strip())
 
 
+def split_compact_item_and_hs(body: str) -> tuple[str, str, str]:
+    slash_match = re.match(r"^(?P<prefix>.+?\s/\s)(?P<rest>.+)$", body)
+    if not slash_match:
+        return "", "", ""
+
+    prefix = slash_match.group("prefix")
+    rest = slash_match.group("rest")
+    hs_lengths = (14, 12, 10, 8, 6)
+
+    for serial_len in range(7, min(21, len(rest)) + 1):
+        serial = rest[:serial_len]
+        if not re.fullmatch(r"[A-Z0-9]+", serial) or not re.search(r"[A-Z]", serial):
+            continue
+
+        for hs_len in hs_lengths:
+            hs_end = serial_len + hs_len
+            if hs_end >= len(rest):
+                continue
+
+            hs_code = rest[serial_len:hs_end]
+            description = rest[hs_end:].strip()
+            if not hs_code.isdigit() or not description or not re.match(r"^[A-Z]", description):
+                continue
+
+            item_code = normalize_line(f"{prefix}{serial}")
+            return item_code, hs_code, normalize_line(description)
+
+    return "", "", ""
+
+
 def split_item_and_hs(body: str) -> tuple[str, str, str]:
+    body = normalize_line(body)
+
     # Pattern 1: "4657-924 / 78E3R9W 84717098000000 STORAGE UNITS..."
     match1 = re.match(r"^(.+?\s/\s[A-Z0-9]{7,21})\s+(\d{6,14})\s+(.*)$", body)
     if match1:
@@ -28,6 +60,11 @@ def split_item_and_hs(body: str) -> tuple[str, str, str]:
         hs_code = match1.group(2)
         description = normalize_line(match1.group(3))
         return item_code, hs_code, description
+
+    # Pattern 1b: OCR/text extraction can collapse separators between serial, HS, and description.
+    compact_item_code, compact_hs_code, compact_description = split_compact_item_and_hs(body)
+    if compact_item_code:
+        return compact_item_code, compact_hs_code, compact_description
 
     # Pattern 2: "0000003LG589 8523510000 FLASH MEMORY..."
     match2 = re.match(r"^([A-Z0-9]+)\s+(\d{6,12})\s+(.*)$", body)
