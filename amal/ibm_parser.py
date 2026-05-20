@@ -21,36 +21,24 @@ def parse_decimal(value: str) -> float:
 
 
 def split_item_and_hs(body: str) -> tuple[str, str, str]:
-    slash_match = re.match(
-        r"^(?P<part>.+?\s/\s)(?P<serial>[A-Z0-9]{7,21}?)\s+(?P<hs_code>\d{6,14})?\s*(?P<description>.*)$",
-        body,
-    )
-    if slash_match:
-        item_code = normalize_line(f"{slash_match.group('part')}{slash_match.group('serial')}")
-        hs_code = slash_match.group("hs_code") or ""
-        description = normalize_line(slash_match.group("description"))
+    # Pattern 1: "4657-924 / 78E3R9W 84717098000000 STORAGE UNITS..."
+    match1 = re.match(r"^(.+?\s/\s[A-Z0-9]{7,21})\s+(\d{6,14})\s+(.*)$", body)
+    if match1:
+        item_code = normalize_line(match1.group(1))
+        hs_code = match1.group(2)
+        description = normalize_line(match1.group(3))
         return item_code, hs_code, description
 
-    hs_serial_match = re.match(
-        r"^(?P<item_code>[A-Z0-9]+)\s+(?P<hs_code>\d{6,12})\s+(?P<description>.*)$",
-        body,
-    )
-    if hs_serial_match:
-        return (
-            normalize_line(hs_serial_match.group("item_code")),
-            hs_serial_match.group("hs_code"),
-            normalize_line(hs_serial_match.group("description")),
-        )
-
-    hs_match = re.match(r"^(?P<item_code>\S+)\s+(?P<hs_code>\d{6,12})(?=\s|$)(?P<description>.*)$", body)
-    if hs_match:
-        item_code = normalize_line(hs_match.group("item_code"))
-        hs_code = hs_match.group("hs_code")
-        description = normalize_line(hs_match.group("description"))
+    # Pattern 2: "0000003LG589 8523510000 FLASH MEMORY..."
+    match2 = re.match(r"^([A-Z0-9]+)\s+(\d{6,12})\s+(.*)$", body)
+    if match2:
+        item_code = normalize_line(match2.group(1))
+        hs_code = match2.group(2)
+        description = normalize_line(match2.group(3))
         return item_code, hs_code, description
 
-    item_code = normalize_line(body)
-    return item_code, "", ""
+    # Fallback: no hs code
+    return normalize_line(body), "", ""
 
 
 def parse_item_row(row_text: str) -> dict | None:
@@ -183,53 +171,91 @@ def extract_item_rows_from_ibm_pdf(uploaded_file) -> list[dict]:
                     continue
 
                 header = [clean_cell(cell) for cell in table[0]]
-                if "Part Number / Serial" not in header or "HS Code" not in header:
-                    continue
-
-                parts_for_value = ""
-                for row in table[1:]:
-                    cells = [clean_cell(cell) for cell in row]
-                    if len(cells) < 10:
-                        continue
-
-                    if cells[0] == "Case No" or cells[0].startswith("Company name"):
-                        break
-
-                    if cells[3].startswith("Parts for:"):
-                        parts_for_value = normalize_parts_for_value(cells[3])
-                        continue
-
-                    if not cells[0].isdigit() or not cells[2]:
-                        continue
-
-                    item_code = parts_for_value or cells[3]
-                    parts_for_item_code = parts_for_value or ""
+                
+                # MIBB format (Part Number / Serial, HS Code columns)
+                if "Part Number / Serial" in header and "HS Code" in header:
                     parts_for_value = ""
+                    for row in table[1:]:
+                        cells = [clean_cell(cell) for cell in row]
+                        if len(cells) < 10:
+                            continue
 
-                    qty = parse_decimal(cells[7]) if cells[7] else 0
-                    total_price = parse_decimal(cells[9]) if cells[9] else 0
-                    unit_price = total_price / qty if qty else 0
+                        if cells[0] == "Case No" or cells[0].startswith("Company name"):
+                            break
 
-                    parsed = {
-                        "line_no": cells[0],
-                        "order_no": cells[1],
-                        "case_no": cells[2],
-                        "item_code": item_code,
-                        "original_item_code": cells[3],
-                        "hs_code": cells[4],
-                        "mibb_description": cells[5],
-                        "origin": cells[6],
-                        "qty": qty,
-                        "temp_unit_price": unit_price,
-                        "mibb_total_price": total_price,
-                    }
-                    if parts_for_item_code:
-                        parsed["parts_for_item_code"] = parts_for_item_code
-                    parsed_items.append(parsed)
+                        if cells[3].startswith("Parts for:"):
+                            parts_for_value = normalize_parts_for_value(cells[3])
+                            continue
 
-                if parsed_items:
-                    uploaded_file.seek(0)
-                    return parsed_items
+                        if not cells[0].isdigit() or not cells[2]:
+                            continue
+
+                        item_code = parts_for_value or cells[3]
+                        parts_for_item_code = parts_for_value or ""
+                        parts_for_value = ""
+
+                        qty = parse_decimal(cells[7]) if cells[7] else 0
+                        total_price = parse_decimal(cells[9]) if cells[9] else 0
+                        unit_price = total_price / qty if qty else 0
+
+                        parsed = {
+                            "line_no": cells[0],
+                            "order_no": cells[1],
+                            "case_no": cells[2],
+                            "item_code": item_code,
+                            "original_item_code": cells[3],
+                            "hs_code": cells[4],
+                            "mibb_description": cells[5],
+                            "origin": cells[6],
+                            "qty": qty,
+                            "temp_unit_price": unit_price,
+                            "mibb_total_price": total_price,
+                        }
+                        if parts_for_item_code:
+                            parsed["parts_for_item_code"] = parts_for_item_code
+                        parsed_items.append(parsed)
+
+                    if parsed_items:
+                        uploaded_file.seek(0)
+                        return parsed_items
+                
+                # SOB format (Item, Item Description columns)
+                elif "Item" in header and "Item Description" in header:
+                    item_idx = header.index("Item")
+                    desc_idx = header.index("Item Description")
+                    qty_idx = header.index("Order Qty") if "Order Qty" in header else -1
+                    unit_price_idx = header.index("Unit Price") if "Unit Price" in header else -1
+                    total_idx = header.index("Total (excl. VAT)") if "Total (excl. VAT)" in header else -1
+                    
+                    for row_num, row in enumerate(table[1:], 1):
+                        cells = [clean_cell(cell) for cell in row]
+                        if not cells or not cells[item_idx]:
+                            continue
+                        
+                        item_code = cells[item_idx]
+                        description = cells[desc_idx] if desc_idx < len(cells) else ""
+                        qty = parse_decimal(cells[qty_idx]) if qty_idx >= 0 and qty_idx < len(cells) and cells[qty_idx] else 1
+                        unit_price = parse_decimal(cells[unit_price_idx]) if unit_price_idx >= 0 and unit_price_idx < len(cells) and cells[unit_price_idx] else 0
+                        total_price = parse_decimal(cells[total_idx]) if total_idx >= 0 and total_idx < len(cells) and cells[total_idx] else 0
+                        
+                        parsed = {
+                            "line_no": str(row_num),
+                            "order_no": "",
+                            "case_no": "",
+                            "item_code": item_code,
+                            "original_item_code": item_code,
+                            "hs_code": "",
+                            "mibb_description": description,
+                            "origin": "",
+                            "qty": qty,
+                            "temp_unit_price": unit_price,
+                            "mibb_total_price": total_price,
+                        }
+                        parsed_items.append(parsed)
+                    
+                    if parsed_items:
+                        uploaded_file.seek(0)
+                        return parsed_items
 
     uploaded_file.seek(0)
     return []
