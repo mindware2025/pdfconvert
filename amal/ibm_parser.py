@@ -42,11 +42,11 @@ def split_item_and_hs(body: str) -> tuple[str, str, str]:
             normalize_line(hs_serial_match.group("description")),
         )
 
-    hs_match = re.search(r"\s(\d{6,12})(?=[A-Z])", body)
+    hs_match = re.match(r"^(?P<item_code>\S+)\s+(?P<hs_code>\d{6,12})(?=\s|$)(?P<description>.*)$", body)
     if hs_match:
-        item_code = normalize_line(body[: hs_match.start()])
-        hs_code = hs_match.group(1)
-        description = normalize_line(body[hs_match.end() :])
+        item_code = normalize_line(hs_match.group("item_code"))
+        hs_code = hs_match.group("hs_code")
+        description = normalize_line(hs_match.group("description"))
         return item_code, hs_code, description
 
     item_code = normalize_line(body)
