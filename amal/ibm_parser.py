@@ -6,8 +6,17 @@ import pdfplumber
 CASE_NO_PATTERN = re.compile(r"^(970[A-Z0-9]{10})(.*)$")
 ROW_START_PATTERN = re.compile(r"^\d+\s+\S+")
 ITEM_ROW_START_PATTERN = re.compile(r"^\d+\s+\S+\s+970[A-Z0-9]{10}")
+# TAIL_PATTERN = re.compile(
+#     r"^(?P<body>.+?)(?P<coo>[A-Z]{2})\s+(?P<qty>\d+(?:\.\d+)?)\s+(?P<unit_price>[\d,]+(?:\.\d+)?)\s+(?P<total_price>[\d,]+(?:\.\d+)?)$"
+# )
 TAIL_PATTERN = re.compile(
-    r"^(?P<body>.+)(?P<coo>[A-Z]{2})\s+(?P<qty>\d+(?:\.\d+)?)\s+(?P<unit_price>[\d,]+(?:\.\d+)?)\s+(?P<total_price>[\d,]+(?:\.\d+)?)$"
+    r"^(?P<body>.+?)\s+"
+    r"(?P<coo>[A-Z]{2})\s+"
+    r"(?P<qty>\d+(?:\.\d+)?)\s+"
+    r"(?P<unit_price>\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s+"
+    r"(?P<vat_pct>\d+(?:\.\d+)?)\s+"
+    r"(?P<vat_amt>\d+(?:\.\d+)?)\s+"
+    r"(?P<total_price>\d{1,3}(?:,\d{3})*(?:\.\d+)?)$"
 )
 
 
@@ -16,6 +25,7 @@ def normalize_line(value: str) -> str:
 
 
 def parse_decimal(value: str) -> float:
+    
     return float(value.replace(",", "").strip())
 
 
