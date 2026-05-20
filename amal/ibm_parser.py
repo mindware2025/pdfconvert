@@ -6,17 +6,8 @@ import pdfplumber
 CASE_NO_PATTERN = re.compile(r"^(970[A-Z0-9]{10})(.*)$")
 ROW_START_PATTERN = re.compile(r"^\d+\s+\S+")
 ITEM_ROW_START_PATTERN = re.compile(r"^\d+\s+\S+\s+970[A-Z0-9]{10}")
-# TAIL_PATTERN = re.compile(
-#     r"^(?P<body>.+?)(?P<coo>[A-Z]{2})\s+(?P<qty>\d+(?:\.\d+)?)\s+(?P<unit_price>[\d,]+(?:\.\d+)?)\s+(?P<total_price>[\d,]+(?:\.\d+)?)$"
-# )
 TAIL_PATTERN = re.compile(
-    r"^(?P<body>.+?)\s+"
-    r"(?P<coo>[A-Z]{2})\s+"
-    r"(?P<qty>\d+(?:\.\d+)?)\s+"
-    r"(?P<unit_price>\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s+"
-    r"(?P<vat_pct>\d+(?:\.\d+)?)\s+"
-    r"(?P<vat_amt>\d+(?:\.\d+)?)\s+"
-    r"(?P<total_price>\d{1,3}(?:,\d{3})*(?:\.\d+)?)$"
+    r"^(?P<body>.+?)(?P<coo>[A-Z]{2})\s+(?P<qty>\d+(?:\.\d+)?)\s+(?P<unit_price>[\d,]+(?:\.\d+)?)\s+(?P<total_price>[\d,]+(?:\.\d+)?)$"
 )
 
 
@@ -80,8 +71,36 @@ def parse_item_row(row_text: str) -> dict | None:
         return None
 
     item_body = normalize_line(tail_match.group("body"))
+    # item_code, hs_code, description = split_item_and_hs(item_body)
+    tail_match = TAIL_PATTERN.match(remaining)
+    if not tail_match:
+        print("\n❌ TAIL NOT MATCHING")
+        print("REMAINING:", remaining)
+        return None
+    
+    print("\n================ DEBUG ROW ================")
+    print("RAW ROW TEXT:", row_text)
+    print("REMAINING:", remaining)
+    
+    print("\n[TAIL MATCH]")
+    print("BODY (raw):", tail_match.group("body"))
+    print("COO:", tail_match.group("coo"))
+    print("QTY:", tail_match.group("qty"))
+    print("UNIT PRICE:", tail_match.group("unit_price"))
+    print("TOTAL PRICE:", tail_match.group("total_price"))
+    
+    item_body = normalize_line(tail_match.group("body"))
+    
+    print("\n[BODY NORMALIZED]")
+    print(item_body)
+    
     item_code, hs_code, description = split_item_and_hs(item_body)
-
+    
+    print("\n[AFTER SPLIT_item_and_hs]")
+    print("ITEM CODE:", item_code)
+    print("DESCRIPTION:", description)
+    
+    print("===========================================\n")
     qty = parse_decimal(tail_match.group("qty"))
     total_price = parse_decimal(tail_match.group("total_price"))
     unit_price = total_price / qty if qty else 0
