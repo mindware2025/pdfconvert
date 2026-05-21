@@ -412,7 +412,7 @@ def fill_comm_inv_unmatched_items(worksheet, items: list[dict], address_rows: in
 def build_pack_list_sheet(worksheet) -> None:
     worksheet.title = "pack_list"
 
-    widths = {"A": 21, "B": 34, "C": 15, "D": 15, "E": 15, "F": 14, "G": 13, "H": 10}
+    widths = {"A": 21, "B": 42, "C": 16, "D": 11, "E": 22, "F": 18, "G": 22, "H": 16}
     for col, w in widths.items():
         worksheet.column_dimensions[col].width = w
 
@@ -427,49 +427,54 @@ def build_pack_list_sheet(worksheet) -> None:
     worksheet.merge_cells("A4:H4")
     style_range(worksheet, "A4:H4", fill=PURPLE_FILL, border=THIN_BORDER)
 
-    worksheet.merge_cells("A5:E6")
-    worksheet.merge_cells("F5:H5")
-    worksheet.merge_cells("F6:H6")
-    worksheet["F5"] = "No. :"
-    worksheet["F6"] = "Date :"
-    worksheet["F5"].font = BOLD_FONT
-    worksheet["F6"].font = BOLD_FONT
-    worksheet["F5"].alignment = LEFT
-    worksheet["F6"].alignment = LEFT
+    for row in (5, 6):
+        worksheet.row_dimensions[row].height = 18
 
+    worksheet.merge_cells("A5:F5")
+    worksheet.merge_cells("A6:F6")
+    worksheet.merge_cells("G5:H5")
+    worksheet.merge_cells("G6:H6")
+    worksheet["G5"] = "No. :"
+    worksheet["G6"] = "Date :"
+    worksheet["G5"].font = BOLD_FONT
+    worksheet["G6"].font = BOLD_FONT
+    worksheet["G5"].alignment = LEFT
+    worksheet["G6"].alignment = LEFT
+
+    worksheet.row_dimensions[7].height = 18
+    worksheet.merge_cells("A7:D7")
+    worksheet.merge_cells("E7:F7")
+    worksheet.merge_cells("G7:H7")
     worksheet["A7"] = "Bill To"
-    worksheet["C7"] = "Ship To"
-    worksheet["F7"] = "Supplier"
+    worksheet["E7"] = "Ship To"
+    worksheet["G7"] = "Supplier"
     style_range(worksheet, "A7:H7", fill=PURPLE_FILL, font=WHITE_BOLD_FONT, border=THIN_BORDER)
-    worksheet.merge_cells("A7:B7")
-    worksheet.merge_cells("C7:E7")
-    worksheet.merge_cells("F7:H7")
     worksheet["A7"].alignment = LEFT
-    worksheet["C7"].alignment = LEFT
-    worksheet["F7"].alignment = LEFT
+    worksheet["E7"].alignment = LEFT
+    worksheet["G7"].alignment = LEFT
 
 
 def fill_pack_list_sheet(worksheet, fields: dict, address_rows: int) -> None:
     addr_s = 8
     addr_e = addr_s + address_rows - 1
 
-    worksheet.merge_cells(start_row=addr_s, start_column=1, end_row=addr_e, end_column=2)
-    worksheet.merge_cells(start_row=addr_s, start_column=3, end_row=addr_e, end_column=5)
-    worksheet.merge_cells(start_row=addr_s, start_column=6, end_row=addr_e, end_column=8)
+    worksheet.merge_cells(start_row=addr_s, start_column=1, end_row=addr_e, end_column=4)
+    worksheet.merge_cells(start_row=addr_s, start_column=5, end_row=addr_e, end_column=6)
+    worksheet.merge_cells(start_row=addr_s, start_column=7, end_row=addr_e, end_column=8)
     apply_outer_border_to_range(worksheet, addr_s, addr_e, 1, 8)
 
-    worksheet["F5"] = '="No. : " & \'comm-inv\'!G5'
-    worksheet["F6"] = '="Date : " & \'comm-inv\'!G6'
+    worksheet["G5"] = '="No. : " & \'comm-inv\'!G5'
+    worksheet["G6"] = '="Date : " & \'comm-inv\'!G6'
 
     c = worksheet.cell(row=addr_s, column=1)
     c.value = "='comm-inv'!A9"
     c.alignment = TOP_LEFT
 
-    c = worksheet.cell(row=addr_s, column=3)
+    c = worksheet.cell(row=addr_s, column=5)
     c.value = "='comm-inv'!E9"
     c.alignment = TOP_LEFT
 
-    c = worksheet.cell(row=addr_s, column=6)
+    c = worksheet.cell(row=addr_s, column=7)
     c.value = SUPPLIER_TEXT
     c.font = BOLD_FONT
     c.alignment = TOP_LEFT
