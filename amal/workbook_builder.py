@@ -522,7 +522,7 @@ def fill_pack_list_items(worksheet, items: list[dict], address_rows: int) -> Non
 
     worksheet.cell(row=summary_start, column=1).value = "Total No of Cases"
     worksheet.cell(row=summary_start, column=1).font = BOLD_FONT
-    worksheet.cell(row=summary_start + 1, column=1).value = "Total Gross Weight"
+    worksheet.cell(row=summary_start + 1, column=1).value = "Total Gross Weight in Kgs"
     worksheet.cell(row=summary_start + 1, column=1).font = BOLD_FONT
 
     worksheet.cell(row=case_hdr_row, column=1).value = "CASE #"
