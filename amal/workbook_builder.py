@@ -434,8 +434,8 @@ def build_pack_list_sheet(worksheet) -> None:
     worksheet.merge_cells("A6:F6")
     worksheet.merge_cells("G5:H5")
     worksheet.merge_cells("G6:H6")
-    worksheet["G5"] = "No. :"
-    worksheet["G6"] = "Date :"
+    worksheet["G5"] = ""
+    worksheet["G6"] = ""
     worksheet["G5"].font = BOLD_FONT
     worksheet["G6"].font = BOLD_FONT
     worksheet["G5"].alignment = LEFT
@@ -575,8 +575,9 @@ def fill_pack_list_items(worksheet, items: list[dict], address_rows: int) -> Non
     worksheet.cell(row=summary_start + 1, column=2).value = weight_total
     worksheet.cell(row=summary_start + 1, column=2).alignment = LEFT
 
-    worksheet.merge_cells(start_row=stc_row, start_column=1, end_row=stc_row, end_column=4)
-    worksheet.cell(row=stc_row, column=1).value = f"STC {qty_total} IN {total_packages} cases"
+    worksheet.merge_cells(start_row=stc_row, start_column=1, end_row=stc_row, end_column=2)
+    qty_total_display = int(qty_total) if float(qty_total).is_integer() else qty_total
+    worksheet.cell(row=stc_row, column=1).value = f"STC {qty_total_display} pcs IN {total_packages} cases"
     worksheet.cell(row=stc_row, column=1).font = BOLD_FONT
     worksheet.cell(row=stc_row, column=1).alignment = LEFT
 
