@@ -298,7 +298,6 @@ def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
     wr = L["words_row"]
     worksheet.row_dimensions[wr - 1].height = 6  # small blank gap
     worksheet.merge_cells(start_row=wr, start_column=1, end_row=wr + 1, end_column=6)
-    apply_outer_border_to_range(worksheet, wr, wr + 1, 1, 6)
     words_text = (
         f"Total in Words : {fields.get('total_in_words', '')}"
         if fields.get("total_in_words")
@@ -515,7 +514,7 @@ def fill_pack_list_items(worksheet, items: list[dict], address_rows: int) -> Non
     apply_border_to_range(worksheet, items_start, total_row - 1, 1, 8)
     apply_border_to_range(worksheet, total_row, total_row, 5, 8)
     apply_border_to_range(worksheet, summary_start, summary_start + 1, 1, 2)
-    apply_border_to_range(worksheet, stc_row, stc_row, 1, 4)
+    apply_border_to_range(worksheet, stc_row, stc_row, 1, 2)
     apply_border_to_range(worksheet, case_hdr_row, case_hdr_row, 1, 2)
 
     worksheet.cell(row=addr_e + 3, column=8).value = "Mindware FZ LLC"
