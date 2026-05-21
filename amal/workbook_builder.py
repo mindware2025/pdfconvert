@@ -508,12 +508,14 @@ def fill_pack_list_items(worksheet, items: list[dict], address_rows: int) -> Non
     items_start = hdr_row + 1
     total_row = items_start + max(len(items), 1)
     summary_start = total_row + 2
+    stc_row = summary_start + 2
     case_hdr_row = summary_start + 3
     case_data_start = case_hdr_row + 1
 
     apply_border_to_range(worksheet, items_start, total_row - 1, 1, 8)
     apply_border_to_range(worksheet, total_row, total_row, 5, 8)
     apply_border_to_range(worksheet, summary_start, summary_start + 1, 1, 2)
+    apply_border_to_range(worksheet, stc_row, stc_row, 1, 4)
     apply_border_to_range(worksheet, case_hdr_row, case_hdr_row, 1, 2)
 
     worksheet.cell(row=addr_e + 3, column=8).value = "Mindware FZ LLC"
@@ -569,7 +571,14 @@ def fill_pack_list_items(worksheet, items: list[dict], address_rows: int) -> Non
 
     total_packages = len({i.get("case_no") for i in items if i.get("case_no")})
     worksheet.cell(row=summary_start, column=2).value = total_packages
+    worksheet.cell(row=summary_start, column=2).alignment = LEFT
     worksheet.cell(row=summary_start + 1, column=2).value = weight_total
+    worksheet.cell(row=summary_start + 1, column=2).alignment = LEFT
+
+    worksheet.merge_cells(start_row=stc_row, start_column=1, end_row=stc_row, end_column=4)
+    worksheet.cell(row=stc_row, column=1).value = f"STC {qty_total} IN {total_packages} cases"
+    worksheet.cell(row=stc_row, column=1).font = BOLD_FONT
+    worksheet.cell(row=stc_row, column=1).alignment = LEFT
 
     for offset, item in enumerate(items):
         row = case_data_start + offset
