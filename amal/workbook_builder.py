@@ -1,4 +1,5 @@
 import io
+from copy import copy
 
 import pandas as pd
 from openpyxl import Workbook
@@ -46,7 +47,19 @@ def apply_border_to_range(worksheet, start_row: int, end_row: int, start_col: in
             worksheet.cell(row=row, column=col).border = THIN_BORDER
 
 
-set_outer_border = apply_border_to_range
+def apply_outer_border_to_range(worksheet, start_row: int, end_row: int, start_col: int, end_col: int) -> None:
+    for row in range(start_row, end_row + 1):
+        for col in range(start_col, end_col + 1):
+            cell = worksheet.cell(row=row, column=col)
+            border = copy(cell.border)
+            border.left = THIN_SIDE if col == start_col else border.left
+            border.right = THIN_SIDE if col == end_col else border.right
+            border.top = THIN_SIDE if row == start_row else border.top
+            border.bottom = THIN_SIDE if row == end_row else border.bottom
+            cell.border = border
+
+
+set_outer_border = apply_outer_border_to_range
 
 
 def to_number_if_possible(value):
@@ -172,12 +185,10 @@ def build_comm_inv_static(worksheet) -> None:
     worksheet.merge_cells("A5:F5")
     worksheet.merge_cells("A6:F6")
     worksheet.merge_cells("A7:F7")
-    apply_border_to_range(worksheet, 5, 7, 1, 6)
 
     worksheet.merge_cells("G5:H5")
     worksheet.merge_cells("G6:H6")
     worksheet.merge_cells("G7:H7")
-    apply_border_to_range(worksheet, 5, 7, 7, 8)
 
     for addr in ("A5", "A6", "A7"):
         worksheet[addr].font = BOLD_FONT
@@ -225,7 +236,7 @@ def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
     worksheet.merge_cells(start_row=addr_s, start_column=1, end_row=addr_e, end_column=4)
     worksheet.merge_cells(start_row=addr_s, start_column=5, end_row=addr_e, end_column=6)
     worksheet.merge_cells(start_row=addr_s, start_column=7, end_row=addr_e, end_column=8)
-    apply_border_to_range(worksheet, addr_s, addr_e, 1, 8)
+    apply_outer_border_to_range(worksheet, addr_s, addr_e, 1, 8)
 
     c = worksheet.cell(row=addr_s, column=1)
     c.value = bill_to
@@ -262,7 +273,7 @@ def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
     # Footer rows
     fr = L["freight_row"]
     worksheet.merge_cells(start_row=fr, start_column=1, end_row=fr, end_column=6)
-    apply_border_to_range(worksheet, fr, fr, 1, 8)
+    apply_border_to_range(worksheet, fr, fr, 7, 8)
     worksheet.cell(row=fr, column=7).value = "Freight Charges"
     worksheet.cell(row=fr, column=7).font = BOLD_FONT
     worksheet.cell(row=fr, column=7).alignment = RIGHT
@@ -274,7 +285,7 @@ def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
 
     tr = L["total_row"]
     worksheet.merge_cells(start_row=tr, start_column=1, end_row=tr, end_column=6)
-    apply_border_to_range(worksheet, tr, tr, 1, 8)
+    apply_border_to_range(worksheet, tr, tr, 7, 8)
     worksheet.cell(row=tr, column=7).value = "Total Amount"
     worksheet.cell(row=tr, column=7).font = BOLD_FONT
     worksheet.cell(row=tr, column=7).alignment = RIGHT
@@ -287,7 +298,7 @@ def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
     wr = L["words_row"]
     worksheet.row_dimensions[wr - 1].height = 6  # small blank gap
     worksheet.merge_cells(start_row=wr, start_column=1, end_row=wr + 1, end_column=6)
-    apply_border_to_range(worksheet, wr, wr + 1, 1, 6)
+    apply_outer_border_to_range(worksheet, wr, wr + 1, 1, 6)
     words_text = (
         f"Total in Words : {fields.get('total_in_words', '')}"
         if fields.get("total_in_words")
@@ -299,7 +310,7 @@ def fill_comm_inv_sheet(worksheet, fields: dict, item_count: int) -> None:
     c.alignment = TOP_LEFT
 
     worksheet.merge_cells(start_row=wr, start_column=7, end_row=wr + 1, end_column=8)
-    apply_border_to_range(worksheet, wr, wr + 1, 7, 8)
+    apply_outer_border_to_range(worksheet, wr, wr + 1, 7, 8)
     c = worksheet.cell(row=wr, column=7)
     c.value = "Mindware FZ LLC"
     c.font = BOLD_FONT
@@ -419,7 +430,6 @@ def build_pack_list_sheet(worksheet) -> None:
     worksheet.merge_cells("A5:E6")
     worksheet.merge_cells("F5:H5")
     worksheet.merge_cells("F6:H6")
-    apply_border_to_range(worksheet, 5, 6, 1, 8)
     worksheet["F5"] = "No. :"
     worksheet["F6"] = "Date :"
     worksheet["F5"].font = BOLD_FONT
@@ -446,7 +456,7 @@ def fill_pack_list_sheet(worksheet, fields: dict, address_rows: int) -> None:
     worksheet.merge_cells(start_row=addr_s, start_column=1, end_row=addr_e, end_column=2)
     worksheet.merge_cells(start_row=addr_s, start_column=3, end_row=addr_e, end_column=5)
     worksheet.merge_cells(start_row=addr_s, start_column=6, end_row=addr_e, end_column=8)
-    apply_border_to_range(worksheet, addr_s, addr_e, 1, 8)
+    apply_outer_border_to_range(worksheet, addr_s, addr_e, 1, 8)
 
     worksheet["F5"] = '="No. : " & \'comm-inv\'!G5'
     worksheet["F6"] = '="Date : " & \'comm-inv\'!G6'
@@ -498,22 +508,22 @@ def fill_pack_list_items(worksheet, items: list[dict], address_rows: int) -> Non
 
     apply_border_to_range(worksheet, items_start, total_row - 1, 1, 8)
     apply_border_to_range(worksheet, total_row, total_row, 5, 8)
-    apply_border_to_range(worksheet, summary_start, summary_start + 1, 2, 4)
-    apply_border_to_range(worksheet, case_hdr_row, case_hdr_row, 2, 4)
+    apply_border_to_range(worksheet, summary_start, summary_start + 1, 1, 2)
+    apply_border_to_range(worksheet, case_hdr_row, case_hdr_row, 1, 2)
 
     worksheet.cell(row=addr_e + 3, column=8).value = "Mindware FZ LLC"
     worksheet.cell(row=addr_e + 3, column=8).font = BOLD_FONT
     worksheet.cell(row=addr_e + 3, column=8).alignment = CENTER
 
-    worksheet.cell(row=summary_start, column=2).value = "Total No of Cases"
-    worksheet.cell(row=summary_start, column=2).font = BOLD_FONT
-    worksheet.cell(row=summary_start + 1, column=2).value = "Total Gross Weight"
-    worksheet.cell(row=summary_start + 1, column=2).font = BOLD_FONT
+    worksheet.cell(row=summary_start, column=1).value = "Total No of Cases"
+    worksheet.cell(row=summary_start, column=1).font = BOLD_FONT
+    worksheet.cell(row=summary_start + 1, column=1).value = "Total Gross Weight"
+    worksheet.cell(row=summary_start + 1, column=1).font = BOLD_FONT
 
-    worksheet.cell(row=case_hdr_row, column=2).value = "CASE #"
+    worksheet.cell(row=case_hdr_row, column=1).value = "CASE #"
+    worksheet.cell(row=case_hdr_row, column=1).font = BOLD_FONT
+    worksheet.cell(row=case_hdr_row, column=2).value = "Dimension In Cms"
     worksheet.cell(row=case_hdr_row, column=2).font = BOLD_FONT
-    worksheet.cell(row=case_hdr_row, column=4).value = "Dimension In Cms"
-    worksheet.cell(row=case_hdr_row, column=4).font = BOLD_FONT
 
     for offset, item in enumerate(items):
         row = items_start + offset
@@ -553,22 +563,22 @@ def fill_pack_list_items(worksheet, items: list[dict], address_rows: int) -> Non
         c.border = THIN_BORDER
 
     total_packages = len({i.get("case_no") for i in items if i.get("case_no")})
-    worksheet.cell(row=summary_start, column=4).value = total_packages
-    worksheet.cell(row=summary_start + 1, column=4).value = weight_total
+    worksheet.cell(row=summary_start, column=2).value = total_packages
+    worksheet.cell(row=summary_start + 1, column=2).value = weight_total
 
     for offset, item in enumerate(items):
         row = case_data_start + offset
-        c = worksheet.cell(row=row, column=2)
+        c = worksheet.cell(row=row, column=1)
         c.value = item.get("case_no", "")
         c.border = THIN_BORDER
         c.alignment = CENTER
-        c = worksheet.cell(row=row, column=4)
+        c = worksheet.cell(row=row, column=2)
         c.value = item.get("dimensions_cm", "")
         c.border = THIN_BORDER
         c.alignment = CENTER
 
     if items:
-        apply_border_to_range(worksheet, case_data_start, case_data_start + len(items) - 1, 2, 4)
+        apply_border_to_range(worksheet, case_data_start, case_data_start + len(items) - 1, 1, 2)
 
 
 # ---------------------------------------------------------------------------
