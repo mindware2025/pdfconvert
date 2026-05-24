@@ -82,11 +82,24 @@ creds = Credentials.from_service_account_info(service_account_info, scopes=scope
 # ✅ Authorize and open sheet
 gc = gspread.authorize(creds)
 
-tool_sheet = gc.open(SHEET_NAME).worksheet("Sheet1")     # Main usage sheet
+workbook = gc.open(SHEET_NAME)
+tool_sheet = workbook.worksheet("Sheet1")     # Main usage sheet
 env = st.secrets.get("env", "live")  # Default to live if not set
 
 USAGE_HEADERS = ["Tool", "Month", "Usage Count", "Team", "PDF Count", "Excel Count"]
 EXCEL_EXTENSIONS = (".xlsx", ".xls", ".xlsm")
+RUN_LOG_SHEET_NAME = "Run Log"
+RUN_LOG_HEADERS = ["Timestamp", "Tool", "Month", "Team", "PDF Count", "Excel Count"]
+
+
+def get_or_create_worksheet(title, rows=1000, cols=10):
+    try:
+        return workbook.worksheet(title)
+    except gspread.WorksheetNotFound:
+        return workbook.add_worksheet(title=title, rows=rows, cols=cols)
+
+
+run_log_sheet = get_or_create_worksheet(RUN_LOG_SHEET_NAME)
 
 
 def ensure_usage_sheet_columns():
@@ -111,8 +124,33 @@ def count_uploaded_files(files, extensions):
     )
 
 
+def ensure_run_log_sheet_columns():
+    headers = run_log_sheet.row_values(1)
+    if not headers:
+        run_log_sheet.append_row(RUN_LOG_HEADERS)
+        return
+
+    for idx, header in enumerate(RUN_LOG_HEADERS, start=1):
+        if len(headers) < idx or headers[idx - 1] != header:
+            run_log_sheet.update_cell(1, idx, header)
+
+
+def log_run_details(tool_name, team, pdf_count, excel_count):
+    ensure_run_log_sheet_columns()
+    now = datetime.now()
+    run_log_sheet.append_row([
+        now.strftime("%Y-%m-%d %H:%M:%S"),
+        tool_name,
+        now.strftime("%b-%Y"),
+        team,
+        pdf_count,
+        excel_count,
+    ])
+
+
 def update_usage(tool_name, team, pdf_count=0, excel_count=0):
     ensure_usage_sheet_columns()
+    log_run_details(tool_name, team, pdf_count, excel_count)
     month = datetime.today().strftime("%b-%Y")
     all_rows = tool_sheet.get_all_records()
     found = False
