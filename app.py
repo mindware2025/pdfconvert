@@ -85,7 +85,34 @@ gc = gspread.authorize(creds)
 tool_sheet = gc.open(SHEET_NAME).worksheet("Sheet1")     # Main usage sheet
 env = st.secrets.get("env", "live")  # Default to live if not set
 
-def update_usage(tool_name, team):
+USAGE_HEADERS = ["Tool", "Month", "Usage Count", "Team", "PDF Count", "Excel Count"]
+EXCEL_EXTENSIONS = (".xlsx", ".xls", ".xlsm")
+
+
+def ensure_usage_sheet_columns():
+    headers = tool_sheet.row_values(1)
+    if not headers:
+        tool_sheet.append_row(USAGE_HEADERS)
+        return
+
+    for idx, header in enumerate(USAGE_HEADERS, start=1):
+        if len(headers) < idx or headers[idx - 1] != header:
+            tool_sheet.update_cell(1, idx, header)
+
+
+def count_uploaded_files(files, extensions):
+    if not files:
+        return 0
+
+    file_list = files if isinstance(files, list) else [files]
+    return sum(
+        1 for uploaded_file in file_list
+        if getattr(uploaded_file, "name", "").lower().endswith(extensions)
+    )
+
+
+def update_usage(tool_name, team, pdf_count=0, excel_count=0):
+    ensure_usage_sheet_columns()
     month = datetime.today().strftime("%b-%Y")
     all_rows = tool_sheet.get_all_records()
     found = False
@@ -93,12 +120,16 @@ def update_usage(tool_name, team):
     for i, row in enumerate(all_rows, start=2):
         if row.get("Tool") == tool_name and row.get("Month") == month and row.get("Team") == team:
             current_count = row.get("Usage Count", 0) or 0
+            current_pdf_count = row.get("PDF Count", 0) or 0
+            current_excel_count = row.get("Excel Count", 0) or 0
             tool_sheet.update_cell(i, 3, current_count + 1)
+            tool_sheet.update_cell(i, 5, current_pdf_count + pdf_count)
+            tool_sheet.update_cell(i, 6, current_excel_count + excel_count)
             found = True
             break
 
     if not found:
-        tool_sheet.append_row([tool_name, month, 1, team])
+        tool_sheet.append_row([tool_name, month, 1, team, pdf_count, excel_count])
 
 
 
@@ -883,7 +914,7 @@ def extractor_workflow(
                     file_name=file_name,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     on_click=lambda: (
-                            update_usage("Google Automation", team)
+                            update_usage("Google Automation", team, pdf_count=1)
                         ),
                     key=f"download_{extractor_name}"
                 )
@@ -898,7 +929,7 @@ def extractor_workflow(
                     file_name=file_name,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     on_click=lambda: (
-                            update_usage("google Automation", team)
+                            update_usage("google Automation", team, pdf_count=1)
                         ),
                 )
         else:
@@ -1040,7 +1071,14 @@ elif tool == "📄 Claims Automation":
                 file_name="claims_output.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 on_click=lambda: (
-                            update_usage("Claims Automation", team)
+                            update_usage(
+                                "Claims Automation",
+                                team,
+                                excel_count=count_uploaded_files(
+                                    [source1_file, master1_file, source2_file, master2_file],
+                                    EXCEL_EXTENSIONS,
+                                ),
+                            )
                         ),
                 key="claims_download"
             )
@@ -1071,7 +1109,11 @@ elif tool == "🚚 Freight Forwarder JV Tool":
                     data=output_excel.getvalue(),
                     file_name=f"Expeditors-{datetime.now().strftime('%Y-%m-%d')}.xlsx",
                     on_click=lambda: (
-                            update_usage("freight_forwarder_Expeditor", team)
+                            update_usage(
+                                "freight_forwarder_Expeditor",
+                                team,
+                                pdf_count=count_uploaded_files(uploaded_files, (".pdf",)),
+                            )
                         ),
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
@@ -1256,7 +1298,11 @@ elif tool == "🧾 Cloud Invoice Tool":
             file_name="cloud_invoice.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             on_click=lambda: (
-                            update_usage("Cloud Automation", team)
+                            update_usage(
+                                "Cloud Automation",
+                                team,
+                                excel_count=count_uploaded_files(uploaded_file, EXCEL_EXTENSIONS),
+                            )
                         ),
 
         )
@@ -1599,7 +1645,12 @@ elif tool == "💻 Dell Invoice Extractor":
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     key="download_dell_pre_alert",
                     on_click=lambda: (
-                            update_usage("Dell Automation", team)
+                            update_usage(
+                                "Dell Automation",
+                                team,
+                                pdf_count=count_uploaded_files(uploaded_files, (".pdf",)),
+                                excel_count=count_uploaded_files(master_file, EXCEL_EXTENSIONS),
+                            )
                         ),
                 )
             else:
@@ -1664,7 +1715,11 @@ elif tool == "🟨 AWS Invoice Tool":
                     mime="application/zip",
              
                     on_click=lambda: (
-                            update_usage("AWS Automation", team)
+                            update_usage(
+                                "AWS Automation",
+                                team,
+                                pdf_count=count_uploaded_files(uploaded_files, (".pdf",)),
+                            )
                         ),
                 )
             else:
@@ -1688,7 +1743,11 @@ elif tool == "Coface CSV Uploader":
             file_name="customer_outputs.zip",
             mime="application/zip",
             on_click=lambda: (
-                            update_usage("credit format by customer", team)
+                            update_usage(
+                                "credit format by customer",
+                                team,
+                                excel_count=count_uploaded_files(uploaded_file, EXCEL_EXTENSIONS),
+                            )
                         ),
         )
 elif tool == "AR to EDD file":
@@ -1737,7 +1796,11 @@ elif tool == "AR to EDD file":
             file_name="EDD.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             on_click=lambda: (
-                            update_usage("credit Automation ", team)
+                            update_usage(
+                                "credit Automation ",
+                                team,
+                                excel_count=count_uploaded_files(uploaded_file, EXCEL_EXTENSIONS),
+                            )
                             
                         ),
         )
@@ -1763,7 +1826,11 @@ elif tool == "🟧 Oracle Invoice Tool":
                 file_name="oracle_invoice_data.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             on_click=lambda: (
-                            update_usage("Oracle Automation ", team)
+                            update_usage(
+                                "Oracle Automation ",
+                                team,
+                                pdf_count=count_uploaded_files(uploaded_files, (".pdf",)),
+                            )
                             
                         ),
             )
@@ -1831,7 +1898,12 @@ elif tool == "IBM Quotation":
                     data=result['excel_bytes'],
                     file_name="Styled_Quotation.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    on_click=lambda co=country, tn=temp_num: update_usage(f"IBM Automation ({co}) temp {tn}", team),
+                    on_click=lambda co=country, tn=temp_num: update_usage(
+                        f"IBM Automation ({co}) temp {tn}",
+                        team,
+                        pdf_count=count_uploaded_files(uploaded_pdf, (".pdf",)),
+                        excel_count=count_uploaded_files(uploaded_excel, EXCEL_EXTENSIONS),
+                    ),
                 )
 
 
@@ -1861,7 +1933,11 @@ elif tool == "🟪 Lenovo Credit Note Tool - UAE":
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="lenovo_uae_download_btn",
                             on_click=lambda: (
-                            update_usage("Lenovo Credit Note Tool - UAE", team)
+                            update_usage(
+                                "Lenovo Credit Note Tool - UAE",
+                                team,
+                                pdf_count=count_uploaded_files(uploaded_files, (".pdf",)),
+                            )
                             
                         ),
             )
@@ -1898,7 +1974,11 @@ elif tool == "🟥 Lenovo CNTS Tool - KSA":
                 data=excel_bytes,
                 file_name=build_ksa_output_filename(),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                on_click=lambda: update_usage("Lenovo Credit Note Tool - KSA", team),
+                on_click=lambda: update_usage(
+                    "Lenovo Credit Note Tool - KSA",
+                    team,
+                    pdf_count=count_uploaded_files(uploaded_files, (".pdf",)),
+                ),
                 key="lenovo_ksa_download_btn",
             )
 
@@ -2003,6 +2083,8 @@ elif tool == "💻 Dell Quotation":
                     update_usage(
                         f"dell quotation-{st.session_state.get('dell_last_template_label', 'unknown')}-{st.session_state.get('dell_last_currency_code', currency_code)}",
                         team,
+                        pdf_count=1 if str(st.session_state.get("dell_last_uploaded_name", "")).lower().endswith(".pdf") else 0,
+                        excel_count=1 if str(st.session_state.get("dell_last_uploaded_name", "")).lower().endswith(EXCEL_EXTENSIONS) else 0,
                     )
                 ),
                 use_container_width=True
@@ -2075,6 +2157,8 @@ elif tool == "💻 Dell Quotation":
                 update_usage(
                     f"dell quotation-{st.session_state.get('dell_last_template_label', 'unknown')}-{st.session_state.get('dell_last_currency_code', currency_code)}",
                     team,
+                    pdf_count=1 if str(st.session_state.get("dell_last_uploaded_name", "")).lower().endswith(".pdf") else 0,
+                    excel_count=1 if str(st.session_state.get("dell_last_uploaded_name", "")).lower().endswith(EXCEL_EXTENSIONS) else 0,
                 )
             ),
             use_container_width=True
