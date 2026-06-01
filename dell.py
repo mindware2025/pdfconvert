@@ -12,6 +12,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter, column_index_from_string as colidx
 from openpyxl.drawing.image import Image as XLImage
+from dell_utils import _extract_part_number_from_description
 
 
 # ----------------- Logging -----------------
@@ -153,6 +154,145 @@ def build_dell_output_filename(input_excel_bytes: bytes, currency_code: str = "U
         datetime.now().strftime("%Y-%m-%d"),
     ]
     return "- ".join(parts) + ".xlsx"
+
+
+# Part-number extraction moved to `dell_utils._extract_part_number_from_description`
+
+
+def _extract_dell_quote_items(input_excel_bytes: bytes, currency_code: str = "USD"):
+    currency_code = (currency_code or "USD").upper()
+    conversion_rate = CURRENCY_CONVERSION_RATES.get(currency_code, 1.0)
+    consolidation_fee = 0.0
+    items = []
+    config_rows = []
+    item_headings_by_item = {}
+    item_descs_order = []
+
+    is_pdf = input_excel_bytes.lstrip().startswith(b"%PDF")
+    if is_pdf:
+        items, quote_meta, config_rows, quote_ref_text, date_text, consolidation_fee = _extract_pdf_quote_data(
+            input_excel_bytes
+        )
+        item_descs_order = [it[0] for it in items]
+    else:
+        src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
+        src_ws = src_wb.active
+        src_config_ws = _find_configuration_sheet(src_wb)
+
+        quote_ref_text, date_text = _extract_metadata_strict(src_ws)
+        if (
+            not quote_ref_text
+            or "$" in quote_ref_text
+            or not re.search(r"\d{6,}", quote_ref_text)
+        ):
+            fb_ref, fb_date = _extract_metadata_excel_fallback(src_ws)
+            if fb_ref:
+                quote_ref_text = fb_ref
+            if fb_date:
+                date_text = fb_date
+
+        if _is_grouped_config_template(src_ws):
+            quote_ref_text, date_text = _extract_grouped_template_metadata(src_ws)
+            items, grouped_config_rows = _extract_grouped_template_items_and_config(src_ws)
+            if src_config_ws is not None:
+                config_rows = _extract_config_rows_from_configuration_sheet(src_config_ws)
+            else:
+                config_rows = grouped_config_rows
+            item_descs_order = [it[0] for it in items]
+            item_headings_by_item = {str(i + 1): items[i][0] for i in range(len(items))}
+            consolidation_fee = _extract_excel_consolidation_fee(src_ws)
+        else:
+            extracted_config_rows = None
+            items_ps = _try_extract_items_from_pricing_summary(src_ws)
+            if items_ps:
+                items = items_ps
+            else:
+                compact_items, compact_config_rows = _extract_compact_quote_items_and_config(src_ws)
+                if compact_items:
+                    items = compact_items
+                    extracted_config_rows = compact_config_rows
+                else:
+                    first_data_row, desc_col, qty_col, unit_col = _find_header_row_strict_or_detect(src_ws)
+                    items = []
+                    r = first_data_row
+                    while r <= src_ws.max_row:
+                        desc = _cell_to_text(src_ws.cell(r, desc_col).value)
+                        if not desc or desc.lower().startswith("total"):
+                            break
+                        qty_value = src_ws.cell(r, qty_col).value
+                        try:
+                            qty_val = int(qty_value) if qty_value not in (None, "") else 0
+                        except Exception:
+                            qty_val = int(_parse_money(qty_value) or 0)
+                        unit_val = _parse_money(src_ws.cell(r, unit_col).value) or 0.0
+                        if qty_val > 0:
+                            items.append((desc, qty_val, unit_val, None))
+                        r += 1
+            item_descs_order = [it[0] for it in items]
+            if src_config_ws is not None:
+                config_rows = _extract_config_rows_from_configuration_sheet(src_config_ws)
+                item_headings_by_item = (
+                    _extract_product_detail_headings(src_config_ws)
+                    or _extract_product_detail_headings(src_ws)
+                )
+            else:
+                config_rows = (
+                    extracted_config_rows
+                    if extracted_config_rows is not None
+                    else _extract_all_config_rows(src_ws)
+                )
+                item_headings_by_item = _extract_product_detail_headings(src_ws)
+
+            consolidation_fee = _extract_excel_consolidation_fee(src_ws)
+            if currency_code == "AED":
+                shipping_fee = _extract_excel_shipping_fee(src_ws)
+                consolidation_fee += shipping_fee
+
+    if conversion_rate != 1.0:
+        items = [
+            (
+                desc_text,
+                qty_val,
+                (unit_val or 0.0) * conversion_rate,
+                (subtotal_val * conversion_rate) if subtotal_val is not None else None,
+            )
+            for (desc_text, qty_val, unit_val, subtotal_val) in items
+        ]
+        consolidation_fee *= conversion_rate
+
+    part_numbers_by_item = {}
+    for row_data in config_rows or []:
+        if len(row_data) >= 5:
+            item_no, *_rest, sku = row_data[:5]
+        elif len(row_data) >= 1:
+            item_no = row_data[0]
+            sku = ""
+        else:
+            continue
+        if item_no is None:
+            continue
+        item_key = str(item_no).strip()
+        sku_text = _cell_to_text(sku)
+        if sku_text and item_key and item_key not in part_numbers_by_item:
+            part_numbers_by_item[item_key] = sku_text
+
+    heading_part_numbers_by_item = {}
+    for item_key, heading in item_headings_by_item.items():
+        part_number = _extract_part_number_from_description(heading)
+        if part_number:
+            heading_part_numbers_by_item[item_key] = part_number
+
+    for idx, desc in enumerate(item_descs_order, start=1):
+        item_key = str(idx)
+        if item_key not in heading_part_numbers_by_item:
+            part_number = _extract_part_number_from_description(desc)
+            if part_number:
+                heading_part_numbers_by_item[item_key] = part_number
+
+    for item_key, part_number in heading_part_numbers_by_item.items():
+        part_numbers_by_item.setdefault(item_key, part_number)
+
+    return items, consolidation_fee, part_numbers_by_item, config_rows
 
 
 
@@ -1885,22 +2025,7 @@ def generate_dell_quote(
 
 
 
-    def _extract_part_number_from_description(text: str) -> str:
-        text = _cell_to_text(text)
-        if not text:
-            return ""
-
-        matches = re.findall(r"\(([^()]+)\)", text)
-        for candidate in reversed(matches):
-            normalized = candidate.strip()
-            normalized = normalized.replace("–", "-").replace("—", "-").replace("−", "-")
-            normalized = re.sub(r"\s*-\s*", "-", normalized)
-            normalized = re.sub(r"\s+", " ", normalized).strip()
-
-            # Dell files use multiple part number formats, including 210-XXXX and AD123456.
-            if re.fullmatch(r"(?:\d{3}-[A-Z0-9]{4,5}|[A-Z]{2}\d{6,})", normalized, re.I):
-                return normalized
-        return ""
+    # part-number helper now provided by `dell_utils._extract_part_number_from_description`
 
     allow_part_number = not is_pdf
     part_numbers_by_item: Dict[str, str] = {}
