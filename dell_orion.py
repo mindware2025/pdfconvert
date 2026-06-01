@@ -24,28 +24,41 @@ def _build_orion_description(
     memory = ""
     storage_parts: List[str] = []
 
-    storage_tokens = ("storage", "m.2", "hard drive", "ssd", "flex bay", "pci")
+    storage_tokens = (
+        "storage",
+        "m.2",
+        "nvme",
+        "hard drive",
+        "hdd",
+        "ssd",
+        "flex bay",
+        "pci",
+        "disk",
+    )
 
     for row_item, _heading, module, desc, _sku, _qty in config_rows:
         if row_item != item_key:
             continue
-        mod = module.strip().lower()
-        value = desc.strip() or module.strip()
+        mod = module.strip()
+        value = desc.strip() or mod
         if not value:
             continue
 
-        normalized = re.sub(r"\s+", " ", mod)
-        if normalized == "processor" or normalized.startswith("processor"):
+        normalized = re.sub(r"\s+", " ", mod.lower())
+        if not normalized:
+            normalized = re.sub(r"\s+", " ", desc.lower())
+
+        if "processor" in normalized or "cpu" in normalized:
             processor = value
             continue
-        if normalized == "graphics" or normalized.startswith("graphics"):
+        if "graphics" in normalized or "gpu" in normalized:
             if "holder" not in normalized:
                 graphics = value
             continue
-        if "operating system" in normalized:
+        if "operating system" in normalized or normalized == "os":
             operating_system = value
             continue
-        if normalized == "memory" or normalized.startswith("memory"):
+        if "memory" in normalized or "ram" in normalized:
             memory = value
             continue
         if any(token in normalized for token in storage_tokens):
