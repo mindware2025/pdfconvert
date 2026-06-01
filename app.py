@@ -24,10 +24,8 @@ from extractors.google_dnts import extract_invoice_info, extract_table_from_text
 from extractors.insurance import process_insurance_excel
 from extractors.insurance2  import process_grouped_customer_files
 #from sales.mibb_quotation import create_mibb_excel, extract_mibb_header_from_pdf, extract_mibb_table_from_pdf
-
 from extractors.oracle import prepare_excel_bytes, process_oracle_pdfs_cached
 from extractors.lenovo_cn import build_ksa_output_filename, build_output_filename, prepare_ksa_excel_bytes, process_lenovo_credit_pdfs, process_lenovo_ksa_pdfs
-
 from extractors.freight_forwarder_processor import (
     JVConfig,
     create_excel_file as create_freight_forwarder_excel_file,
