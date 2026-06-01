@@ -31,6 +31,9 @@ from extractors.freight_forwarder_processor import (
     create_excel_file as create_freight_forwarder_excel_file,
     process_freight_forwarder_pdfs,
 )
+from amal.processor import build_output_workbook as build_comm_generator_workbook
+from amal.processor import process_uploaded_pairs as process_comm_generator_pairs
+
 from sales.dell_extended_services import generate_dell_extended_services_quote
 from sales.dell import build_dell_output_filename, detect_dell_standard_variant, generate_dell_quote
 from sales.dell_extended_services import build_dell_extended_services_output_filename
