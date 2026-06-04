@@ -2510,7 +2510,7 @@ elif tool == "💻 Dell Quotation":
 
         "Currency",
 
-        ["USD", "QAR", "AED"],
+        ["USD", "QAR", "AED", "EUR"],
 
         horizontal=True
 
@@ -2700,6 +2700,8 @@ elif tool == "💻 Dell Quotation":
                             input_excel_bytes=input_bytes,
 
                             margin_percent=margin_percent,
+
+                            currency_code=currency_code,
 
                         )
 

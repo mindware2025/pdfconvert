@@ -10,6 +10,8 @@ from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.drawing.image import Image as XLImage
 
+from dell_currency_support import get_currency_format, get_currency_rate, get_footer_notes
+
 AED_RATE = 3.68
 
 
@@ -272,7 +274,12 @@ def generate_dell_extended_services_quote(
     input_excel_bytes: bytes,
     logo_bytes: Optional[bytes] = None,
     margin_percent: float = 0.0,
+    currency_code: str = "AED",
 ) -> bytes:
+
+    currency_code = (currency_code or "AED").upper()
+    conversion_rate = get_currency_rate(currency_code)
+    currency_fmt = get_currency_format(currency_code)
 
     src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
     src_ws = src_wb.active
@@ -389,7 +396,7 @@ def generate_dell_extended_services_quote(
     # ===== DATA ROWS =====
     row_ptr = header_row + 1
     sr_no = 1
-    currency_fmt = '"AED" #,##0.00'
+    currency_fmt = get_currency_format(currency_code)
     margin_fmt = '0.00%'
     yellow = PatternFill(start_color="D9EAF7", end_color="D9EAF7", fill_type="solid")
     helper_body_fill = PatternFill(start_color="FCE5E5", end_color="FCE5E5", fill_type="solid")
@@ -410,8 +417,8 @@ def generate_dell_extended_services_quote(
         ws[f"C{row_ptr}"] = service_desc
         ws[f"D{row_ptr}"] = qty
 
-        # Unit Price with AED conversion and margin (like Standard Quote logic)
-        ws[f"E{row_ptr}"].value = f"=ROUND(({price_usd}*{AED_RATE})/(1-{margin_percent}/100),2)"
+        # Unit Price with selected currency conversion and margin.
+        ws[f"E{row_ptr}"].value = f"=ROUND(({price_usd}*{conversion_rate})/(1-{margin_percent}/100),2)"
         ws[f"E{row_ptr}"].number_format = currency_fmt
 
         # Total Price = Qty * Unit Price
@@ -451,7 +458,7 @@ def generate_dell_extended_services_quote(
         ws[f"G{total_row}"].border = border_thin
 
     # ===== FOOTER NOTES =====
-    footer_notes = _aed_footer_notes()
+    footer_notes = get_footer_notes(currency_code)
     notes_title_row = (total_row + 2) if total_cells else (row_ptr + 2)
     ws.merge_cells(start_row=notes_title_row, start_column=1, end_row=notes_title_row, end_column=7)
     ws.cell(notes_title_row, 1).value = "Terms and Conditions"
