@@ -5,18 +5,19 @@ from typing import Optional, Dict, List, Tuple
 import logging
 import os
 import re
+import tempfile
 from logging.handlers import RotatingFileHandler
 
 import openpyxl
 from openpyxl import Workbook
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter, column_index_from_string as colidx
 from openpyxl.drawing.image import Image as XLImage
-from dell_utils import _extract_part_number_from_description
 
 
 # ----------------- Logging -----------------
-_LOG_FILE = os.path.join(os.path.dirname(__file__), "dell_quote.log")
+_LOG_FILE = os.path.join(tempfile.gettempdir(), "mindware_dell_quote.log")
 
 
 def _get_logger():
@@ -78,7 +79,15 @@ def _cell_to_text(v, fallback=""):
         return fallback
     if isinstance(v, datetime):
         return v.strftime("%d/%m/%Y")
-    return str(v).strip()
+    return _sanitize_excel_text(str(v).strip())
+
+
+def _sanitize_excel_text(value: str) -> str:
+    """Remove characters that openpyxl cannot write into worksheet cells."""
+    if value is None:
+        return ""
+    text = ILLEGAL_CHARACTERS_RE.sub("", str(value))
+    return text[:32767]
 
 
 def _normalize_text(s: str) -> str:
@@ -156,145 +165,6 @@ def build_dell_output_filename(input_excel_bytes: bytes, currency_code: str = "U
     return "- ".join(parts) + ".xlsx"
 
 
-# Part-number extraction moved to `dell_utils._extract_part_number_from_description`
-
-
-def _extract_dell_quote_items(input_excel_bytes: bytes, currency_code: str = "USD"):
-    currency_code = (currency_code or "USD").upper()
-    conversion_rate = CURRENCY_CONVERSION_RATES.get(currency_code, 1.0)
-    consolidation_fee = 0.0
-    items = []
-    config_rows = []
-    item_headings_by_item = {}
-    item_descs_order = []
-
-    is_pdf = input_excel_bytes.lstrip().startswith(b"%PDF")
-    if is_pdf:
-        items, quote_meta, config_rows, quote_ref_text, date_text, consolidation_fee = _extract_pdf_quote_data(
-            input_excel_bytes
-        )
-        item_descs_order = [it[0] for it in items]
-    else:
-        src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
-        src_ws = src_wb.active
-        src_config_ws = _find_configuration_sheet(src_wb)
-
-        quote_ref_text, date_text = _extract_metadata_strict(src_ws)
-        if (
-            not quote_ref_text
-            or "$" in quote_ref_text
-            or not re.search(r"\d{6,}", quote_ref_text)
-        ):
-            fb_ref, fb_date = _extract_metadata_excel_fallback(src_ws)
-            if fb_ref:
-                quote_ref_text = fb_ref
-            if fb_date:
-                date_text = fb_date
-
-        if _is_grouped_config_template(src_ws):
-            quote_ref_text, date_text = _extract_grouped_template_metadata(src_ws)
-            items, grouped_config_rows = _extract_grouped_template_items_and_config(src_ws)
-            if src_config_ws is not None:
-                config_rows = _extract_config_rows_from_configuration_sheet(src_config_ws)
-            else:
-                config_rows = grouped_config_rows
-            item_descs_order = [it[0] for it in items]
-            item_headings_by_item = {str(i + 1): items[i][0] for i in range(len(items))}
-            consolidation_fee = _extract_excel_consolidation_fee(src_ws)
-        else:
-            extracted_config_rows = None
-            items_ps = _try_extract_items_from_pricing_summary(src_ws)
-            if items_ps:
-                items = items_ps
-            else:
-                compact_items, compact_config_rows = _extract_compact_quote_items_and_config(src_ws)
-                if compact_items:
-                    items = compact_items
-                    extracted_config_rows = compact_config_rows
-                else:
-                    first_data_row, desc_col, qty_col, unit_col = _find_header_row_strict_or_detect(src_ws)
-                    items = []
-                    r = first_data_row
-                    while r <= src_ws.max_row:
-                        desc = _cell_to_text(src_ws.cell(r, desc_col).value)
-                        if not desc or desc.lower().startswith("total"):
-                            break
-                        qty_value = src_ws.cell(r, qty_col).value
-                        try:
-                            qty_val = int(qty_value) if qty_value not in (None, "") else 0
-                        except Exception:
-                            qty_val = int(_parse_money(qty_value) or 0)
-                        unit_val = _parse_money(src_ws.cell(r, unit_col).value) or 0.0
-                        if qty_val > 0:
-                            items.append((desc, qty_val, unit_val, None))
-                        r += 1
-            item_descs_order = [it[0] for it in items]
-            if src_config_ws is not None:
-                config_rows = _extract_config_rows_from_configuration_sheet(src_config_ws)
-                item_headings_by_item = (
-                    _extract_product_detail_headings(src_config_ws)
-                    or _extract_product_detail_headings(src_ws)
-                )
-            else:
-                config_rows = (
-                    extracted_config_rows
-                    if extracted_config_rows is not None
-                    else _extract_all_config_rows(src_ws)
-                )
-                item_headings_by_item = _extract_product_detail_headings(src_ws)
-
-            consolidation_fee = _extract_excel_consolidation_fee(src_ws)
-            if currency_code == "AED":
-                shipping_fee = _extract_excel_shipping_fee(src_ws)
-                consolidation_fee += shipping_fee
-
-    if conversion_rate != 1.0:
-        items = [
-            (
-                desc_text,
-                qty_val,
-                (unit_val or 0.0) * conversion_rate,
-                (subtotal_val * conversion_rate) if subtotal_val is not None else None,
-            )
-            for (desc_text, qty_val, unit_val, subtotal_val) in items
-        ]
-        consolidation_fee *= conversion_rate
-
-    part_numbers_by_item = {}
-    for row_data in config_rows or []:
-        if len(row_data) >= 5:
-            item_no, *_rest, sku = row_data[:5]
-        elif len(row_data) >= 1:
-            item_no = row_data[0]
-            sku = ""
-        else:
-            continue
-        if item_no is None:
-            continue
-        item_key = str(item_no).strip()
-        sku_text = _cell_to_text(sku)
-        if sku_text and item_key and item_key not in part_numbers_by_item:
-            part_numbers_by_item[item_key] = sku_text
-
-    heading_part_numbers_by_item = {}
-    for item_key, heading in item_headings_by_item.items():
-        part_number = _extract_part_number_from_description(heading)
-        if part_number:
-            heading_part_numbers_by_item[item_key] = part_number
-
-    for idx, desc in enumerate(item_descs_order, start=1):
-        item_key = str(idx)
-        if item_key not in heading_part_numbers_by_item:
-            part_number = _extract_part_number_from_description(desc)
-            if part_number:
-                heading_part_numbers_by_item[item_key] = part_number
-
-    for item_key, part_number in heading_part_numbers_by_item.items():
-        part_numbers_by_item.setdefault(item_key, part_number)
-
-    return items, consolidation_fee, part_numbers_by_item, config_rows
-
-
 
 
 def _row_text(ws, r, c1=1, c2=None) -> str:
@@ -355,9 +225,16 @@ def _pil_to_xl_image(pil_img):
 
 def _get_local_logo_path() -> Optional[str]:
     """Return the first available local logo path."""
-    for path in ("dell copy.png", "dell.png"):
-        if os.path.exists(path):
-            return path
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    candidate_dirs = [
+        base_dir,
+        os.path.dirname(base_dir),
+    ]
+    for directory in candidate_dirs:
+        for name in ("dell copy.png", "dell.png", "dell_quote.png"):
+            path = os.path.join(directory, name)
+            if os.path.exists(path):
+                return path
     return None
 
 def _extract_all_excel_quote_refs(ws, max_rows: int = 80):
@@ -1848,6 +1725,30 @@ CURRENCY_NUMBER_FORMATS = {
     "AED": '"AED" #,##0.00',
 }
 
+
+def detect_dell_standard_variant(input_excel_bytes: bytes) -> str:
+    """Return the standard Dell extraction variant used for this input."""
+    try:
+        if input_excel_bytes.lstrip().startswith(b"%PDF"):
+            return "pdf"
+
+        src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
+        src_ws = src_wb.active
+
+        if _is_grouped_config_template(src_ws):
+            return "grouped_config"
+
+        if _try_extract_items_from_pricing_summary(src_ws):
+            return "pricing_summary"
+
+        compact_items, _ = _extract_compact_quote_items_and_config(src_ws)
+        if compact_items:
+            return "compact"
+
+        return "generic"
+    except Exception:
+        return "unknown"
+
 def generate_dell_quote(
     input_excel_bytes: bytes,
     logo_bytes: Optional[bytes] = None,
@@ -1877,6 +1778,7 @@ def generate_dell_quote(
 
     # Missing consolidation fee should be treated as zero for both Excel and PDF uploads.
     consolidation_fee = 0.0
+    item_headings_by_item: Dict[str, str] = {}
     item_display_numbers_by_item: Dict[str, str] = {}
     service_fields_by_item: Dict[str, Dict[str, str]] = {}
     expiry_text = ""
@@ -1889,6 +1791,7 @@ def generate_dell_quote(
         logger.info("Parsed PDF quote: %d items, quote_ref=%s, date=%s", len(items), quote_ref_text, date_text)
         _log_items("PDF items", items)
         item_descs_order = [it[0] for it in items]
+        item_headings_by_item = {str(i + 1): items[i][0] for i in range(len(items))}
     else:
         src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
         src_ws = src_wb.active
@@ -1994,15 +1897,16 @@ def generate_dell_quote(
                 item_headings_by_item = _extract_product_detail_headings(src_ws)
                 item_display_numbers_by_item = _extract_product_detail_display_numbers(src_ws)
             consolidation_fee = _extract_excel_consolidation_fee(src_ws)
+            shipping_fee = _extract_excel_shipping_fee(src_ws)
+            if shipping_fee:
+                logger.info(
+                    "%s: adding Excel shipping fee to consolidation fee (shipping=%s, consolidation_before=%s)",
+                    currency_code,
+                    shipping_fee,
+                    consolidation_fee,
+                )
+            consolidation_fee += shipping_fee
             if currency_code == "AED":
-                shipping_fee = _extract_excel_shipping_fee(src_ws)
-                if shipping_fee:
-                    logger.info(
-                        "AED: adding Excel shipping fee to consolidation fee (shipping=%s, consolidation_before=%s)",
-                        shipping_fee,
-                        consolidation_fee,
-                    )
-                consolidation_fee += shipping_fee
                 # If this template doesn't have a config table, we may still have service fields in Product Details.
                 if not config_rows:
                     service_fields_by_item = _extract_excel_service_fields(src_ws)
@@ -2025,7 +1929,22 @@ def generate_dell_quote(
 
 
 
-    # part-number helper now provided by `dell_utils._extract_part_number_from_description`
+    def _extract_part_number_from_description(text: str) -> str:
+        text = _cell_to_text(text)
+        if not text:
+            return ""
+
+        matches = re.findall(r"\(([^()]+)\)", text)
+        for candidate in reversed(matches):
+            normalized = candidate.strip()
+            normalized = normalized.replace("–", "-").replace("—", "-").replace("−", "-")
+            normalized = re.sub(r"\s*-\s*", "-", normalized)
+            normalized = re.sub(r"\s+", " ", normalized).strip()
+
+            # Dell files use multiple part number formats, including 210-XXXX and AD123456.
+            if re.fullmatch(r"(?:\d{3}-[A-Z0-9]{4,5}|[A-Z]{2}\d{6,})", normalized, re.I):
+                return normalized
+        return ""
 
     allow_part_number = not is_pdf
     part_numbers_by_item: Dict[str, str] = {}
@@ -2294,7 +2213,7 @@ def generate_dell_quote(
             part_number_from_config = part_numbers_by_item.get(str(sr_no), "")
             part_number_from_heading = _extract_part_number_from_description(item_headings_by_item.get(str(sr_no), ""))
             part_number = part_number_from_heading or part_number_from_config
-            ws[f"B{row_ptr}"] = part_number
+            ws[f"B{row_ptr}"] = _sanitize_excel_text(part_number)
             logger.debug(
                 "Part number for item %s resolved to '%s' (heading='%s', config='%s', pricing_description='%s')",
                 sr_no,
@@ -2303,7 +2222,7 @@ def generate_dell_quote(
                 part_number_from_config,
                 desc_text,
             )
-        ws[f"{desc_col}{row_ptr}"] = desc_text
+        ws[f"{desc_col}{row_ptr}"] = _sanitize_excel_text(desc_text)
         ws[f"{qty_col}{row_ptr}"] = qty_val
 
         # Helper columns keep the original unit price and per-unit adjustment.
@@ -2414,7 +2333,7 @@ def generate_dell_quote(
     for line in notes:
         footer_end_col = 8 if currency_code == "AED" else 6
         ws.merge_cells(start_row=footer_row, start_column=2, end_row=footer_row, end_column=footer_end_col)
-        ws.cell(footer_row, 2).value = line
+        ws.cell(footer_row, 2).value = _sanitize_excel_text(line)
         ws.cell(footer_row, 2).alignment = Alignment(wrap_text=True, vertical="top")
         footer_row += 1
 
@@ -2549,19 +2468,19 @@ def generate_dell_quote(
                 details = service_fields_by_item.get(item_key, {})
                 ws2[f"A{r2}"] = display_item_no
                 ws2[f"B{r2}"] = ""
-                ws2[f"C{r2}"] = heading
+                ws2[f"C{r2}"] = _sanitize_excel_text(heading)
                 if show_sku_col:
-                    ws2[f"D{r2}"] = part_numbers_by_item.get(item_key, "")
-                    ws2[f"E{r2}"] = details.get("service_tag", "")
-                    ws2[f"F{r2}"] = details.get("service_start_date", "")
-                    ws2[f"G{r2}"] = details.get("service_end_date", "")
-                    ws2[f"H{r2}"] = qty_by_item.get(item_key, "")
+                    ws2[f"D{r2}"] = _sanitize_excel_text(part_numbers_by_item.get(item_key, ""))
+                    ws2[f"E{r2}"] = _sanitize_excel_text(details.get("service_tag", ""))
+                    ws2[f"F{r2}"] = _sanitize_excel_text(details.get("service_start_date", ""))
+                    ws2[f"G{r2}"] = _sanitize_excel_text(details.get("service_end_date", ""))
+                    ws2[f"H{r2}"] = _sanitize_excel_text(qty_by_item.get(item_key, ""))
                     cols = ("A", "B", "C", "D", "E", "F", "G", "H")
                 else:
-                    ws2[f"D{r2}"] = details.get("service_tag", "")
-                    ws2[f"E{r2}"] = details.get("service_start_date", "")
-                    ws2[f"F{r2}"] = details.get("service_end_date", "")
-                    ws2[f"G{r2}"] = qty_by_item.get(item_key, "")
+                    ws2[f"D{r2}"] = _sanitize_excel_text(details.get("service_tag", ""))
+                    ws2[f"E{r2}"] = _sanitize_excel_text(details.get("service_start_date", ""))
+                    ws2[f"F{r2}"] = _sanitize_excel_text(details.get("service_end_date", ""))
+                    ws2[f"G{r2}"] = _sanitize_excel_text(qty_by_item.get(item_key, ""))
                     cols = ("A", "B", "C", "D", "E", "F", "G")
 
                 for col in cols:
@@ -2602,7 +2521,7 @@ def generate_dell_quote(
             r2 += 1
 
             ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=5)
-            ws2[f"A{r2}"] = item_heading
+            ws2[f"A{r2}"] = _sanitize_excel_text(item_heading)
             ws2[f"A{r2}"].font = Font(italic=True, color="1F497D")
             ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
             r2 += 1
@@ -2627,7 +2546,7 @@ def generate_dell_quote(
                     ws2[f"A{r2}"] = ""
                     end_col = 5 if show_sku_col else 4
                     ws2.merge_cells(start_row=r2, start_column=2, end_row=r2, end_column=end_col)
-                    ws2[f"B{r2}"] = module
+                    ws2[f"B{r2}"] = _sanitize_excel_text(module)
                     ws2[f"B{r2}"].font = Font(bold=True, color="1F1F1F")
                     ws2[f"B{r2}"].fill = section_fill
                     ws2[f"B{r2}"].alignment = Alignment(horizontal="left", vertical="center")
@@ -2638,14 +2557,14 @@ def generate_dell_quote(
                     continue
 
                 ws2[f"A{r2}"] = ""
-                ws2[f"B{r2}"] = module
-                ws2[f"C{r2}"] = dsc
+                ws2[f"B{r2}"] = _sanitize_excel_text(module)
+                ws2[f"C{r2}"] = _sanitize_excel_text(dsc)
                 if show_sku_col:
-                    ws2[f"D{r2}"] = sku
-                    ws2[f"E{r2}"] = qty
+                    ws2[f"D{r2}"] = _sanitize_excel_text(sku)
+                    ws2[f"E{r2}"] = _sanitize_excel_text(qty)
                     cols = ("A", "B", "C", "D", "E")
                 else:
-                    ws2[f"D{r2}"] = qty
+                    ws2[f"D{r2}"] = _sanitize_excel_text(qty)
                     cols = ("A", "B", "C", "D")
                 for col in cols:
                     ws2[f"{col}{r2}"].alignment = Alignment(vertical="top", wrap_text=True)
