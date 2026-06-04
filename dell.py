@@ -15,6 +15,13 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter, column_index_from_string as colidx
 from openpyxl.drawing.image import Image as XLImage
 
+from dell_template_support import (
+    find_compact_quote_header,
+    find_grouped_config_header,
+    find_label_value,
+    is_configuration_sheet_name,
+)
+
 
 # ----------------- Logging -----------------
 _LOG_FILE = os.path.join(tempfile.gettempdir(), "mindware_dell_quote.log")
@@ -436,18 +443,23 @@ def _add_static_logo(ws, image_path: str, anchor="A1", width: int = 120, height:
 
 
 def _extract_metadata_strict(ws):
-    """Extract quote ref/date from strict positions in the worksheet."""
+    """Extract quote ref/date from strict positions in the worksheet, with label-based fallback for template variants."""
     logger = _get_logger()
-    raw_ref = ws["E15"].value
-    quote_ref = "" if raw_ref is None else (
-        raw_ref.strftime("%d/%m/%Y") if isinstance(raw_ref, datetime) else str(raw_ref).strip()
-    )
 
-    raw_date = ws["E18"].value
-    if isinstance(raw_date, datetime):
-        quote_date = raw_date.strftime("%d/%m/%Y")
-    else:
-        quote_date = "" if raw_date is None else str(raw_date).strip()
+    quote_ref = _find_label_value(ws, ("quote no", "quote number", "quote ref", "quotation no"), max_rows=60)
+    if not quote_ref:
+        raw_ref = ws["E15"].value
+        quote_ref = "" if raw_ref is None else (
+            raw_ref.strftime("%d/%m/%Y") if isinstance(raw_ref, datetime) else str(raw_ref).strip()
+        )
+
+    quote_date = _find_label_value(ws, ("quote date", "quoted on", "date"), max_rows=60)
+    if not quote_date:
+        raw_date = ws["E18"].value
+        if isinstance(raw_date, datetime):
+            quote_date = raw_date.strftime("%d/%m/%Y")
+        else:
+            quote_date = "" if raw_date is None else str(raw_date).strip()
 
     quote_refs = _extract_all_excel_quote_refs(ws)
     if quote_refs:
@@ -661,8 +673,11 @@ def _normalize_sheet_name(name: str) -> str:
 
 
 def _is_configuration_sheet_name(name: str) -> bool:
-    normalized = _normalize_sheet_name(name)
-    return normalized in ("configuration", "config", "configsheet", "configurationsheet")
+    return is_configuration_sheet_name(name)
+
+
+def _find_label_value(ws, labels: Tuple[str, ...], max_rows: int = 40, max_cols: int = 10) -> str:
+    return find_label_value(ws, labels, max_rows=max_rows, max_cols=max_cols)
 
 
 def _find_configuration_sheet(wb):
@@ -718,25 +733,7 @@ def _extract_config_rows_from_configuration_sheet(ws) -> List[Tuple[str, str, st
 
 
 def _find_grouped_config_header(ws):
-    for r in range(1, min(ws.max_row, 20) + 1):
-        row_text = [(_cell_to_text(ws.cell(r, c).value).lower()) for c in range(1, ws.max_column + 1)]
-        if "config" in row_text and "unit selling price" in row_text and "total selling price" in row_text:
-            columns = {}
-            for c in range(1, ws.max_column + 1):
-                name = _cell_to_text(ws.cell(r, c).value).strip().lower()
-                if "description" in name and "description" not in columns:
-                    columns["description"] = c
-                if "sku" in name and "sku" not in columns:
-                    columns["sku"] = c
-                if name in ("q-ty", "qty", "quantity") and "qty" not in columns:
-                    columns["qty"] = c
-                if "unit selling price" in name and "unit" not in columns:
-                    columns["unit"] = c
-                if "total selling price" in name and "total" not in columns:
-                    columns["total"] = c
-            if "description" in columns and "sku" in columns:
-                return r, columns
-    return None
+    return find_grouped_config_header(ws)
 
 
 def _is_grouped_config_template(ws) -> bool:
@@ -834,29 +831,7 @@ def _extract_grouped_template_items_and_config(ws):
 
 
 def _find_compact_quote_header(ws):
-    search_end = min(ws.max_row, 30)
-    for r in range(1, search_end + 1):
-        columns = {}
-        for c in range(1, ws.max_column + 1):
-            name = _cell_to_text(ws.cell(r, c).value).strip().lower()
-            if not name:
-                continue
-            if name == "#" and "item" not in columns:
-                columns["item"] = c
-            if "sku" in name and "sku" not in columns:
-                columns["sku"] = c
-            if "description" in name and "description" not in columns:
-                columns["description"] = c
-            if name in ("q-ty", "qty", "quantity") and "qty" not in columns:
-                columns["qty"] = c
-            if "unit selling price" in name and "unit" not in columns:
-                columns["unit"] = c
-            if "total selling price" in name and "total" not in columns:
-                columns["total"] = c
-        if all(k in columns for k in ("item", "sku", "description", "qty", "total")):
-            # Some Dell exports omit a separate Unit Selling Price column.
-            return r, columns
-    return None
+    return find_compact_quote_header(ws)
 
 
 def _extract_compact_quote_items_and_config(ws):
