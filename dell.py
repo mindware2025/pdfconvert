@@ -1717,14 +1717,12 @@ CURRENCY_CONVERSION_RATES = {
     "USD": 1.0,
     "QAR": 3.64,
     "AED": 3.68,
-    "EUR": 0.92,
 }
 
 CURRENCY_NUMBER_FORMATS = {
     "USD": '"$"#,##0.00',
     "QAR": '"QAR" #,##0.00',
     "AED": '"AED" #,##0.00',
-    "EUR": '"€"#,##0.00',
 }
 
 
@@ -1908,8 +1906,8 @@ def generate_dell_quote(
                     consolidation_fee,
                 )
             consolidation_fee += shipping_fee
-            if currency_code in ("AED", "EUR"):
-                # Keep the existing AED-style path for EUR too, without altering the current AED behavior.
+            if currency_code == "AED":
+                # If this template doesn't have a config table, we may still have service fields in Product Details.
                 if not config_rows:
                     service_fields_by_item = _extract_excel_service_fields(src_ws)
 
@@ -1990,7 +1988,7 @@ def generate_dell_quote(
     ws.sheet_view.showGridLines = False
 
 
-    if currency_code in ("AED", "EUR"):
+    if currency_code == "AED":
         helper_unit_col = "G" if include_part_number else "F"
         helper_margin_col = "H" if include_part_number else "G"
     else:
@@ -2034,7 +2032,7 @@ def generate_dell_quote(
         widths["C"] = 8
         widths["D"] = 15
         widths["E"] = 17
-    if currency_code in ("AED", "EUR"):
+    if currency_code == "AED":
         widths["A"] = 11
         if include_part_number:
             widths["B"] = 16
@@ -2105,7 +2103,7 @@ def generate_dell_quote(
         )
 
     # ---- Quote Summary Section (Same layout for all currencies) ----
-    has_currency_expiry = bool(expiry_text) and currency_code in ("AED", "EUR")
+    has_currency_expiry = bool(expiry_text) and currency_code == "AED"
     
     ws.merge_cells("A8:D8")
     ws["A8"] = "Quote Summary"
@@ -2129,7 +2127,7 @@ def generate_dell_quote(
     customer_title_row = 12 if has_currency_expiry else 11
 
     # ---- Quote metadata (varies by country/template) ----
-    if currency_code in ("AED", "EUR"):
+    if currency_code == "AED":
         meta_rows = [
             ("End User:", quote_meta.get("end user", "")),
             ("Reseller:", quote_meta.get("reseller", "")),
@@ -2184,7 +2182,7 @@ def generate_dell_quote(
     ws[f"{qty_col}{header_row}"] = "Qty"
     ws[f"{unit_price_col}{header_row}"] = "Unit Price"
     ws[f"{total_price_col}{header_row}"] = (
-        "Total Price (excluding vat)" if currency_code in ("AED", "EUR") else "Total Price"
+        "Total Price (excluding vat)" if currency_code == "AED" else "Total Price"
     )
     ws[f"{helper_unit_col}{header_row}"] = "Original Unit Price"
     ws[f"{helper_margin_col}{header_row}"] = "Margin"
@@ -2280,14 +2278,14 @@ def generate_dell_quote(
     ws[f"{total_value_col}{row_ptr}"].font = Font(bold=True, color="1F497D")
     ws[f"{total_value_col}{row_ptr}"].alignment = Alignment(horizontal="center", vertical="center")
     ws[f"{total_value_col}{row_ptr}"].border = border_thin
-    if currency_code in ("AED", "EUR"):
+    if currency_code == "AED":
         ws[f"{helper_unit_col}{row_ptr}"].fill = helper_body_fill
         ws[f"{helper_margin_col}{row_ptr}"].fill = helper_body_fill
         ws[f"{helper_unit_col}{row_ptr}"].border = border_thin
         ws[f"{helper_margin_col}{row_ptr}"].border = border_thin
 
     # Footer notes
-    if currency_code in ("AED", "EUR"):
+    if currency_code == "AED":
         notes = [
             "Ø All prices are exclusive of VAT and any other applicable taxes, which shall be charged in accordance with applicable laws and regulations.",
             "Ø  Payment terms will be as per our finance approval.",
@@ -2333,7 +2331,7 @@ def generate_dell_quote(
         ]
     footer_row = max(row_ptr + 2, header_row + 8)
     for line in notes:
-        footer_end_col = 8 if currency_code in ("AED", "EUR") else 6
+        footer_end_col = 8 if currency_code == "AED" else 6
         ws.merge_cells(start_row=footer_row, start_column=2, end_row=footer_row, end_column=footer_end_col)
         ws.cell(footer_row, 2).value = _sanitize_excel_text(line)
         ws.cell(footer_row, 2).alignment = Alignment(wrap_text=True, vertical="top")
@@ -2345,7 +2343,7 @@ def generate_dell_quote(
     ws2 = wb.create_sheet("Configuration")
     ws2.sheet_view.showGridLines = False
 
-    use_service_layout = bool(service_fields_by_item) and (currency_code in ("AED", "EUR")) and (not is_pdf) and (not config_rows)
+    use_service_layout = bool(service_fields_by_item) and (currency_code == "AED") and (not is_pdf) and (not config_rows)
     show_sku_col = bool(part_numbers_by_item) or any(
         len(row) >= 5 and str(row[4]).strip()
         for row in config_rows

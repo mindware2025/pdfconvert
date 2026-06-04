@@ -6,31 +6,23 @@ import os
 import re
 import openpyxl
 from openpyxl import Workbook
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.drawing.image import Image as XLImage
 
 AED_RATE = 3.68
-EUR_RATE = 0.92
-
-CURRENCY_CONVERSION_RATES = {
-    "USD": 1.0,
-    "AED": AED_RATE,
-    "EUR": EUR_RATE,
-    "QAR": 3.64,
-}
-
-CURRENCY_NUMBER_FORMATS = {
-    "USD": '"$"#,##0.00',
-    "AED": '"AED" #,##0.00',
-    "EUR": '"€"#,##0.00',
-    "QAR": '"QAR" #,##0.00',
-}
 
 
 # ---------------- Helpers ----------------
 
 def _text(v):
-    return "" if v is None else str(v).strip()
+    return "" if v is None else _sanitize_excel_text(str(v).strip())
+
+
+def _sanitize_excel_text(value: str) -> str:
+    if value is None:
+        return ""
+    return ILLEGAL_CHARACTERS_RE.sub("", str(value))[:32767]
 
 
 def _sanitize_filename_part(value: str) -> str:
@@ -55,14 +47,6 @@ def _usd_to_aed(val):
         return 0.0
 
 
-def _usd_to_currency(val, currency_code: str = "AED"):
-    try:
-        rate = CURRENCY_CONVERSION_RATES.get((currency_code or "AED").upper(), AED_RATE)
-        return round(float(val) * rate, 2)
-    except Exception:
-        return 0.0
-
-
 def _to_number(v):
     try:
         if v is None or v == "":
@@ -76,10 +60,15 @@ def _to_number(v):
 
 def _get_local_logo_path() -> Optional[str]:
     base_dir = Path(__file__).resolve().parent
-    for name in ("dell.png", "dell copy.png"):
-        candidate = base_dir / name
-        if candidate.exists():
-            return str(candidate)
+    candidate_dirs = [
+        base_dir,
+        base_dir.parent,
+    ]
+    for directory in candidate_dirs:
+        for name in ("dell.png", "dell copy.png", "dell_quote.png"):
+            candidate = directory / name
+            if candidate.exists():
+                return str(candidate)
     return None
 
 
@@ -283,12 +272,7 @@ def generate_dell_extended_services_quote(
     input_excel_bytes: bytes,
     logo_bytes: Optional[bytes] = None,
     margin_percent: float = 0.0,
-    currency_code: str = "AED",
 ) -> bytes:
-
-    currency_code = (currency_code or "AED").upper()
-    conversion_rate = CURRENCY_CONVERSION_RATES.get(currency_code, AED_RATE)
-    currency_fmt = CURRENCY_NUMBER_FORMATS.get(currency_code, f'"{currency_code}" #,##0.00')
 
     src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
     src_ws = src_wb.active
@@ -384,7 +368,7 @@ def generate_dell_extended_services_quote(
     ws[f"F{header_row}"] = "Total Price (excluding vat)"
     ws[f"G{header_row}"] = "Margin"
 
-    header_fill = PatternFill(start_color="9BBB59", end_color="9BBB59", fill_type="solid")
+    header_fill = PatternFill(start_color="9BC2E6", end_color="9BC2E6", fill_type="solid")
     helper_header_fill = PatternFill(start_color="F4CCCC", end_color="F4CCCC", fill_type="solid")
     header_font = Font(bold=True, color="000000")
     border_thin = Border(
@@ -405,7 +389,7 @@ def generate_dell_extended_services_quote(
     # ===== DATA ROWS =====
     row_ptr = header_row + 1
     sr_no = 1
-    currency_fmt = CURRENCY_NUMBER_FORMATS.get(currency_code, f'"{currency_code}" #,##0.00')
+    currency_fmt = '"AED" #,##0.00'
     margin_fmt = '0.00%'
     yellow = PatternFill(start_color="D9EAF7", end_color="D9EAF7", fill_type="solid")
     helper_body_fill = PatternFill(start_color="FCE5E5", end_color="FCE5E5", fill_type="solid")
@@ -427,7 +411,7 @@ def generate_dell_extended_services_quote(
         ws[f"D{row_ptr}"] = qty
 
         # Unit Price with AED conversion and margin (like Standard Quote logic)
-        ws[f"E{row_ptr}"].value = f"=ROUND(({price_usd}*{conversion_rate})/(1-{margin_percent}/100),2)"
+        ws[f"E{row_ptr}"].value = f"=ROUND(({price_usd}*{AED_RATE})/(1-{margin_percent}/100),2)"
         ws[f"E{row_ptr}"].number_format = currency_fmt
 
         # Total Price = Qty * Unit Price
@@ -467,22 +451,7 @@ def generate_dell_extended_services_quote(
         ws[f"G{total_row}"].border = border_thin
 
     # ===== FOOTER NOTES =====
-    footer_notes = _aed_footer_notes() if currency_code == "AED" else [
-        "Incoterms:",
-        "",
-        "Payment Terms:",
-        "",
-        "Quote validity:",
-        "",
-        "Estimated Delivery Time from the date of booking:",
-        "",
-        "These prices do not include installation of any kind",
-        "All prices are exclusive of VAT and any other applicable taxes, which shall be charged in accordance with applicable laws and regulations.",
-        "Change in Qty or partial shipment is not acceptable",
-        "For all B2B orders complete end customer details should be mentioned on the PO",
-        f"PO Should be addressed to Mindware FZ LLC and should be in {currency_code}",
-        "Orders once placed with Dell cannot be cancelled",
-    ]
+    footer_notes = _aed_footer_notes()
     notes_title_row = (total_row + 2) if total_cells else (row_ptr + 2)
     ws.merge_cells(start_row=notes_title_row, start_column=1, end_row=notes_title_row, end_column=7)
     ws.cell(notes_title_row, 1).value = "Terms and Conditions"
@@ -503,6 +472,81 @@ def generate_dell_extended_services_quote(
     }
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
+    ws.column_dimensions["G"].hidden = False
+
+    # ===== CONFIGURATION SHEET =====
+    ws2 = wb.create_sheet("Configuration")
+    ws2.sheet_view.showGridLines = False
+
+    config_headers = [
+        "Item #",
+        "Model",
+        "Service Contract Description",
+        "Asset",
+        "New Contract Start Date",
+        "Service Contract Expiration",
+        "Qty",
+    ]
+
+    config_header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+    config_body_fill = PatternFill(start_color="D9EAF7", end_color="D9EAF7", fill_type="solid")
+    thin_gray = Border(
+        left=Side(style="thin", color="DDDDDD"),
+        right=Side(style="thin", color="DDDDDD"),
+        top=Side(style="thin", color="DDDDDD"),
+        bottom=Side(style="thin", color="DDDDDD"),
+    )
+
+    for col_idx, header in enumerate(config_headers, start=1):
+        cell = ws2.cell(row=1, column=col_idx, value=header)
+        cell.font = Font(bold=True)
+        cell.fill = config_header_fill
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = border_thin
+
+    config_row = 2
+    item_no = 1
+    for row in rows:
+        model = row[2]
+        service_desc = row[10]
+        asset = row[0]
+        contract_start = row[12]
+        contract_expiration = row[9]
+        qty = _to_number(row[14])
+
+        if not service_desc or qty <= 0:
+            continue
+
+        values = [
+            str(item_no),
+            _sanitize_excel_text(model),
+            _sanitize_excel_text(service_desc),
+            _sanitize_excel_text(asset),
+            _sanitize_excel_text(contract_start),
+            _sanitize_excel_text(contract_expiration),
+            str(int(qty)) if float(qty).is_integer() else str(qty),
+        ]
+
+        for col_idx, value in enumerate(values, start=1):
+            cell = ws2.cell(row=config_row, column=col_idx, value=value)
+            cell.fill = config_body_fill
+            cell.border = thin_gray
+            cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+
+        config_row += 1
+        item_no += 1
+
+    config_widths = {
+        "A": 12,
+        "B": 20,
+        "C": 60,
+        "D": 22,
+        "E": 22,
+        "F": 24,
+        "G": 10,
+    }
+    for col, width in config_widths.items():
+        ws2.column_dimensions[col].width = width
 
     out = BytesIO()
     wb.save(out)

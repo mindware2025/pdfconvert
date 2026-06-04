@@ -1,5 +1,6 @@
 
 import csv
+import hashlib
 import os
 import zipfile
 import streamlit as st
@@ -17,6 +18,7 @@ from budg.ui_new_bud2026 import render_new_bud_tool as render_new_bud_tool_exter
 
 from dell import (
     build_dell_output_filename,
+    detect_dell_standard_variant,
     generate_dell_quote,
 )
 
@@ -2469,8 +2471,335 @@ elif tool == "🟥 Lenovo Credit Note Tool":
 #                 st.success("Done ✅")
 
 elif tool == "💻 Dell Quotation":
-    st.warning("Need a different tool? Just let us know what you need and we'll build it for you! 🚀")
-    st.info("Currently, only the Google DNTS Extractor tool is available. More tools can be added based on your requirements.")
+
+
+
+    st.title("💼 Dell Quotation Tool")
+
+
+
+    uploaded = st.file_uploader(
+
+        "Upload Dell BOQ Excel or PDF",
+
+        type=["xlsx", "xlsm", "xls", "pdf"],
+
+        key="dell_uploader"
+
+    )
+
+
+
+    margin_percent = st.number_input(
+
+        "Default Margin %",
+
+        min_value=0.0,
+
+        max_value=100.0,
+
+        value=5.0,
+
+        step=0.5
+
+    )
+
+
+
+    currency_code = st.radio(
+
+        "Currency",
+
+        ["USD", "QAR", "AED"],
+
+        horizontal=True
+
+    )
+
+
+
+    if "dell_output_bytes" not in st.session_state:
+
+        st.session_state["dell_output_bytes"] = None
+
+    if "dell_output_name" not in st.session_state:
+
+        st.session_state["dell_output_name"] = None
+
+    if "dell_generation_done" not in st.session_state:
+
+        st.session_state["dell_generation_done"] = False
+
+    if "dell_generation_success" not in st.session_state:
+
+        st.session_state["dell_generation_success"] = False
+
+    if "dell_last_error" not in st.session_state:
+
+        st.session_state["dell_last_error"] = None
+
+    if "dell_uploaded_hash" not in st.session_state:
+
+        st.session_state["dell_uploaded_hash"] = None
+
+    if "dell_uploaded_bytes" not in st.session_state:
+
+        st.session_state["dell_uploaded_bytes"] = None
+
+    if "dell_last_uploaded_name" not in st.session_state:
+
+        st.session_state["dell_last_uploaded_name"] = None
+
+    if "dell_last_currency_code" not in st.session_state:
+
+        st.session_state["dell_last_currency_code"] = None
+
+    if "dell_last_margin_percent" not in st.session_state:
+
+        st.session_state["dell_last_margin_percent"] = None
+
+    if "dell_last_template_label" not in st.session_state:
+
+        st.session_state["dell_last_template_label"] = None
+
+
+
+    if uploaded is not None:
+
+        uploaded_bytes = uploaded.getvalue()
+
+        uploaded_hash = hashlib.sha256(uploaded_bytes).hexdigest()
+
+        if (
+
+            st.session_state["dell_last_uploaded_name"] != uploaded.name
+
+            or st.session_state["dell_uploaded_hash"] != uploaded_hash
+
+        ):
+
+            st.session_state["dell_output_bytes"] = None
+
+            st.session_state["dell_output_name"] = None
+
+            st.session_state["dell_generation_done"] = False
+
+            st.session_state["dell_generation_success"] = False
+
+            st.session_state["dell_last_error"] = None
+
+            st.session_state["dell_last_template_label"] = None
+
+            st.session_state["dell_uploaded_hash"] = uploaded_hash
+
+            st.session_state["dell_uploaded_bytes"] = uploaded_bytes
+
+            st.session_state["dell_last_uploaded_name"] = uploaded.name
+
+    else:
+
+        uploaded_bytes = st.session_state.get("dell_uploaded_bytes")
+
+
+
+    if (
+
+        st.session_state.get("dell_last_currency_code") not in (None, currency_code)
+
+        or st.session_state.get("dell_last_margin_percent") not in (None, margin_percent)
+
+    ):
+
+        st.session_state["dell_output_bytes"] = None
+
+        st.session_state["dell_output_name"] = None
+
+        st.session_state["dell_generation_done"] = False
+
+        st.session_state["dell_generation_success"] = False
+
+        st.session_state["dell_last_error"] = None
+
+        st.session_state["dell_last_template_label"] = None
+
+
+
+
+
+    col1, col2 = st.columns([1, 1])
+
+   
+
+    with col1:
+
+        generate_clicked = st.button("🚀 Generate Quotation", key="generate_dell_quote_btn", use_container_width=True)
+
+   
+
+    with col2:
+
+        if st.session_state.get("dell_output_bytes"):
+
+            st.download_button(
+
+                label="⬇️ Download quotation",
+
+                data=st.session_state.get("dell_output_bytes"),
+
+                file_name=st.session_state.get("dell_output_name", "quotation.xlsx"),
+
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+                key="download_dell_quote_top",
+
+             
+                use_container_width=True
+
+            )
+
+
+
+    if st.session_state.get("dell_generation_success", False):
+
+        st.success("✅ Quotation generated successfully! Download button is ready above.")
+
+        st.session_state["dell_generation_success"] = False
+
+
+
+    if generate_clicked:
+
+        if uploaded is None and st.session_state.get("dell_uploaded_bytes") is None:
+
+            st.warning("Please upload a file first.")
+
+        else:
+
+            try:
+
+                st.session_state["dell_last_error"] = None
+
+                input_bytes = st.session_state.get("dell_uploaded_bytes") or uploaded.getvalue()
+
+                if input_bytes is None:
+
+                    raise ValueError("Uploaded file bytes are missing.")
+
+
+
+                with st.spinner("⚙️ Generating quotation..."):
+
+                    template_type = detect_dell_template(input_bytes)
+
+                    if template_type == "extended_services":
+
+                        template_label = "extended_services"
+
+                        out_bytes = generate_dell_extended_services_quote(
+
+                            input_excel_bytes=input_bytes,
+
+                            margin_percent=margin_percent,
+
+                        )
+
+                        output_name = build_dell_extended_services_output_filename(input_bytes)
+
+                    else:
+
+                        template_label = detect_dell_standard_variant(input_bytes)
+
+                        out_bytes = generate_dell_quote(
+
+                            input_excel_bytes=input_bytes,
+
+                            margin_percent=margin_percent,
+
+                            currency_code=currency_code,
+
+                        )
+
+                        output_name = build_dell_output_filename(
+
+                            input_bytes,
+
+                            currency_code=currency_code,
+
+                        )
+
+
+
+                    if isinstance(out_bytes, io.BytesIO):
+
+                        out_bytes = out_bytes.getvalue()
+
+
+
+                    if not out_bytes:
+
+                        raise ValueError("Quotation generation completed but produced no file data.")
+
+
+
+                    st.session_state["dell_output_bytes"] = out_bytes
+
+                    st.session_state["dell_output_name"] = output_name
+
+                    st.session_state["dell_generation_done"] = True
+
+                    st.session_state["dell_generation_success"] = True
+
+                    st.session_state["dell_last_currency_code"] = currency_code
+
+                    st.session_state["dell_last_margin_percent"] = margin_percent
+
+                    st.session_state["dell_last_template_label"] = template_label
+
+
+
+                st.success("✅ Quotation generated successfully.")
+
+            except Exception as e:
+
+                st.session_state["dell_last_error"] = str(e)
+
+                st.error(str(e))
+
+                st.exception(e)
+
+
+
+    if st.session_state.get("dell_output_bytes"):
+
+        st.markdown("### Download your file")
+
+        st.download_button(
+
+            label="⬇️ Download quotation",
+
+            data=st.session_state.get("dell_output_bytes"),
+
+            file_name=st.session_state.get("dell_output_name", "quotation.xlsx"),
+
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+            key="download_dell_quote_bottom",
+
+        
+            use_container_width=True
+
+        )
+
+        st.caption(f"Prepared file: {st.session_state.get('dell_output_name', 'quotation.xlsx')}")
+
+
+
+    if uploaded is None and not st.session_state.get("dell_output_bytes"):
+
+        st.info("Upload Dell BOQ Excel or PDF, then click Generate Quotation.")
+
+
+
 st.markdown("""
 <footer style='text-align:center; margin-top:3rem; color:#1a73e8; font-size:20px; font-weight:bold; font-family: Google Sans, sans-serif;'>
     Made with ❤️ by Mindware | © 2025
