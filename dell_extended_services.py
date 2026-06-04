@@ -10,6 +10,21 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.drawing.image import Image as XLImage
 
 AED_RATE = 3.68
+EUR_RATE = 0.92
+
+CURRENCY_CONVERSION_RATES = {
+    "USD": 1.0,
+    "AED": AED_RATE,
+    "EUR": EUR_RATE,
+    "QAR": 3.64,
+}
+
+CURRENCY_NUMBER_FORMATS = {
+    "USD": '"$"#,##0.00',
+    "AED": '"AED" #,##0.00',
+    "EUR": '"€"#,##0.00',
+    "QAR": '"QAR" #,##0.00',
+}
 
 
 # ---------------- Helpers ----------------
@@ -36,6 +51,14 @@ def _strip_trailing_asterisk(value: str) -> str:
 def _usd_to_aed(val):
     try:
         return round(float(val) * AED_RATE, 2)
+    except Exception:
+        return 0.0
+
+
+def _usd_to_currency(val, currency_code: str = "AED"):
+    try:
+        rate = CURRENCY_CONVERSION_RATES.get((currency_code or "AED").upper(), AED_RATE)
+        return round(float(val) * rate, 2)
     except Exception:
         return 0.0
 
@@ -260,7 +283,12 @@ def generate_dell_extended_services_quote(
     input_excel_bytes: bytes,
     logo_bytes: Optional[bytes] = None,
     margin_percent: float = 0.0,
+    currency_code: str = "AED",
 ) -> bytes:
+
+    currency_code = (currency_code or "AED").upper()
+    conversion_rate = CURRENCY_CONVERSION_RATES.get(currency_code, AED_RATE)
+    currency_fmt = CURRENCY_NUMBER_FORMATS.get(currency_code, f'"{currency_code}" #,##0.00')
 
     src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
     src_ws = src_wb.active
@@ -377,7 +405,7 @@ def generate_dell_extended_services_quote(
     # ===== DATA ROWS =====
     row_ptr = header_row + 1
     sr_no = 1
-    currency_fmt = '"AED" #,##0.00'
+    currency_fmt = CURRENCY_NUMBER_FORMATS.get(currency_code, f'"{currency_code}" #,##0.00')
     margin_fmt = '0.00%'
     yellow = PatternFill(start_color="D9EAF7", end_color="D9EAF7", fill_type="solid")
     helper_body_fill = PatternFill(start_color="FCE5E5", end_color="FCE5E5", fill_type="solid")
@@ -399,7 +427,7 @@ def generate_dell_extended_services_quote(
         ws[f"D{row_ptr}"] = qty
 
         # Unit Price with AED conversion and margin (like Standard Quote logic)
-        ws[f"E{row_ptr}"].value = f"=ROUND(({price_usd}*{AED_RATE})/(1-{margin_percent}/100),2)"
+        ws[f"E{row_ptr}"].value = f"=ROUND(({price_usd}*{conversion_rate})/(1-{margin_percent}/100),2)"
         ws[f"E{row_ptr}"].number_format = currency_fmt
 
         # Total Price = Qty * Unit Price
@@ -439,7 +467,22 @@ def generate_dell_extended_services_quote(
         ws[f"G{total_row}"].border = border_thin
 
     # ===== FOOTER NOTES =====
-    footer_notes = _aed_footer_notes()
+    footer_notes = _aed_footer_notes() if currency_code == "AED" else [
+        "Incoterms:",
+        "",
+        "Payment Terms:",
+        "",
+        "Quote validity:",
+        "",
+        "Estimated Delivery Time from the date of booking:",
+        "",
+        "These prices do not include installation of any kind",
+        "All prices are exclusive of VAT and any other applicable taxes, which shall be charged in accordance with applicable laws and regulations.",
+        "Change in Qty or partial shipment is not acceptable",
+        "For all B2B orders complete end customer details should be mentioned on the PO",
+        f"PO Should be addressed to Mindware FZ LLC and should be in {currency_code}",
+        "Orders once placed with Dell cannot be cancelled",
+    ]
     notes_title_row = (total_row + 2) if total_cells else (row_ptr + 2)
     ws.merge_cells(start_row=notes_title_row, start_column=1, end_row=notes_title_row, end_column=7)
     ws.cell(notes_title_row, 1).value = "Terms and Conditions"

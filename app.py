@@ -2438,7 +2438,7 @@ elif tool == "💻 Dell Quotation (Orion)":
 
     currency_code = st.radio(
         "Currency",
-        ["USD", "QAR", "AED"],
+        ["USD", "QAR", "AED", "EUR"],
         horizontal=True,
     )
 
