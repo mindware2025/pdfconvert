@@ -1329,7 +1329,7 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
         # Example:
         #   "DELL USB-C Mobile Adapter - DA310 65.1 3 195.3"
         m = re.match(
-            r"^(?P<desc>.*?)(?P<unit>\d[\d,\.]*?)\s+(?P<qty>\d+)\s+(?P<total>\d[\d,\.]*)$",
+            r"^(?P<desc>.*?)(?P<unit>[$€£]?\s*[\d,]+(?:\.\d+)?)\s+(?P<qty>\d+)\s+(?P<total>[$€£]?\s*[\d,]+(?:\.\d+)?)$",
             line
         )
         if not m:
