@@ -1,11 +1,13 @@
 AED_RATE = 3.68
 EUR_RATE = 0.92
 QAR_RATE = 3.64
+SAR_RATE = 3.75
 
 CURRENCY_CONVERSION_RATES = {
     "USD": 1.0,
     "AED": AED_RATE,
     "EUR": EUR_RATE,
+    "SAR": SAR_RATE,
     "QAR": QAR_RATE,
 }
 
@@ -13,6 +15,7 @@ CURRENCY_NUMBER_FORMATS = {
     "USD": '"$"#,##0.00',
     "AED": '"AED" #,##0.00',
     "EUR": '"€"#,##0.00',
+    "SAR": '"SAR" #,##0.00',
     "QAR": '"QAR" #,##0.00',
 }
 
@@ -34,7 +37,7 @@ def get_footer_notes(currency_code: str):
             "Ø  Hardware will take 4-12 weeks delivery time from the date of Booking.",
             "Ø  These prices do not include Mindware installation of any kind.",
             "Ø  Change in Qty or partial shipment is not acceptable.",
-            "Ø  PO Should be addressed to Mindware Technology Trading LLC and should be in AED.",
+            f"Ø  PO Should be addressed to Mindware Technology Trading LLC and should be in {code}.",
             "Ø  For all B2B orders complete end customer details should be mentioned on the PO.",
             "Ø  Orders once placed with Dell cannot be cancelled.",
             "Ø  Kindly also ensure to review the proposal specifications from your end and ensure that they match the requirements exactly as per the End User.",
