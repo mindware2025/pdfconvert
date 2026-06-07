@@ -21,6 +21,7 @@ from dell import (
     detect_dell_standard_variant,
     generate_dell_quote,
 )
+from dell_orion import build_dell_orion_output_filename, generate_orion_quote
 
 from dell_extended_services import build_dell_extended_services_output_filename, generate_dell_extended_services_quote
 from extractors.barcodeper50 import barcode_tooll
@@ -2423,52 +2424,47 @@ elif tool == "🟥 Lenovo Credit Note Tool":
         st.info("Upload Lenovo credit note PDFs to begin.")
         
 
-# elif tool == "💻 Dell Quotation (Orion)":
-#     st.title("💼 Dell Quotation (Orion)")
-#     st.markdown(
-#         "Upload a Dell quotation Excel or PDF and generate the Orion  export."
-#     )
+elif tool == "💻 Dell Quotation (Orion)":
+    st.title("💼 Dell Quotation (Orion)")
+    st.markdown("Upload a Dell quotation Excel or PDF and generate the Orion export.")
 
-#     uploaded = st.file_uploader(
-#         "Upload Dell BOQ Excel or PDF",
-#         type=["xlsx", "xlsm", "xls", "pdf"],
-#         accept_multiple_files=False,
-#     )
+    uploaded = st.file_uploader(
+        "Upload Dell BOQ Excel or PDF",
+        type=["xlsx", "xlsm", "xls", "pdf"],
+        accept_multiple_files=False,
+        key="dell_orion_upload",
+    )
 
-#     currency_code = st.radio(
-#         "Currency",
-#         ["USD", "QAR", "AED", "EUR"],
-#         horizontal=True,
-#     )
+    currency_code = st.radio(
+        "Currency",
+        ["USD", "QAR", "AED", "SAR", "EUR"],
+        horizontal=True,
+        key="dell_orion_currency",
+    )
 
-#     if st.button("Generate Dell Orion Quotation"):
-#         if not uploaded:
-#             st.warning("Please upload a file.")
-#         else:
-#             input_bytes = uploaded.read()
-#             output_name = "Dell_Orion_Quotation.xlsx"
-
-#             with st.spinner("Generating..."):
-#                 try:
-#                     out_bytes = generate_orion_quote(
-#                         input_excel_bytes=input_bytes,
-#                         currency_code=currency_code,
-#                     )
-#                     output_name = build_dell_orion_output_filename(
-#                         input_excel_bytes=input_bytes,
-#                     )
-#                 except Exception as e:
-#                     st.error(f"Generation failed: {e}")
-#                     st.stop()
-
-#                 st.download_button(
-#                     "⬇️ Download Orion quotation",
-#                     data=out_bytes,
-#                     file_name=output_name,
-#                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-#                 )
-
-#                 st.success("Done ✅")
+    if st.button("Generate Dell Orion Quotation", key="generate_dell_orion_btn"):
+        if not uploaded:
+            st.warning("Please upload a file first.")
+        else:
+            input_bytes = uploaded.getvalue()
+            with st.spinner("Generating Orion quotation..."):
+                try:
+                    out_bytes = generate_orion_quote(
+                        input_excel_bytes=input_bytes,
+                        currency_code=currency_code,
+                    )
+                    output_name = build_dell_orion_output_filename(input_excel_bytes=input_bytes)
+                    st.download_button(
+                        "⬇️ Download Orion quotation",
+                        data=out_bytes,
+                        file_name=output_name,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="download_dell_orion_quote",
+                    )
+                    st.success("Done ✅")
+                except Exception as e:
+                    st.error(f"Generation failed: {e}")
+                    st.exception(e)
 
 elif tool == "💻 Dell Quotation":
 
