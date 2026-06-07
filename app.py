@@ -2510,7 +2510,7 @@ elif tool == "💻 Dell Quotation":
 
         "Currency",
 
-        ["USD", "QAR", "AED", "EUR"],
+        ["USD", "QAR", "AED", "SAR", "EUR"],
 
         horizontal=True
 
