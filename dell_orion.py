@@ -12,6 +12,7 @@ from dell import (
     _extract_compact_quote_items_and_config,
     _extract_grouped_template_items_and_config,
     _extract_pdf_quote_data,
+    _extract_product_detail_headings,
     _extract_quote_metadata,
     _extract_config_rows_from_configuration_sheet,
     _try_extract_items_from_pricing_summary,
@@ -76,11 +77,12 @@ def _extract_items_and_metadata(input_excel_bytes: bytes):
     is_pdf = input_excel_bytes.lstrip().startswith(b"%PDF")
     if is_pdf:
         items, quote_meta, config_rows, quote_ref_text, date_text, _ = _extract_pdf_quote_data(input_excel_bytes)
-        return items, quote_meta, config_rows, quote_ref_text, date_text, is_pdf
+        return items, quote_meta, config_rows, {}, quote_ref_text, date_text, is_pdf
 
     wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
     ws = wb.active
     quote_meta = _extract_quote_metadata(ws)
+    item_headings_by_item = _extract_product_detail_headings(ws)
 
     items = _try_extract_items_from_pricing_summary(ws)
     config_rows = []
@@ -114,7 +116,7 @@ def _extract_items_and_metadata(input_excel_bytes: bytes):
 
 
 def build_dell_orion_output_filename(input_excel_bytes: bytes) -> str:
-    items, quote_meta, _, quote_ref_text, _, _ = _extract_items_and_metadata(input_excel_bytes)
+    _, quote_meta, _, _, quote_ref_text, _, _ = _extract_items_and_metadata(input_excel_bytes)
     partner_name = _sanitize_text(
         quote_meta.get("reseller") or quote_meta.get("company name") or quote_meta.get("end user") or "Dell"
     )
@@ -129,7 +131,7 @@ def generate_orion_quote(input_excel_bytes: bytes, currency_code: str = "USD") -
     Generate a basic Orion quotation workbook from the same Dell quotation input.
     The output is intentionally lightweight and keeps the existing Dell generator untouched.
     """
-    items, quote_meta, config_rows, _, _, _ = _extract_items_and_metadata(input_excel_bytes)
+    items, _, config_rows, item_headings_by_item, _, _, _ = _extract_items_and_metadata(input_excel_bytes)
     conversion_rate = CURRENCY_CONVERSION_RATES.get((currency_code or "USD").upper(), 1.0)
     number_format = CURRENCY_NUMBER_FORMATS.get((currency_code or "USD").upper(), "#,##0.00")
 
@@ -139,20 +141,40 @@ def generate_orion_quote(input_excel_bytes: bytes, currency_code: str = "USD") -
 
     ws.append(ORION_HEADERS)
 
-    for idx, (desc, qty, unit_price, total_price) in enumerate(items):
+    item_descs_order = [item[0] for item in items]
+    part_numbers_by_item = {}
+    for row_data in config_rows:
+        if len(row_data) >= 7:
+            item_no, _heading, _module, _desc, sku, _tax, _qty = row_data
+        else:
+            item_no, _heading, _module, _desc, sku, _tax = row_data
+        if sku and item_no not in part_numbers_by_item:
+            part_numbers_by_item[item_no] = sku
+
+    heading_part_numbers_by_item = {}
+    for item_key, heading in item_headings_by_item.items():
+        part_number = _extract_part_number_from_description(heading)
+        if part_number:
+            heading_part_numbers_by_item[item_key] = part_number
+
+    for idx, desc in enumerate(item_descs_order, start=1):
+        item_key = str(idx)
+        if item_key not in heading_part_numbers_by_item:
+            part_number = _extract_part_number_from_description(desc)
+            if part_number:
+                heading_part_numbers_by_item[item_key] = part_number
+
+    for item_key, part_number in heading_part_numbers_by_item.items():
+        part_numbers_by_item.setdefault(item_key, part_number)
+
+    for idx, (desc, qty, unit_price, total_price) in enumerate(items, start=1):
         qty_value = int(qty) if qty not in (None, "") else 0
         unit_value = float(unit_price or 0.0)
         total_value = float(total_price) if total_price is not None else (qty_value * unit_value)
         unit_value *= conversion_rate
         total_value *= conversion_rate
 
-        vendor_code = ""
-        for row in config_rows:
-            if len(row) >= 5 and str(row[0]).strip() == str(idx + 1):
-                vendor_code = _sanitize_text(row[4] or row[3] or row[2] or "")
-                break
-        if not vendor_code:
-            vendor_code = _extract_part_number_from_description(desc)
+        vendor_code = part_numbers_by_item.get(str(idx), "") or _extract_part_number_from_description(desc)
 
         description = _best_description(desc, config_rows, idx)
 
