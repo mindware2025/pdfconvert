@@ -1327,12 +1327,19 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
 
     # ---------------------- ITEMS (FULL 13+ extraction) ----------------------
     def _try_parse_item(line: str):
-        # Example:
-        #   "DELL USB-C Mobile Adapter - DA310 65.1 3 195.3"
+        """Parse Dell PDF item lines using the quote export format from the PDF text."""
+        money_pattern = r"(?:[$€£]?\s*[\d,]+(?:\.\d+)?)"
         m = re.match(
-            r"^(?P<desc>.*?)(?P<unit>\d[\d,\.]*?)\s+(?P<qty>\d+)\s+(?P<total>\d[\d,\.]*)$",
+            rf"^(?P<desc>.+?)\s+(?P<qty>\d+)\s+(?P<unit>{money_pattern})\s+(?P<total>{money_pattern})$",
             line,
+            flags=re.IGNORECASE,
         )
+        if not m:
+            m = re.match(
+                rf"^(?P<desc>.+?)\s+(?P<unit>{money_pattern})\s+(?P<qty>\d+)\s+(?P<total>{money_pattern})$",
+                line,
+                flags=re.IGNORECASE,
+            )
         if not m and is_eur_item_line(line):
             return parse_eur_item_line(line)
         if not m:
@@ -1353,7 +1360,14 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
         if "quote summary" in low:
             in_items = True
             continue
-        if "unit price" in low and "qty" in low and "item total" in low:
+
+        # Dell PDF quotes often show the item table header as
+        # 'Qty Unit Price Subtotal' instead of the older 'Qty Unit Price Item Total' label.
+        if (
+            "qty" in low
+            and "unit price" in low
+            and ("subtotal" in low or "item total" in low or "amount" in low)
+        ):
             in_items = True
             continue
 
