@@ -112,7 +112,7 @@ def _extract_items_and_metadata(input_excel_bytes: bytes):
         if label.startswith("date"):
             date_text = _cell_to_text(ws.cell(r, 5).value)
 
-    return items, quote_meta, config_rows, quote_ref_text, date_text, is_pdf
+    return items, quote_meta, config_rows, item_headings_by_item, quote_ref_text, date_text, is_pdf
 
 
 def build_dell_orion_output_filename(input_excel_bytes: bytes) -> str:
