@@ -29,6 +29,14 @@ ORION_HEADERS = [
     "Unit Selling",
 ]
 
+ORION_CURRENCY_CONVERSION_RATES = {
+    "USD": 1.0,
+    "AED": 3.67,
+    "EUR": 0.92,
+    "SAR": 3.75,
+    "QAR": 3.64,
+}
+
 
 def _cell_to_text(value) -> str:
     if value is None:
@@ -176,6 +184,7 @@ def build_orion_description(text: str) -> str:
 
 
 def _find_config_detail(config_rows: list, item_no: int, matcher) -> str:
+    matches = []
     for row in config_rows:
         if len(row) < 6:
             continue
@@ -186,8 +195,16 @@ def _find_config_detail(config_rows: list, item_no: int, matcher) -> str:
         description = _sanitize_text(str(row[3] or ""))
         candidate = description or module
         if matcher(module, description):
-            return candidate
-    return ""
+            matches.append((module, description, candidate))
+
+    if not matches:
+        return ""
+
+    preferred = [item for item in matches if "base options" in f"{item[0]} {item[1]}".lower()]
+    if preferred:
+        return preferred[0][2]
+
+    return matches[0][2]
 
 
 def _processor_match(module: str, description: str) -> bool:
@@ -215,6 +232,20 @@ def _os_match(module: str, description: str) -> bool:
     return "operating system" in text or any(term in text for term in ("windows", "ubuntu", "linux", "rhel", "red hat", "suse", "vmware"))
 
 
+def _find_base_options_summary(config_rows: list, item_no: int) -> str:
+    for row in config_rows:
+        if len(row) < 6:
+            continue
+        row_item = str(row[0]).strip()
+        if row_item and row_item != str(item_no):
+            continue
+        module = _sanitize_text(str(row[2] or ""))
+        description = _sanitize_text(str(row[3] or ""))
+        if "base options" in f"{module} {description}".lower():
+            return description or module
+    return ""
+
+
 def build_orion_description_from_config(desc: str, config_rows: list, idx: int) -> str:
     base = _sanitize_text(desc)
     parts = []
@@ -222,17 +253,21 @@ def build_orion_description_from_config(desc: str, config_rows: list, idx: int) 
     if base:
         parts.append(base)
 
-    processor = _find_config_detail(config_rows, idx, _processor_match)
-    if processor:
-        parts.append(processor)
+    base_options_summary = _find_base_options_summary(config_rows, idx)
+    if base_options_summary:
+        parts.append(base_options_summary)
+    else:
+        processor = _find_config_detail(config_rows, idx, _processor_match)
+        if processor:
+            parts.append(processor)
 
-    memory = _find_config_detail(config_rows, idx, _memory_match)
-    if memory:
-        parts.append(memory)
+        memory = _find_config_detail(config_rows, idx, _memory_match)
+        if memory:
+            parts.append(memory)
 
-    graphics = _find_config_detail(config_rows, idx, _graphics_match)
-    if graphics:
-        parts.append(graphics)
+        graphics = _find_config_detail(config_rows, idx, _graphics_match)
+        if graphics:
+            parts.append(graphics)
 
     storage = _find_config_detail(config_rows, idx, _storage_match)
     if storage:
@@ -307,8 +342,9 @@ def generate_orion_quote(input_excel_bytes: bytes, currency_code: str = "USD") -
     The output is intentionally lightweight and keeps the existing Dell generator untouched.
     """
     items, _, config_rows, item_headings_by_item, _, _, _ = _extract_items_and_metadata(input_excel_bytes)
-    conversion_rate = CURRENCY_CONVERSION_RATES.get((currency_code or "USD").upper(), 1.0)
-    number_format = CURRENCY_NUMBER_FORMATS.get((currency_code or "USD").upper(), "#,##0.00")
+    currency_code = (currency_code or "USD").upper()
+    conversion_rate = ORION_CURRENCY_CONVERSION_RATES.get(currency_code, CURRENCY_CONVERSION_RATES.get(currency_code, 1.0))
+    number_format = CURRENCY_NUMBER_FORMATS.get(currency_code, "#,##0.00")
 
     wb = Workbook()
     ws = wb.active
