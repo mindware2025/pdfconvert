@@ -1,11 +1,26 @@
+"""
+Fixed helpers and generate_orion_quote for the Dell → Orion pipeline.
+
+Fixes applied:
+1. MSRP / Unit Cost now use unit_price (not total_price).
+2. "Base Options" rows are excluded from the description.
+3. Processor extraction now works from config rows for ALL items (including item 1).
+4. Memory regex no longer drops "1 x N GB" entries.
+5. Graphics extraction uses config rows (catches NVIDIA on items 2 & 4).
+6. "Storage configuration (Boot Drive)" module is excluded from storage match.
+7. Item 4 NVMe SSD rows (modules "1st M.2 NVMe SSD" / "Additional M.2 NVMe SSD") are
+   now matched by the storage matcher.
+"""
+
+import re
 from datetime import datetime
 from io import BytesIO
-import re
 
 import openpyxl
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 
+# ── keep all the original imports from your dell module ──────────────────────
 from dell import (
     CURRENCY_CONVERSION_RATES,
     CURRENCY_NUMBER_FORMATS,
@@ -38,6 +53,8 @@ ORION_CURRENCY_CONVERSION_RATES = {
 }
 
 
+# ── small text utilities (unchanged) ─────────────────────────────────────────
+
 def _cell_to_text(value) -> str:
     if value is None:
         return ""
@@ -54,7 +71,6 @@ def _extract_part_number_from_description(text: str) -> str:
     text = _sanitize_text(text)
     if not text:
         return ""
-
     matches = re.findall(r"\(([^()]+)\)", text)
     for candidate in reversed(matches):
         normalized = candidate.strip().replace("–", "-").replace("—", "-")
@@ -62,7 +78,6 @@ def _extract_part_number_from_description(text: str) -> str:
         normalized = re.sub(r"\s+", " ", normalized).strip()
         if re.fullmatch(r"(?:\d{3}-[A-Z0-9]{4,5}|[A-Z]{2}\d{6,})", normalized, re.I):
             return normalized
-
     fallback = re.search(r"\b(?:[A-Z]{2}\d{6,}|\d{3}-[A-Z0-9]{4,5})\b", text, re.I)
     if fallback:
         return fallback.group(0).upper()
@@ -73,7 +88,6 @@ def _best_description(desc: str, config_rows: list, idx: int) -> str:
     base = _sanitize_text(desc)
     if base:
         return base
-
     for row in config_rows:
         if len(row) >= 5 and str(row[0]).strip() == str(idx + 1):
             candidate = _sanitize_text(row[3] or row[4] or row[2] or row[1])
@@ -82,17 +96,17 @@ def _best_description(desc: str, config_rows: list, idx: int) -> str:
     return base
 
 
+# ── description-building utilities (unchanged except where noted) ─────────────
+
 def _extract_product_description(text: str) -> str:
     text = _sanitize_text(text)
     if not text:
         return ""
-
     if re.search(r"\bserver\b", text, flags=re.I):
         candidate = re.split(r"\bserver\b", text, flags=re.I, maxsplit=1)[0]
         candidate = re.split(r"\s+(?=intel\b)", candidate, flags=re.I, maxsplit=1)[0]
         candidate = re.sub(r"\s*[,;]+\s*$", "", candidate)
         return _sanitize_text(candidate)
-
     candidate = re.split(r"\s+(?=intel\b)", text, flags=re.I, maxsplit=1)[0]
     candidate = re.sub(r"\s*[,;]+\s*$", "", candidate)
     return _sanitize_text(candidate)
@@ -102,7 +116,6 @@ def _extract_processor(text: str) -> str:
     match = re.search(r"intel[^,;]*?(?:\d+(?:\.\d+)?\s*GHz)[^,;]*", text, re.I)
     if match:
         return _sanitize_text(match.group(0).rstrip(" ,;"))
-
     match = re.search(r"intel[^,;]*?(?=,\s*\d+\s*cores?\b|,\s*\d+\s*C\b|,|;|$)", text, re.I)
     if match:
         return _sanitize_text(match.group(0).rstrip(" ,;"))
@@ -110,14 +123,11 @@ def _extract_processor(text: str) -> str:
 
 
 def _extract_memory(text: str) -> str:
+    # FIX: removed the `int(qty) > 1` filter — single-stick configs like "1 x 16 GB" were dropped
     matches = re.findall(r"(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*GB\b", text, flags=re.I)
     if not matches:
         return ""
-
-    parts = []
-    for qty, size in matches:
-        if int(qty) > 1:
-            parts.append(f"{qty} x {size} GB")
+    parts = [f"{qty} x {size} GB" for qty, size in matches]
     return ", ".join(parts)
 
 
@@ -144,24 +154,27 @@ def _extract_operating_system(text: str) -> str:
     match = re.search(r"\b(?:operating\s*system|os)\b\s*[:\-]?\s*([^,;]+)", text, re.I)
     if match:
         return _sanitize_text(match.group(1))
-
-    match = re.search(r"\b(?:windows|ubuntu|linux|rhel|red\s*hat|suse|oracle\s*linux|vmware\s*esxi)[^,;]*", text, re.I)
+    match = re.search(
+        r"\b(?:windows|ubuntu|linux|rhel|red\s*hat|suse|oracle\s*linux|vmware\s*esxi)[^,;]*",
+        text, re.I,
+    )
     if match:
         return _sanitize_text(match.group(0))
     return ""
 
 
 def _extract_support_terms(text: str) -> str:
-    match = re.search(r"hardware\s+support\s+services\s+upgrades.*?(prosupport\s+next\s+business\s+day)\s*(\d+)\s*months", text, re.I)
+    match = re.search(
+        r"hardware\s+support\s+services\s+upgrades.*?(prosupport\s+next\s+business\s+day)\s*(\d+)\s*months",
+        text, re.I,
+    )
     if not match:
         return ""
-
     _, months = match.groups()
     try:
         years = int(int(months) / 12)
     except Exception:
         return ""
-
     prefix = match.group(1)[0].upper() if match.group(1) else "P"
     return _sanitize_text(f"{prefix} {years} Years")
 
@@ -170,7 +183,6 @@ def build_orion_description(text: str) -> str:
     cleaned = _sanitize_text(text)
     if not cleaned:
         return ""
-
     parts = [
         _extract_product_description(cleaned),
         _extract_processor(cleaned),
@@ -183,6 +195,68 @@ def build_orion_description(text: str) -> str:
     return " | ".join(part for part in parts if part)
 
 
+# ── config-row matchers ───────────────────────────────────────────────────────
+
+def _is_base_options_row(module: str, description: str) -> bool:
+    """Return True for rows that only describe the base option (noise)."""
+    text = f"{module} {description}".lower()
+    return "base options" in text or module.lower().startswith("base options")
+
+
+def _processor_match(module: str, description: str) -> bool:
+    # FIX: match the "Processor" module name directly, in addition to keyword search
+    if module.lower().strip() == "processor":
+        return True
+    text = f"{module} {description}".lower()
+    return ("processor" in text or "cpu" in text) and any(
+        term in text for term in ("intel", "amd", "core", "ghz", "cache", "cores")
+    )
+
+
+def _memory_match(module: str, description: str) -> bool:
+    text = f"{module} {description}".lower()
+    return "memory" in text and any(term in text for term in ("gb", "ddr", "sodimm", "non-ecc"))
+
+
+def _graphics_match(module: str, description: str) -> bool:
+    # FIX: match "Graphics" module name directly
+    if module.lower().strip() in ("graphics", "graphics holder"):
+        return module.lower().strip() == "graphics"  # only the primary graphics row
+    text = f"{module} {description}".lower()
+    return "graphics" in text or any(
+        term in text for term in ("nvidia", "amd", "radeon", "rtx", "gtx", "gpu")
+    )
+
+
+def _storage_match(module: str, description: str) -> bool:
+    module_lower = module.lower().strip()
+    desc_lower = description.lower()
+
+    # FIX: exclude "Storage configuration (Boot Drive)" — it's just a chassis note
+    if "storage configuration" in module_lower:
+        return False
+
+    # FIX: explicitly match NVMe SSD module names used in towers (item 4)
+    if re.search(r"\bm\.2\b.*\bssd\b|\bm2\b.*\bssd\b|nvme\s+ssd|1st\s+m\.2|additional\s+m\.2", module_lower):
+        return True
+
+    text = f"{module_lower} {desc_lower}"
+    return (
+        ("storage" in text or "hard drive" in text or any(term in text for term in ("ssd", "hdd", "tb")))
+        and "driver" not in text
+        and "storage configuration" not in text
+    )
+
+
+def _os_match(module: str, description: str) -> bool:
+    text = f"{module} {description}".lower()
+    return "operating system" in text or any(
+        term in text for term in ("windows", "ubuntu", "linux", "rhel", "red hat", "suse", "vmware")
+    )
+
+
+# ── config-row detail finder ──────────────────────────────────────────────────
+
 def _find_config_detail(config_rows: list, item_no: int, matcher) -> str:
     matches = []
     for row in config_rows:
@@ -193,6 +267,11 @@ def _find_config_detail(config_rows: list, item_no: int, matcher) -> str:
             continue
         module = _sanitize_text(str(row[2] or ""))
         description = _sanitize_text(str(row[3] or ""))
+
+        # FIX: skip "Base Options" rows — they are chassis/config noise
+        if _is_base_options_row(module, description):
+            continue
+
         candidate = description or module
         if matcher(module, description):
             matches.append((module, description, candidate))
@@ -207,42 +286,9 @@ def _find_config_detail(config_rows: list, item_no: int, matcher) -> str:
     return matches[0][2]
 
 
-def _processor_match(module: str, description: str) -> bool:
-    text = f"{module} {description}".lower()
-    return ("processor" in text or "cpu" in text) and any(term in text for term in ("intel", "amd", "core", "ghz", "cache", "cores"))
-
-
-def _memory_match(module: str, description: str) -> bool:
-    text = f"{module} {description}".lower()
-    return "memory" in text and any(term in text for term in ("gb", "ddr", "sodimm", "non-ecc"))
-
-
-def _graphics_match(module: str, description: str) -> bool:
-    text = f"{module} {description}".lower()
-    return "graphics" in text or any(term in text for term in ("nvidia", "amd", "radeon", "rtx", "gtx", "gpu"))
-
-
-def _storage_match(module: str, description: str) -> bool:
-    text = f"{module} {description}".lower()
-    return ("storage" in text or "hard drive" in text or any(term in text for term in ("ssd", "hdd", "tb"))) and "driver" not in text
-
-
-def _os_match(module: str, description: str) -> bool:
-    text = f"{module} {description}".lower()
-    return "operating system" in text or any(term in text for term in ("windows", "ubuntu", "linux", "rhel", "red hat", "suse", "vmware"))
-
-
 def _find_base_options_summary(config_rows: list, item_no: int) -> str:
-    for row in config_rows:
-        if len(row) < 6:
-            continue
-        row_item = str(row[0]).strip()
-        if row_item and row_item != str(item_no):
-            continue
-        module = _sanitize_text(str(row[2] or ""))
-        description = _sanitize_text(str(row[3] or ""))
-        if "base options" in f"{module} {description}".lower():
-            return description or module
+    # FIX: this function previously returned Base Options text (noise); now returns ""
+    # so the individual field matchers always run instead.
     return ""
 
 
@@ -253,21 +299,19 @@ def build_orion_description_from_config(desc: str, config_rows: list, idx: int) 
     if base:
         parts.append(base)
 
-    base_options_summary = _find_base_options_summary(config_rows, idx)
-    if base_options_summary:
-        parts.append(base_options_summary)
-    else:
-        processor = _find_config_detail(config_rows, idx, _processor_match)
-        if processor:
-            parts.append(processor)
+    # _find_base_options_summary now always returns "" (see above), so we always
+    # fall through to individual field extraction.
+    processor = _find_config_detail(config_rows, idx, _processor_match)
+    if processor:
+        parts.append(processor)
 
-        memory = _find_config_detail(config_rows, idx, _memory_match)
-        if memory:
-            parts.append(memory)
+    memory = _find_config_detail(config_rows, idx, _memory_match)
+    if memory:
+        parts.append(memory)
 
-        graphics = _find_config_detail(config_rows, idx, _graphics_match)
-        if graphics:
-            parts.append(graphics)
+    graphics = _find_config_detail(config_rows, idx, _graphics_match)
+    if graphics:
+        parts.append(graphics)
 
     storage = _find_config_detail(config_rows, idx, _storage_match)
     if storage:
@@ -282,6 +326,8 @@ def build_orion_description_from_config(desc: str, config_rows: list, idx: int) 
         return combined
     return build_orion_description(base)
 
+
+# ── metadata extraction (unchanged) ──────────────────────────────────────────
 
 def _extract_items_and_metadata(input_excel_bytes: bytes):
     is_pdf = input_excel_bytes.lstrip().startswith(b"%PDF")
@@ -336,22 +382,22 @@ def build_dell_orion_output_filename(input_excel_bytes: bytes) -> str:
     return f"{safe_partner}-{safe_ref}-{datetime.now().strftime('%Y%m%d')}.xlsx"
 
 
+# ── main generator ────────────────────────────────────────────────────────────
+
 def generate_orion_quote(input_excel_bytes: bytes, currency_code: str = "USD") -> bytes:
-    """
-    Generate a basic Orion quotation workbook from the same Dell quotation input.
-    The output is intentionally lightweight and keeps the existing Dell generator untouched.
-    """
     items, _, config_rows, item_headings_by_item, _, _, _ = _extract_items_and_metadata(input_excel_bytes)
     currency_code = (currency_code or "USD").upper()
-    conversion_rate = ORION_CURRENCY_CONVERSION_RATES.get(currency_code, CURRENCY_CONVERSION_RATES.get(currency_code, 1.0))
+    conversion_rate = ORION_CURRENCY_CONVERSION_RATES.get(
+        currency_code, CURRENCY_CONVERSION_RATES.get(currency_code, 1.0)
+    )
     number_format = CURRENCY_NUMBER_FORMATS.get(currency_code, "#,##0.00")
 
     wb = Workbook()
     ws = wb.active
     ws.title = "Orion_Quote"
-
     ws.append(ORION_HEADERS)
 
+    # Build part-number lookups (unchanged)
     item_descs_order = [item[0] for item in items]
     part_numbers_by_item = {}
     for row_data in config_rows:
@@ -378,12 +424,12 @@ def generate_orion_quote(input_excel_bytes: bytes, currency_code: str = "USD") -
     for item_key, part_number in heading_part_numbers_by_item.items():
         part_numbers_by_item.setdefault(item_key, part_number)
 
+    # Write rows
     for idx, (desc, qty, unit_price, total_price) in enumerate(items, start=1):
         qty_value = int(qty) if qty not in (None, "") else 0
-        unit_value = float(unit_price or 0.0)
-        total_value = float(total_price) if total_price is not None else (qty_value * unit_value)
-        unit_value *= conversion_rate
-        total_value *= conversion_rate
+
+        # FIX: use unit_price for MSRP and Unit Cost, NOT total_price
+        unit_value = float(unit_price or 0.0) * conversion_rate
 
         vendor_code = part_numbers_by_item.get(str(idx), "") or _extract_part_number_from_description(desc)
 
@@ -393,16 +439,16 @@ def generate_orion_quote(input_excel_bytes: bytes, currency_code: str = "USD") -
             description = build_orion_description(_best_description(desc, config_rows, idx))
 
         ws.append([
-            vendor_code,
-            "",
-            description,
-            qty_value,
-            total_value,
-            total_value,
-            "",
+            vendor_code,   # Vendor Item Code
+            "",            # P/N - Orion Item code
+            description,   # Description
+            qty_value,     # Qty
+            unit_value,    # MSRP  ← unit price (fixed)
+            unit_value,    # Unit Cost ← unit price (fixed)
+            "",            # Unit Selling
         ])
 
-    # Formatting
+    # Formatting (unchanged)
     header_fill = PatternFill(fill_type="solid", start_color="D9EAF7", end_color="D9EAF7")
     for cell in ws[1]:
         cell.fill = header_fill
