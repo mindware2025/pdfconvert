@@ -2075,28 +2075,33 @@ def generate_dell_quote(
     _add_logo(ws, logo_bytes, anchor="A1", width=780, height=52, currency_code=currency_code)
 
     is_eur_location = currency_code == "EUR"
+
+    def _write_address_block(start_row: int, end_row: int, lines: list[str]) -> None:
+        merged_range = f"A{start_row}:D{end_row}"
+        ws.merge_cells(merged_range)
+        ws.unmerge_cells(merged_range)
+        for offset, text in enumerate(lines):
+            cell = ws.cell(row=start_row + offset, column=1, value=text)
+            cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        ws.merge_cells(merged_range)
+
     if currency_code == "QAR":
-        ws.merge_cells("A5:D5")
-        ws.merge_cells("A6:D6")
-        ws.merge_cells("A7:D7")
-        ws["A5"] = "Mindware SA, PO Box 22421, D-Ring Road"
-        ws["A6"] = "Next to Doha bank, Doha, Qatar"
-        ws["A7"] = "Tel : +974 44405000    Website : www.midisglobal.com"
+        _write_address_block(5, 5, ["Mindware SA, PO Box 22421, D-Ring Road"])
+        _write_address_block(6, 6, ["Next to Doha bank, Doha, Qatar"])
+        _write_address_block(7, 7, ["Tel : +974 44405000    Website : www.midisglobal.com"])
         address_end_row = 7
     elif is_eur_location:
-        ws.merge_cells("A5:D8")
-        ws["A5"] = "14, rue du Bas Marin"
-        ws["A6"] = "94537 Orly cedex - France"
-        ws["A7"] = "DL:     +33 1 49 79 42 24"
-        ws["A8"] = "Fax:   +33 1 49 79 45 33"
+        _write_address_block(5, 8, [
+            "14, rue du Bas Marin",
+            "94537 Orly cedex - France",
+            "DL:     +33 1 49 79 42 24",
+            "Fax:   +33 1 49 79 45 33",
+        ])
         address_end_row = 8
     else:
-        ws.merge_cells("A5:D5")
-        ws.merge_cells("A6:D6")
-        ws.merge_cells("A7:D7")
-        ws["A5"] = "P O Box 55609, Dubai, UAE"
-        ws["A6"] = "Tel :  +9714 4500600    Fax : +9714 4500678"
-        ws["A7"] = "Website :  www.mindware.net"
+        _write_address_block(5, 5, ["P O Box 55609, Dubai, UAE"])
+        _write_address_block(6, 6, ["Tel :  +9714 4500600    Fax : +9714 4500678"])
+        _write_address_block(7, 7, ["Website :  www.mindware.net"])
         address_end_row = 7
     for cell in ("A5", "A6", "A7", "A8") if is_eur_location else ("A5", "A6", "A7"):
         ws[cell].font = Font(bold=True, size=11, color="1F497D")
