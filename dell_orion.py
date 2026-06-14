@@ -106,71 +106,91 @@ def _best_description(desc: str, config_rows: list, idx: int) -> str:
 
 def _extract_product_description(text: str) -> str:
     """
-    Return the product name up to (but not including) the model number,
-    the word 'server', or 'Intel' — whichever comes first.
-    Examples of model-number patterns: R750xs, T550, R6625, MX750c.
+    Return the product name up to the first Dell model token or the word 'server'.
     """
     text = _sanitize_text(text)
     if not text:
         return ""
-    # Stop at: a Dell model number, the word "server", or the word "Intel"
-    candidate = re.split(
-        r"\s+(?=[A-Z]{1,2}\d{3,4}[a-z]{0,3}\b|\bserver\b|\bintel\b)",
-        text, maxsplit=1, flags=re.I
-    )[0]
-    candidate = re.sub(r"\s*[,;]+\s*$", "", candidate)
-    return _sanitize_text(candidate)
+
+    text = re.sub(r"^\s*SI#\s*\w+\s*", "", text, flags=re.I)
+
+    model_match = re.search(r"\b(?:[A-Z]{1,2}\d{3,4}[A-Za-z0-9]*|[A-Z]{2,}\d{3,4}[A-Za-z0-9]*)\b", text, flags=re.I)
+    if model_match:
+        text = text[:model_match.start()].strip()
+
+    stop_match = re.search(r"\b(?:server|intel)\b", text, flags=re.I)
+    if stop_match:
+        text = text[:stop_match.start()].strip()
+
+    text = re.sub(r"\s*[-,;:]+\s*$", "", text)
+    text = text.rstrip("()[]{}")
+    return _sanitize_text(text)
 
 
 def _extract_processor(text: str) -> str:
     """
-    Return the processor descriptor starting AFTER 'Intel' (or 'Intel Core'),
-    up to 'N cores', 'NC', a comma, semicolon, or end of string.
-    e.g. "Intel Core i9-13900K 3.0GHz, 24 cores" → "i9-13900K 3.0GHz"
-    e.g. "Intel Xeon Gold 6354 3.0GHz 18C"       → "Xeon Gold 6354 3.0GHz"
+    Return a compact processor descriptor in the form 'qty x Ultra 7 ...'.
     """
+    cleaned = _sanitize_text(text)
+    cleaned = cleaned.replace("Intel(R)", "Intel").replace("Core(TM)", "Core")
+    cleaned = cleaned.replace("vPro(R)", "vPro")
+
     match = re.search(
-        r"intel(?:\s+core)?\s+(\S[^,;]*?)(?=\s*,?\s*\d+\s*(?:cores?\b|C\b)|[,;]|$)",
-        text, re.I
+        r"(?:(\d+)\s*x\s*)?intel(?:\s+core)?\s+(.*?)(?=\s*,\s*\d+\s*(?:cores?|threads?)\b|\s*,\s*\d+\s*MB\b|\s*,\s*\d+\.\d+\s*GHz\b|\s*\(|[,;]|$)",
+        cleaned,
+        re.I,
     )
     if match:
-        return _sanitize_text(match.group(1).rstrip(" ,;"))
+        qty = match.group(1) or "1"
+        processor = _sanitize_text(match.group(2))
+        processor = re.sub(r"\bprocessor\b", "", processor, flags=re.I)
+        processor = processor.strip(" ,;")
+        return _sanitize_text(f"{qty} x {processor}")
     return ""
 
 
 def _extract_memory(text: str) -> str:
     """
-    Return memory as 'N x M GB' (or just 'M GB' when qty is 1).
-    Captures all occurrences and joins them.
+    Return memory in the form 'N x M GB' or 'M GB' when the quantity is 1.
     """
-    matches = re.findall(r"(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*GB\b", text, flags=re.I)
-    if not matches:
-        return ""
     parts = []
-    for qty, size in matches:
-        if int(qty) == 1:
-            parts.append(f"{size} GB")
-        else:
-            parts.append(f"{qty} x {size} GB")
-    return ", ".join(parts)
+    for clause in re.split(r"\s*\|\s*", text):
+        clause = clause.strip()
+        if not clause or any(term in clause.lower() for term in ("ssd", "hdd", "hard drive", "storage")):
+            continue
+        matches = re.findall(r"(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*GB\b", clause, flags=re.I)
+        if not matches:
+            continue
+        for qty, size in matches:
+            if int(qty) == 1:
+                parts.append(f"{size} GB")
+            else:
+                parts.append(f"{qty} x {size} GB")
+    return ", ".join(dict.fromkeys(parts))
 
 
 def _extract_graphics(text: str) -> str:
-    match = re.search(
-        r"(\d+)\s*x\s*(?:[^,;]*?(?:nvidia|amd|radeon|rtx|gtx|graphics?|gpu)[^,;]*)",
-        text,
-        re.I,
-    )
-    if match:
-        return _sanitize_text(match.group(0))
+    for clause in re.split(r"\s*\|\s*", text):
+        clause = clause.strip()
+        if not clause or not re.search(r"\b(?:nvidia|amd|radeon|rtx|gtx|graphics?|gpu)\b", clause, re.I):
+            continue
+        phrase = re.sub(r"\s*\(.*?\)", "", clause)
+        phrase = re.sub(r"\s*,.*$", "", phrase)
+        phrase = re.sub(r"\b(?:graphics|gpu)\b.*$", "", phrase, flags=re.I)
+        return _sanitize_text("1 x " + phrase.strip())
     return ""
 
 
 def _extract_storage(text: str) -> str:
-    match = re.search(r"(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*(TB|GB)\s*(SSD|HDD)\b", text, re.I)
-    if match:
-        qty, size, unit, drive_type = match.groups()
-        return _sanitize_text(f"{qty} x {size} {unit} {drive_type}")
+    for clause in re.split(r"\s*\|\s*", text):
+        clause = clause.strip()
+        if not clause or not re.search(r"\b(?:ssd|hdd)\b", clause, re.I):
+            continue
+        match = re.search(r"(?:(\d+)\s*x\s*)?(\d+(?:\.\d+)?)\s*(TB|GB)\b[^,;]*(SSD|HDD)\b", clause, re.I)
+        if match:
+            qty, size, unit, drive_type = match.groups()
+            qty_value = qty or "1"
+            return _sanitize_text(f"{qty_value} x {size} {unit} {drive_type}")
     return ""
 
 
@@ -189,43 +209,36 @@ def _extract_operating_system(text: str) -> str:
 
 def _extract_support_terms(text: str) -> str:
     """
-    Single-string fallback: expects both 'Hardware Support Services Upgrades'
-    and 'ProSupport Next Business Day' and the month count in one string.
+    Extract ProSupport years from a support row or combined support text.
+    Accepts strings like 'ProSupport Next Business Day 36 Months' or
+    'Hardware Support Services Upgrades ProSupport Next Business Day 36 Months'.
     """
-    match = re.search(
-        r"hardware\s+support\s+services\s+upgrades.*?(prosupport\s+next\s+business\s+day)\s*(\d+)\s*months",
-        text, re.I,
-    )
-    if not match:
+    combined = _sanitize_text(text)
+    if not combined:
         return ""
-    _, months = match.groups()
+
+    months_match = re.search(r"(\d+)\s*months?", combined, re.I)
+    if not months_match:
+        return ""
+
     try:
-        years = int(int(months) / 12)
+        years = int(int(months_match.group(1)) / 12)
     except Exception:
         return ""
+
     if years == 0:
         return ""
-    prefix = match.group(1)[0].upper() if match.group(1) else "P"
+
+    prefix_match = re.search(r"\bprosupport\b|\bpro\s*support\b", combined, re.I)
+    prefix = prefix_match.group(0)[0].upper() if prefix_match else "P"
     return _sanitize_text(f"{prefix} {years} Years")
 
 
 def _extract_support_terms_from_parts(part1: str, part2: str) -> str:
     """
-    Two-row variant: combines the text of two support config rows.
-    part1 typically contains 'ProSupport Next Business Day'.
-    part2 typically contains 'N Months'.
-    Returns e.g. 'P 3 Years'.
+    Two-row variant: combines support config rows and uses the same year parser.
     """
-    combined = f"{part1} {part2}"
-    months_match = re.search(r"(\d+)\s*months?", combined, re.I)
-    if not months_match:
-        return ""
-    years = int(months_match.group(1)) // 12
-    if years == 0:
-        return ""
-    prefix_match = re.search(r"\b(ProSupport|Pro\s*Support)\b", combined, re.I)
-    prefix = prefix_match.group(1)[0].upper() if prefix_match else "P"
-    return f"{prefix} {years} Years"
+    return _extract_support_terms(f"{part1} {part2}")
 
 
 def build_orion_description(text: str) -> str:
@@ -382,25 +395,30 @@ def build_orion_description_from_config(desc: str, config_rows: list, idx: int) 
     parts = []
 
     if base:
-        parts.append(base)
+        parts.append(_extract_product_description(base))
 
-    processor = _find_config_detail(config_rows, idx, _processor_match)
+    processor_raw = _find_config_detail(config_rows, idx, _processor_match)
+    processor = _extract_processor(processor_raw) if processor_raw else ""
     if processor:
         parts.append(processor)
 
-    memory = _find_config_detail(config_rows, idx, _memory_match)
+    memory_raw = _find_config_detail(config_rows, idx, _memory_match)
+    memory = _extract_memory(memory_raw) if memory_raw else ""
     if memory:
         parts.append(memory)
 
-    graphics = _find_config_detail(config_rows, idx, _graphics_match)
+    graphics_raw = _find_config_detail(config_rows, idx, _graphics_match)
+    graphics = _extract_graphics(graphics_raw) if graphics_raw else ""
     if graphics:
         parts.append(graphics)
 
-    storage = _find_config_detail(config_rows, idx, _storage_match)
+    storage_raw = _find_config_detail(config_rows, idx, _storage_match)
+    storage = _extract_storage(storage_raw) if storage_raw else ""
     if storage:
         parts.append(storage)
 
-    os_text = _find_config_detail(config_rows, idx, _os_match)
+    os_raw = _find_config_detail(config_rows, idx, _os_match)
+    os_text = _extract_operating_system(os_raw) if os_raw else ""
     if os_text:
         parts.append(os_text)
 
