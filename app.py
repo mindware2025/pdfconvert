@@ -2732,6 +2732,7 @@ elif tool == "💻 Dell Quotation":
                                 margin_percent=margin_percent,
                                 currency_code=target_currency,
                                 exchange_rate=exchange_rate if target_currency == "EUR" else None,
+                                style_currency="EUR" if currency_code == "EUR" else None,
                             )
                             generated_outputs[target_currency] = out_bytes
                         out_bytes = generated_outputs.get("EUR", next(iter(generated_outputs.values())))
@@ -2745,6 +2746,7 @@ elif tool == "💻 Dell Quotation":
                                 margin_percent=margin_percent,
                                 currency_code=target_currency,
                                 exchange_rate=exchange_rate if target_currency == "EUR" else None,
+                                style_currency="EUR" if currency_code == "EUR" else None,
                             )
                             generated_outputs[target_currency] = out_bytes
                         out_bytes = generated_outputs.get("EUR", next(iter(generated_outputs.values())))
@@ -2808,22 +2810,36 @@ elif tool == "💻 Dell Quotation":
 
         st.markdown("### Download your file")
 
-        st.download_button(
-
-            label="⬇️ Download quotation",
-
-            data=st.session_state.get("dell_output_bytes"),
-
-            file_name=st.session_state.get("dell_output_name", "quotation.xlsx"),
-
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-
-            key="download_dell_quote_bottom",
-
-        
-            use_container_width=True
-
-        )
+        if currency_code == "EUR":
+            eur_bytes = st.session_state.get("dell_output_bytes_eur")
+            usd_bytes = st.session_state.get("dell_output_bytes_usd")
+            if eur_bytes is not None:
+                st.download_button(
+                    label="⬇️ Download EUR quotation",
+                    data=eur_bytes,
+                    file_name=st.session_state.get("dell_output_name_eur", "quotation_eur.xlsx"),
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="download_dell_quote_eur_bottom",
+                    use_container_width=True,
+                )
+            if usd_bytes is not None:
+                st.download_button(
+                    label="⬇️ Download USD quotation",
+                    data=usd_bytes,
+                    file_name=st.session_state.get("dell_output_name_usd", "quotation_usd.xlsx"),
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="download_dell_quote_usd_bottom",
+                    use_container_width=True,
+                )
+        else:
+            st.download_button(
+                label="⬇️ Download quotation",
+                data=st.session_state.get("dell_output_bytes"),
+                file_name=st.session_state.get("dell_output_name", "quotation.xlsx"),
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_dell_quote_bottom",
+                use_container_width=True,
+            )
 
         st.caption(f"Prepared file: {st.session_state.get('dell_output_name', 'quotation.xlsx')}")
 

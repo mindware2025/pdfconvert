@@ -284,9 +284,11 @@ def generate_dell_extended_services_quote(
     margin_percent: float = 0.0,
     currency_code: str = "AED",
     exchange_rate: Optional[float] = None,
+    style_currency: Optional[str] = None,
 ) -> bytes:
 
     currency_code = (currency_code or "AED").upper()
+    style_currency = (style_currency or currency_code).upper()
     if currency_code == "EUR" and exchange_rate not in (None, ""):
         try:
             conversion_rate = float(exchange_rate)
@@ -312,13 +314,17 @@ def generate_dell_extended_services_quote(
     ws.merge_cells("A1:H2")
     _add_logo(ws, logo_bytes, anchor="A1", width=780, height=52, currency_code=currency_code)
 
+    is_eur_location = style_currency == "EUR"
+
     # Contact info (AED style)
-    if currency_code == "EUR":
-        ws.merge_cells("A5:D8")
-        ws["A5"] = "14, rue du Bas Marin"
-        ws["A6"] = "94537 Orly cedex - France"
-        ws["A7"] = "DL:     +33 1 49 79 42 24"
-        ws["A8"] = "Fax:   +33 1 49 79 45 33"
+    if is_eur_location:
+        for row_idx, text in enumerate([
+            "14, rue du Bas Marin",
+            "94537 Orly cedex - France",
+            "DL:     +33 1 49 79 42 24",
+            "Fax:   +33 1 49 79 45 33",
+        ], start=5):
+            ws.cell(row=row_idx, column=1, value=text)
         address_cells = ("A5", "A6", "A7", "A8")
     else:
         ws.merge_cells("A5:D5")
@@ -334,12 +340,13 @@ def generate_dell_extended_services_quote(
 
     # ===== METADATA SECTION (AED style) =====
     section_fill = PatternFill(start_color="D9EAF7", end_color="D9EAF7", fill_type="solid")
-    ws.merge_cells("A8:D8")
-    ws["A8"] = "Quote Summary"
-    ws["A8"].font = Font(bold=True, color="1F497D")
-    ws["A8"].alignment = Alignment(horizontal="left", vertical="center")
-    ws["A8"].fill = section_fill
-    ws["A8"].border = Border(
+    summary_title_row = 9 if is_eur_location else 8
+    ws.merge_cells(f"A{summary_title_row}:D{summary_title_row}")
+    ws[f"A{summary_title_row}"] = "Quote Summary"
+    ws[f"A{summary_title_row}"].font = Font(bold=True, color="1F497D")
+    ws[f"A{summary_title_row}"].alignment = Alignment(horizontal="left", vertical="center")
+    ws[f"A{summary_title_row}"].fill = section_fill
+    ws[f"A{summary_title_row}"].border = Border(
         left=Side(style="thin", color="9FBAD0"),
         right=Side(style="thin", color="9FBAD0"),
         top=Side(style="thin", color="9FBAD0"),
@@ -347,8 +354,8 @@ def generate_dell_extended_services_quote(
     )
 
     summary_rows = [
-        (9, "Quote Ref", meta["quote_no"]),
-        (10, "Date", meta["date"]),
+        (summary_title_row + 1, "Quote Ref", meta["quote_no"]),
+        (summary_title_row + 2, "Date", meta["date"]),
     ]
 
     for row_idx, label, value in summary_rows:
@@ -360,7 +367,7 @@ def generate_dell_extended_services_quote(
         ws[f"B{row_idx}"].alignment = Alignment(horizontal="left", vertical="center")
 
     # Customer Information section
-    customer_title_row = 12
+    customer_title_row = summary_title_row + 4
     ws.merge_cells(start_row=customer_title_row, start_column=1, end_row=customer_title_row, end_column=8)
     ws[f"A{customer_title_row}"] = "Customer Information"
     ws[f"A{customer_title_row}"].font = Font(bold=True, color="1F497D")

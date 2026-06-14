@@ -1757,6 +1757,7 @@ def generate_dell_quote(
     margin_percent: float = 0.0,
     currency_code: str = "USD",
     exchange_rate: Optional[float] = None,
+    style_currency: Optional[str] = None,
 ) -> bytes:
     """
     Generate a 2-sheet workbook from either:
@@ -2074,16 +2075,18 @@ def generate_dell_quote(
     ws.merge_cells("A1:H2")
     _add_logo(ws, logo_bytes, anchor="A1", width=780, height=52, currency_code=currency_code)
 
-    is_eur_location = currency_code == "EUR"
+    is_eur_location = style_currency == "EUR"
 
-    def _write_address_block(start_row: int, end_row: int, lines: list[str]) -> None:
-        merged_range = f"A{start_row}:D{end_row}"
-        ws.merge_cells(merged_range)
-        ws.unmerge_cells(merged_range)
+    def _write_address_block(start_row: int, end_row: int, lines: list[str], merge: bool = True) -> None:
+        if merge:
+            merged_range = f"A{start_row}:D{end_row}"
+            ws.merge_cells(merged_range)
+            ws.unmerge_cells(merged_range)
         for offset, text in enumerate(lines):
             cell = ws.cell(row=start_row + offset, column=1, value=text)
             cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
-        ws.merge_cells(merged_range)
+        if merge:
+            ws.merge_cells(f"A{start_row}:D{end_row}")
 
     if currency_code == "QAR":
         _write_address_block(5, 5, ["Mindware SA, PO Box 22421, D-Ring Road"])
@@ -2096,7 +2099,7 @@ def generate_dell_quote(
             "94537 Orly cedex - France",
             "DL:     +33 1 49 79 42 24",
             "Fax:   +33 1 49 79 45 33",
-        ])
+        ], merge=False)
         address_end_row = 8
     else:
         _write_address_block(5, 5, ["P O Box 55609, Dubai, UAE"])
