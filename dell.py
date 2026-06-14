@@ -130,8 +130,9 @@ def _strip_trailing_asterisk(value: str) -> str:
 def build_dell_output_filename(input_excel_bytes: bytes, currency_code: str = "USD") -> str:
     """Build the download filename for the generated Dell workbook."""
     currency_code = (currency_code or "USD").upper()
-    if currency_code not in ("AED", "SAR"):
-        return f"Dell_Quotation_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    if currency_code in ("EUR", "USD", "QAR", "AED", "SAR"):
+        return f"Dell_Quotation_{currency_code}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return f"Dell_Quotation_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
 
     quote_ref_text = ""
     quote_meta: Dict[str, str] = {}
@@ -231,15 +232,20 @@ def _pil_to_xl_image(pil_img):
     return XLImage(buf)
 
 
-def _get_local_logo_path() -> Optional[str]:
-    """Return the first available local logo path."""
+def _get_local_logo_path(currency_code: str = "USD") -> Optional[str]:
+    """Return the first available local logo path for the requested currency."""
     base_dir = os.path.dirname(os.path.abspath(__file__))
     candidate_dirs = [
         base_dir,
         os.path.dirname(base_dir),
     ]
+
+    preferred_names = ["dell spc.png", "dell copy.png", "dell.png", "dell_quote.png"]
+    if (currency_code or "USD").upper() != "EUR":
+        preferred_names = ["dell.png", "dell copy.png", "dell_quote.png"]
+
     for directory in candidate_dirs:
-        for name in ("dell copy.png", "dell.png", "dell_quote.png"):
+        for name in preferred_names:
             path = os.path.join(directory, name)
             if os.path.exists(path):
                 return path
@@ -387,7 +393,7 @@ def _extract_expiry_date(ws) -> str:
         if expiry:
             return _adjust_expiry_date(expiry)
 
-def _add_logo(ws, logo_bytes: Optional[bytes], anchor="A1", width: int = 180, height: int = 60):
+def _add_logo(ws, logo_bytes: Optional[bytes], anchor="A1", width: int = 180, height: int = 60, currency_code: str = "USD"):
     """Add logo from uploaded bytes or fallback to a local logo file."""
     if PILImage is not None:
         if logo_bytes:
@@ -400,7 +406,7 @@ def _add_logo(ws, logo_bytes: Optional[bytes], anchor="A1", width: int = 180, he
                 return
             except Exception:
                 pass
-        local_logo = _get_local_logo_path()
+        local_logo = _get_local_logo_path(currency_code)
         if local_logo:
             try:
                 pil_img = _trim_logo_image(PILImage.open(local_logo))
@@ -411,7 +417,7 @@ def _add_logo(ws, logo_bytes: Optional[bytes], anchor="A1", width: int = 180, he
                 return
             except Exception:
                 pass
-    local_logo = _get_local_logo_path()
+    local_logo = _get_local_logo_path(currency_code)
     if local_logo:
         try:
             img = XLImage(local_logo)
@@ -1750,6 +1756,7 @@ def generate_dell_quote(
     logo_bytes: Optional[bytes] = None,
     margin_percent: float = 0.0,
     currency_code: str = "USD",
+    exchange_rate: Optional[float] = None,
 ) -> bytes:
     """
     Generate a 2-sheet workbook from either:
@@ -1770,7 +1777,13 @@ def generate_dell_quote(
     logger.info("Generating Dell quote (bytes=%d)", len(input_excel_bytes) if input_excel_bytes is not None else 0)
 
     currency_code = (currency_code or "USD").upper()
-    conversion_rate = CURRENCY_CONVERSION_RATES.get(currency_code, 1.0)
+    if currency_code == "EUR" and exchange_rate not in (None, ""):
+        try:
+            conversion_rate = float(exchange_rate)
+        except Exception:
+            conversion_rate = CURRENCY_CONVERSION_RATES.get(currency_code, 1.0)
+    else:
+        conversion_rate = CURRENCY_CONVERSION_RATES.get(currency_code, 1.0)
 
     # Missing consolidation fee should be treated as zero for both Excel and PDF uploads.
     consolidation_fee = 0.0
@@ -2059,20 +2072,33 @@ def generate_dell_quote(
 
     # ===== HEADER: use the full banner logo across A:H =====
     ws.merge_cells("A1:H2")
-    _add_logo(ws, logo_bytes, anchor="A1", width=780, height=52)
+    _add_logo(ws, logo_bytes, anchor="A1", width=780, height=52, currency_code=currency_code)
 
-    ws.merge_cells("A5:D5")
-    ws.merge_cells("A6:D6")
-    ws.merge_cells("A7:D7")
+    is_eur_location = currency_code == "EUR"
     if currency_code == "QAR":
+        ws.merge_cells("A5:D5")
+        ws.merge_cells("A6:D6")
+        ws.merge_cells("A7:D7")
         ws["A5"] = "Mindware SA, PO Box 22421, D-Ring Road"
         ws["A6"] = "Next to Doha bank, Doha, Qatar"
         ws["A7"] = "Tel : +974 44405000    Website : www.midisglobal.com"
+        address_end_row = 7
+    elif is_eur_location:
+        ws.merge_cells("A5:D8")
+        ws["A5"] = "14, rue du Bas Marin"
+        ws["A6"] = "94537 Orly cedex - France"
+        ws["A7"] = "DL:     +33 1 49 79 42 24"
+        ws["A8"] = "Fax:   +33 1 49 79 45 33"
+        address_end_row = 8
     else:
+        ws.merge_cells("A5:D5")
+        ws.merge_cells("A6:D6")
+        ws.merge_cells("A7:D7")
         ws["A5"] = "P O Box 55609, Dubai, UAE"
         ws["A6"] = "Tel :  +9714 4500600    Fax : +9714 4500678"
         ws["A7"] = "Website :  www.mindware.net"
-    for cell in ("A5", "A6", "A7"):
+        address_end_row = 7
+    for cell in ("A5", "A6", "A7", "A8") if is_eur_location else ("A5", "A6", "A7"):
         ws[cell].font = Font(bold=True, size=11, color="1F497D")
         ws[cell].alignment = Alignment(horizontal="left", vertical="center")
 
@@ -2101,16 +2127,17 @@ def generate_dell_quote(
     # ---- Quote Summary Section (Same layout for all currencies) ----
     has_currency_expiry = bool(expiry_text) and currency_code in ("AED", "EUR", "SAR")
     
-    ws.merge_cells("A8:D8")
-    ws["A8"] = "Quote Summary"
-    _style_section_title("A8")
+    summary_title_row = 9 if is_eur_location else 8
+    ws.merge_cells(f"A{summary_title_row}:D{summary_title_row}")
+    ws[f"A{summary_title_row}"] = "Quote Summary"
+    _style_section_title(f"A{summary_title_row}")
 
     summary_rows = [
-        (9, "Quote Ref", quote_ref_text),
-        (10, "Date", date_text),
+        (summary_title_row + 1, "Quote Ref", quote_ref_text),
+        (summary_title_row + 2, "Date", date_text),
     ]
     if has_currency_expiry:
-        summary_rows.append((11, "Expires By", expiry_text))
+        summary_rows.append((summary_title_row + 3, "Expires By", expiry_text))
 
     for row_idx, label, value in summary_rows:
         ws[f"A{row_idx}"] = label
@@ -2120,10 +2147,17 @@ def generate_dell_quote(
         ws[f"B{row_idx}"] = value
         ws[f"B{row_idx}"].alignment = Alignment(horizontal="left", vertical="center")
 
-    customer_title_row = 12 if has_currency_expiry else 11
+    customer_title_row = (summary_title_row + 4) if has_currency_expiry else (summary_title_row + 3)
 
     # ---- Quote metadata (varies by country/template) ----
-    if currency_code in ("AED", "EUR", "SAR"):
+    if currency_code == "EUR":
+        meta_rows = [
+            ("Company Name:", quote_meta.get("company name", "")),
+            ("Customer Name:", quote_meta.get("customer name", "")),
+            ("End User:", quote_meta.get("end user", "")),
+            ("Reseller:", quote_meta.get("reseller", "")),
+        ]
+    elif currency_code in ("AED", "SAR"):
         meta_rows = [
             ("End User:", quote_meta.get("end user", "")),
             ("Reseller:", quote_meta.get("reseller", "")),

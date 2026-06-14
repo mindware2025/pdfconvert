@@ -60,21 +60,26 @@ def _to_number(v):
         return 0.0
 
 
-def _get_local_logo_path() -> Optional[str]:
+def _get_local_logo_path(currency_code: str = "USD") -> Optional[str]:
     base_dir = Path(__file__).resolve().parent
     candidate_dirs = [
         base_dir,
         base_dir.parent,
     ]
+
+    preferred_names = ["dell spc.png", "dell copy.png", "dell.png", "dell_quote.png"]
+    if (currency_code or "USD").upper() != "EUR":
+        preferred_names = ["dell.png", "dell copy.png", "dell_quote.png"]
+
     for directory in candidate_dirs:
-        for name in ("dell.png", "dell copy.png", "dell_quote.png"):
+        for name in preferred_names:
             candidate = directory / name
             if candidate.exists():
                 return str(candidate)
     return None
 
 
-def _add_logo(ws, logo_bytes: Optional[bytes], anchor: str = "A1", width: int = 780, height: int = 52):
+def _add_logo(ws, logo_bytes: Optional[bytes], anchor: str = "A1", width: int = 780, height: int = 52, currency_code: str = "USD"):
     if logo_bytes:
         try:
             img = XLImage(BytesIO(logo_bytes))
@@ -88,7 +93,7 @@ def _add_logo(ws, logo_bytes: Optional[bytes], anchor: str = "A1", width: int = 
         except Exception:
             pass
 
-    local_logo = _get_local_logo_path()
+    local_logo = _get_local_logo_path(currency_code)
     if local_logo:
         try:
             img = XLImage(local_logo)
@@ -156,7 +161,7 @@ def _extract_metadata(ws) -> Dict[str, str]:
     return meta
 
 
-def build_dell_extended_services_output_filename(input_excel_bytes: bytes) -> str:
+def build_dell_extended_services_output_filename(input_excel_bytes: bytes, currency_code: str = "") -> str:
     """Build the download filename for the extended-services workbook."""
     quote_no = ""
     end_user = ""
@@ -176,7 +181,10 @@ def build_dell_extended_services_output_filename(input_excel_bytes: bytes) -> st
         _sanitize_filename_part(end_user),
         datetime.now().strftime("%Y-%m-%d"),
     ]
-    return "- ".join(parts) + ".xlsx"
+    filename = "- ".join(parts) + ".xlsx"
+    if (currency_code or "").upper() in ("EUR", "USD"):
+        filename = filename.replace(".xlsx", f"_{(currency_code or 'EUR').upper()}.xlsx")
+    return filename
 
 
 def _aed_footer_notes() -> List[str]:
@@ -275,10 +283,17 @@ def generate_dell_extended_services_quote(
     logo_bytes: Optional[bytes] = None,
     margin_percent: float = 0.0,
     currency_code: str = "AED",
+    exchange_rate: Optional[float] = None,
 ) -> bytes:
 
     currency_code = (currency_code or "AED").upper()
-    conversion_rate = get_currency_rate(currency_code)
+    if currency_code == "EUR" and exchange_rate not in (None, ""):
+        try:
+            conversion_rate = float(exchange_rate)
+        except Exception:
+            conversion_rate = get_currency_rate(currency_code)
+    else:
+        conversion_rate = get_currency_rate(currency_code)
     currency_fmt = get_currency_format(currency_code)
 
     src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
@@ -295,16 +310,25 @@ def generate_dell_extended_services_quote(
 
     # ===== HEADER: use the full banner logo across A:H =====
     ws.merge_cells("A1:H2")
-    _add_logo(ws, logo_bytes, anchor="A1", width=780, height=52)
+    _add_logo(ws, logo_bytes, anchor="A1", width=780, height=52, currency_code=currency_code)
 
     # Contact info (AED style)
-    ws.merge_cells("A5:D5")
-    ws.merge_cells("A6:D6")
-    ws.merge_cells("A7:D7")
-    ws["A5"] = "P O Box 55609, Dubai, UAE"
-    ws["A6"] = "Tel :  +9714 4500600    Fax : +9714 4500678"
-    ws["A7"] = "Website :  www.mindware.net"
-    for cell in ("A5", "A6", "A7"):
+    if currency_code == "EUR":
+        ws.merge_cells("A5:D8")
+        ws["A5"] = "14, rue du Bas Marin"
+        ws["A6"] = "94537 Orly cedex - France"
+        ws["A7"] = "DL:     +33 1 49 79 42 24"
+        ws["A8"] = "Fax:   +33 1 49 79 45 33"
+        address_cells = ("A5", "A6", "A7", "A8")
+    else:
+        ws.merge_cells("A5:D5")
+        ws.merge_cells("A6:D6")
+        ws.merge_cells("A7:D7")
+        ws["A5"] = "P O Box 55609, Dubai, UAE"
+        ws["A6"] = "Tel :  +9714 4500600    Fax : +9714 4500678"
+        ws["A7"] = "Website :  www.mindware.net"
+        address_cells = ("A5", "A6", "A7")
+    for cell in address_cells:
         ws[cell].font = Font(bold=True, size=11, color="1F497D")
         ws[cell].alignment = Alignment(horizontal="left", vertical="center")
 

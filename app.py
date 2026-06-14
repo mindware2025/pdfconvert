@@ -2500,8 +2500,6 @@ elif tool == "💻 Dell Quotation":
 
     )
 
-
-
     currency_code = st.radio(
 
         "Currency",
@@ -2512,7 +2510,16 @@ elif tool == "💻 Dell Quotation":
 
     )
 
-
+    exchange_rate = None
+    if currency_code == "EUR":
+        exchange_rate = st.number_input(
+            "Exchange Rate (EUR)",
+            min_value=0.0,
+            value=0.92,
+            step=0.01,
+            format="%.4f",
+            key="dell_eur_exchange_rate",
+        )
 
     if "dell_output_bytes" not in st.session_state:
 
@@ -2553,6 +2560,26 @@ elif tool == "💻 Dell Quotation":
     if "dell_last_margin_percent" not in st.session_state:
 
         st.session_state["dell_last_margin_percent"] = None
+
+    if "dell_output_bytes_eur" not in st.session_state:
+
+        st.session_state["dell_output_bytes_eur"] = None
+
+    if "dell_output_bytes_usd" not in st.session_state:
+
+        st.session_state["dell_output_bytes_usd"] = None
+
+    if "dell_output_name_eur" not in st.session_state:
+
+        st.session_state["dell_output_name_eur"] = None
+
+    if "dell_output_name_usd" not in st.session_state:
+
+        st.session_state["dell_output_name_usd"] = None
+
+    if "dell_last_exchange_rate" not in st.session_state:
+
+        st.session_state["dell_last_exchange_rate"] = None
 
     if "dell_last_template_label" not in st.session_state:
 
@@ -2598,11 +2625,15 @@ elif tool == "💻 Dell Quotation":
 
 
 
+    current_exchange_rate = exchange_rate if currency_code == "EUR" else None
+
     if (
 
         st.session_state.get("dell_last_currency_code") not in (None, currency_code)
 
         or st.session_state.get("dell_last_margin_percent") not in (None, margin_percent)
+
+        or st.session_state.get("dell_last_exchange_rate") not in (None, current_exchange_rate)
 
     ):
 
@@ -2687,43 +2718,37 @@ elif tool == "💻 Dell Quotation":
 
                     template_type = detect_dell_template(input_bytes)
 
-                    if template_type == "extended_services":
-
-                        template_label = "extended_services"
-
-                        out_bytes = generate_dell_extended_services_quote(
-
-                            input_excel_bytes=input_bytes,
-
-                            margin_percent=margin_percent,
-
-                            currency_code=currency_code,
-
-                        )
-
-                        output_name = build_dell_extended_services_output_filename(input_bytes)
-
+                    if currency_code == "EUR":
+                        currencies_to_generate = ["EUR", "USD"]
                     else:
+                        currencies_to_generate = [currency_code]
 
+                    if template_type == "extended_services":
+                        template_label = "extended_services"
+                        generated_outputs = {}
+                        for target_currency in currencies_to_generate:
+                            out_bytes = generate_dell_extended_services_quote(
+                                input_excel_bytes=input_bytes,
+                                margin_percent=margin_percent,
+                                currency_code=target_currency,
+                                exchange_rate=exchange_rate if target_currency == "EUR" else None,
+                            )
+                            generated_outputs[target_currency] = out_bytes
+                        out_bytes = generated_outputs.get("EUR", next(iter(generated_outputs.values())))
+                        output_name = build_dell_extended_services_output_filename(input_bytes, currency_code=currency_code)
+                    else:
                         template_label = detect_dell_standard_variant(input_bytes)
-
-                        out_bytes = generate_dell_quote(
-
-                            input_excel_bytes=input_bytes,
-
-                            margin_percent=margin_percent,
-
-                            currency_code=currency_code,
-
-                        )
-
-                        output_name = build_dell_output_filename(
-
-                            input_bytes,
-
-                            currency_code=currency_code,
-
-                        )
+                        generated_outputs = {}
+                        for target_currency in currencies_to_generate:
+                            out_bytes = generate_dell_quote(
+                                input_excel_bytes=input_bytes,
+                                margin_percent=margin_percent,
+                                currency_code=target_currency,
+                                exchange_rate=exchange_rate if target_currency == "EUR" else None,
+                            )
+                            generated_outputs[target_currency] = out_bytes
+                        out_bytes = generated_outputs.get("EUR", next(iter(generated_outputs.values())))
+                        output_name = build_dell_output_filename(input_bytes, currency_code=currency_code)
 
 
 
@@ -2740,8 +2765,19 @@ elif tool == "💻 Dell Quotation":
 
 
                     st.session_state["dell_output_bytes"] = out_bytes
-
+                    st.session_state["dell_output_bytes_eur"] = generated_outputs.get("EUR")
+                    st.session_state["dell_output_bytes_usd"] = generated_outputs.get("USD")
                     st.session_state["dell_output_name"] = output_name
+                    st.session_state["dell_output_name_eur"] = (
+                        build_dell_output_filename(input_bytes, currency_code="EUR")
+                        if template_type != "extended_services"
+                        else build_dell_extended_services_output_filename(input_bytes, currency_code="EUR")
+                    )
+                    st.session_state["dell_output_name_usd"] = (
+                        build_dell_output_filename(input_bytes, currency_code="USD")
+                        if template_type != "extended_services"
+                        else build_dell_extended_services_output_filename(input_bytes, currency_code="USD")
+                    )
 
                     st.session_state["dell_generation_done"] = True
 
@@ -2750,6 +2786,7 @@ elif tool == "💻 Dell Quotation":
                     st.session_state["dell_last_currency_code"] = currency_code
 
                     st.session_state["dell_last_margin_percent"] = margin_percent
+                    st.session_state["dell_last_exchange_rate"] = current_exchange_rate
 
                     st.session_state["dell_last_template_label"] = template_label
 
