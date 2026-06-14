@@ -914,6 +914,8 @@ def _extract_excel_consolidation_fee(ws) -> float:
                     continue
                 parsed = _parse_money(next_value)
                 if parsed is not None:
+                    if abs(parsed) < 1e-9:
+                        parsed = 0.0
                     logger.debug(
                         "Excel consolidation fee found at row=%s col=%s, value_col=%s, raw_value=%s, parsed=%s",
                         cell.row,
@@ -948,6 +950,8 @@ def _extract_excel_shipping_fee(ws) -> float:
 
                 parsed = _parse_money(next_value)
                 shipping_fee = parsed or 0.0
+                if abs(shipping_fee) < 1e-9:
+                    shipping_fee = 0.0
                 logger.debug(
                     "Excel shipping fee found at row=%s col=%s, value_col=%s, raw_value=%s, parsed=%s",
                     cell.row,
