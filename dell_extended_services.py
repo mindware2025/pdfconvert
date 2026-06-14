@@ -391,13 +391,13 @@ def generate_dell_extended_services_quote(
 
     # ===== TABLE HEADER =====
     header_row = customer_title_row + 2
-    ws[f"A{header_row}"] = "Sr. No."
-    ws[f"B{header_row}"] = "Part Number"
+    ws[f"A{header_row}"] = "N°"
+    ws[f"B{header_row}"] = "N° de pièce"
     ws[f"C{header_row}"] = "Description"
-    ws[f"D{header_row}"] = "Qty"
-    ws[f"E{header_row}"] = "Unit Price"
-    ws[f"F{header_row}"] = "Total Price (excluding vat)"
-    ws[f"G{header_row}"] = "Margin"
+    ws[f"D{header_row}"] = "Qté"
+    ws[f"E{header_row}"] = "Prix unitaire"
+    ws[f"F{header_row}"] = "Prix total"
+    ws[f"G{header_row}"] = "Marge"
 
     header_fill = PatternFill(start_color="9BC2E6", end_color="9BC2E6", fill_type="solid")
     helper_header_fill = PatternFill(start_color="F4CCCC", end_color="F4CCCC", fill_type="solid")
@@ -469,7 +469,7 @@ def generate_dell_extended_services_quote(
     if total_cells:
         total_row = row_ptr
         ws.merge_cells(start_row=total_row, start_column=2, end_row=total_row, end_column=5)
-        ws[f"B{total_row}"] = "Total price"
+        ws[f"B{total_row}"] = "Prix total"
         ws[f"B{total_row}"].alignment = Alignment(horizontal="right", vertical="center")
         ws[f"B{total_row}"].font = Font(bold=True, color="1F497D")
 
