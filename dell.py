@@ -2069,13 +2069,13 @@ def generate_dell_quote(
             widths["D"] = 16
             widths["E"] = 18
             widths["F"] = 17
-                widths["G"] = 12
-                widths[helper_fee_col] = 12
+            widths["G"] = 12
+            widths[helper_fee_col] = 12
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
     ws.column_dimensions[helper_unit_col].hidden = False
     ws.column_dimensions[helper_margin_col].hidden = False
-            ws.column_dimensions[helper_fee_col].hidden = False
+    ws.column_dimensions[helper_fee_col].hidden = False
 
     # Header rows height
     for rr in range(1, 3):
