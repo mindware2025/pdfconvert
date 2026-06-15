@@ -254,7 +254,7 @@ def build_orion_description(text: str) -> str:
         _extract_operating_system(cleaned),
         _extract_support_terms(cleaned),
     ]
-    return " | ".join(part for part in parts if part)
+    return ", ".join(part for part in parts if part)
 
 
 # ── config-row matchers ───────────────────────────────────────────────────────
@@ -426,7 +426,7 @@ def build_orion_description_from_config(desc: str, config_rows: list, idx: int) 
     if support_text:
         parts.append(support_text)
 
-    combined = " | ".join(part for part in parts if part)
+    combined = ", ".join(part for part in parts if part)
     if combined:
         return combined
     return build_orion_description(base)

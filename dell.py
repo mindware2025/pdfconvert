@@ -2006,9 +2006,13 @@ def generate_dell_quote(
     if style_currency in ("AED", "EUR", "SAR"):
         helper_unit_col = "G" if include_part_number else "F"
         helper_margin_col = "H" if include_part_number else "G"
+        # Add a per-line fees column for EUR-style outputs (and keep for AED/SAR layouts).
+        # This is a visible helper column where users can enter a per-unit fee (default 0).
+        helper_fee_col = chr(ord(helper_margin_col) + 1)
     else:
         helper_unit_col = "J" if include_part_number else "I"
         helper_margin_col = "K" if include_part_number else "J"
+        helper_fee_col = "L" if include_part_number else "K"
     helper_value_row = 16 if style_currency in ("AED", "SAR") else 2
     helper_aux_row = helper_value_row + 1
     desc_col = "C" if include_part_number else "B"
@@ -2057,17 +2061,21 @@ def generate_dell_quote(
             widths["F"] = 18
             widths["G"] = 17
             widths["H"] = 12
+            # fee helper column width
+            widths[helper_fee_col] = 12
         else:
             widths["B"] = min(max(42, description_width), 56)
             widths["C"] = 8
             widths["D"] = 16
             widths["E"] = 18
             widths["F"] = 17
-            widths["G"] = 12
+                widths["G"] = 12
+                widths[helper_fee_col] = 12
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
     ws.column_dimensions[helper_unit_col].hidden = False
     ws.column_dimensions[helper_margin_col].hidden = False
+            ws.column_dimensions[helper_fee_col].hidden = False
 
     # Header rows height
     for rr in range(1, 3):
@@ -2226,15 +2234,16 @@ def generate_dell_quote(
     ws[f"{unit_price_col}{header_row}"] = "Prix unitaire"
     ws[f"{total_price_col}{header_row}"] = "Prix total"
     ws[f"{helper_unit_col}{header_row}"] = "Prix unitaire d’origine"
+    ws[f"{helper_fee_col}{header_row}"] = "Fees"
     ws[f"{helper_margin_col}{header_row}"] = "Marge"
     header_fill = PatternFill(start_color="9BC2E6", end_color="9BC2E6", fill_type="solid")
     header_font = Font(bold=True, color="000000")
 
-    header_cells = [f"A{header_row}", f"{desc_col}{header_row}", f"{qty_col}{header_row}", f"{unit_price_col}{header_row}", f"{total_price_col}{header_row}", f"{helper_unit_col}{header_row}", f"{helper_margin_col}{header_row}"]
+    header_cells = [f"A{header_row}", f"{desc_col}{header_row}", f"{qty_col}{header_row}", f"{unit_price_col}{header_row}", f"{total_price_col}{header_row}", f"{helper_unit_col}{header_row}", f"{helper_fee_col}{header_row}", f"{helper_margin_col}{header_row}"]
     if include_part_number:
         header_cells.insert(1, f"B{header_row}")
     for addr in header_cells:
-        ws[addr].fill = helper_header_fill if addr in (f"{helper_unit_col}{header_row}", f"{helper_margin_col}{header_row}") else header_fill
+        ws[addr].fill = helper_header_fill if addr in (f"{helper_unit_col}{header_row}", f"{helper_fee_col}{header_row}", f"{helper_margin_col}{header_row}") else header_fill
         ws[addr].font = header_font
         ws[addr].alignment = Alignment(horizontal="center", vertical="center")
         ws[addr].border = border_thin
@@ -2274,8 +2283,12 @@ def generate_dell_quote(
         ws[f"{helper_margin_col}{row_ptr}"].value = margin_percent
         ws[f"{helper_margin_col}{row_ptr}"].number_format = margin_fmt
 
+        # The fees helper column (per-unit) — default 0, editable by user.
+        ws[f"{helper_fee_col}{row_ptr}"].value = 0
+        ws[f"{helper_fee_col}{row_ptr}"].number_format = currency_fmt
+
         # ---- Unit Price shows the adjusted unit price
-        ws[f"{unit_price_col}{row_ptr}"].value = f"=ROUND(((({helper_unit_col}{row_ptr}*${helper_margin_col}${helper_value_row})+{helper_unit_col}{row_ptr})/(1-{helper_margin_col}{row_ptr}/100)),2)"
+        ws[f"{unit_price_col}{row_ptr}"].value = f"=ROUND((((( {helper_unit_col}{row_ptr} + {helper_fee_col}{row_ptr} )*${helper_margin_col}${helper_value_row}) + {helper_unit_col}{row_ptr} + {helper_fee_col}{row_ptr})/(1-{helper_margin_col}{row_ptr}/100)),2)"
         ws[f"{unit_price_col}{row_ptr}"].number_format = currency_fmt
 
         # ---- Total Price = Qty * adjusted unit price
@@ -2283,11 +2296,11 @@ def generate_dell_quote(
         ws[f"{total_price_col}{row_ptr}"].number_format = currency_fmt
 
         # Styling
-        data_cells = [f"A{row_ptr}", f"{desc_col}{row_ptr}", f"{qty_col}{row_ptr}", f"{unit_price_col}{row_ptr}", f"{total_price_col}{row_ptr}", f"{helper_unit_col}{row_ptr}", f"{helper_margin_col}{row_ptr}"]
+        data_cells = [f"A{row_ptr}", f"{desc_col}{row_ptr}", f"{qty_col}{row_ptr}", f"{unit_price_col}{row_ptr}", f"{total_price_col}{row_ptr}", f"{helper_unit_col}{row_ptr}", f"{helper_fee_col}{row_ptr}", f"{helper_margin_col}{row_ptr}"]
         if include_part_number:
             data_cells.insert(1, f"B{row_ptr}")
         for addr in data_cells:
-            ws[addr].fill = helper_body_fill if addr in (f"{helper_unit_col}{row_ptr}", f"{helper_margin_col}{row_ptr}") else yellow
+            ws[addr].fill = helper_body_fill if addr in (f"{helper_unit_col}{row_ptr}", f"{helper_fee_col}{row_ptr}", f"{helper_margin_col}{row_ptr}") else yellow
             ws[addr].border = border_thin
             ws[addr].alignment = Alignment(horizontal="center", vertical="top")
         ws[f"{desc_col}{row_ptr}"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
@@ -2299,7 +2312,7 @@ def generate_dell_quote(
     first_data_row = header_row + 1
     last_data_row = row_ptr - 1
     if last_data_row >= first_data_row:
-        ws[f"{helper_margin_col}{helper_value_row}"] = f"=IFERROR(${helper_unit_col}${helper_value_row}/SUMPRODUCT(${qty_col}${first_data_row}:${qty_col}${last_data_row},${helper_unit_col}${first_data_row}:${helper_unit_col}${last_data_row}),0)"
+        ws[f"{helper_margin_col}{helper_value_row}"] = f"=IFERROR(${helper_unit_col}${helper_value_row}/SUMPRODUCT(${qty_col}${first_data_row}:${qty_col}${last_data_row},${helper_unit_col}${first_data_row}:${helper_unit_col}${last_data_row}+${helper_fee_col}{first_data_row}:${helper_fee_col}{last_data_row}),0)"
     else:
         ws[f"{helper_margin_col}{helper_value_row}"] = 0
 

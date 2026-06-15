@@ -402,9 +402,24 @@ def generate_dell_extended_services_quote(
     ws[f"B{header_row}"] = "N° de pièce"
     ws[f"C{header_row}"] = "Description"
     ws[f"D{header_row}"] = "Qté"
-    ws[f"E{header_row}"] = "Prix unitaire"
-    ws[f"F{header_row}"] = "Prix total"
-    ws[f"G{header_row}"] = "Marge"
+    # For EUR-style outputs add a Fees column between unit price and total
+    if is_eur_location:
+        unit_col = "E"
+        fees_col = "F"
+        total_col = "G"
+        margin_col = "H"
+        ws[f"{unit_col}{header_row}"] = "Prix unitaire"
+        ws[f"{fees_col}{header_row}"] = "Fees"
+        ws[f"{total_col}{header_row}"] = "Prix total"
+        ws[f"{margin_col}{header_row}"] = "Marge"
+    else:
+        unit_col = "E"
+        fees_col = None
+        total_col = "F"
+        margin_col = "G"
+        ws[f"{unit_col}{header_row}"] = "Prix unitaire"
+        ws[f"{total_col}{header_row}"] = "Prix total"
+        ws[f"{margin_col}{header_row}"] = "Marge"
 
     header_fill = PatternFill(start_color="9BC2E6", end_color="9BC2E6", fill_type="solid")
     helper_header_fill = PatternFill(start_color="F4CCCC", end_color="F4CCCC", fill_type="solid")
@@ -416,9 +431,12 @@ def generate_dell_extended_services_quote(
         bottom=Side(style="thin", color="000000"),
     )
 
-    header_cells = [f"A{header_row}", f"B{header_row}", f"C{header_row}", f"D{header_row}", f"E{header_row}", f"F{header_row}", f"G{header_row}"]
+    header_cells = [f"A{header_row}", f"B{header_row}", f"C{header_row}", f"D{header_row}", f"{unit_col}{header_row}", f"{total_col}{header_row}", f"{margin_col}{header_row}"]
+    if fees_col:
+        # insert fees column before total in header_cells
+        header_cells.insert(header_cells.index(f"{total_col}{header_row}"), f"{fees_col}{header_row}")
     for addr in header_cells:
-        ws[addr].fill = helper_header_fill if addr == f"G{header_row}" else header_fill
+        ws[addr].fill = helper_header_fill if addr == f"{margin_col}{header_row}" or (fees_col and addr == f"{fees_col}{header_row}") else header_fill
         ws[addr].font = header_font
         ws[addr].alignment = Alignment(horizontal="center", vertical="center")
         ws[addr].border = border_thin
@@ -449,26 +467,34 @@ def generate_dell_extended_services_quote(
         ws[f"D{row_ptr}"] = qty
 
         # Unit Price with selected currency conversion and margin.
-        ws[f"E{row_ptr}"].value = f"=ROUND(({price_usd}*{conversion_rate})/(1-{margin_percent}/100),2)"
-        ws[f"E{row_ptr}"].number_format = currency_fmt
+        if fees_col:
+            # fees column exists (EUR style): default 0 and include in unit price calculation
+            ws[f"{fees_col}{row_ptr}"].value = 0
+            ws[f"{fees_col}{row_ptr}"].number_format = currency_fmt
+            ws[f"{unit_col}{row_ptr}"].value = f"=ROUND(({price_usd}*{conversion_rate} + {fees_col}{row_ptr})/(1-{margin_percent}/100),2)"
+        else:
+            ws[f"{unit_col}{row_ptr}"].value = f"=ROUND(({price_usd}*{conversion_rate})/(1-{margin_percent}/100),2)"
+        ws[f"{unit_col}{row_ptr}"].number_format = currency_fmt
 
         # Total Price = Qty * Unit Price
-        ws[f"F{row_ptr}"].value = f"=D{row_ptr}*E{row_ptr}"
-        ws[f"F{row_ptr}"].number_format = currency_fmt
+        ws[f"{total_col}{row_ptr}"].value = f"=D{row_ptr}*{unit_col}{row_ptr}"
+        ws[f"{total_col}{row_ptr}"].number_format = currency_fmt
 
         # Margin column
-        ws[f"G{row_ptr}"].value = margin_percent / 100.0
-        ws[f"G{row_ptr}"].number_format = margin_fmt
+        ws[f"{margin_col}{row_ptr}"].value = margin_percent / 100.0
+        ws[f"{margin_col}{row_ptr}"].number_format = margin_fmt
 
         # Styling
-        data_cells = [f"A{row_ptr}", f"B{row_ptr}", f"C{row_ptr}", f"D{row_ptr}", f"E{row_ptr}", f"F{row_ptr}", f"G{row_ptr}"]
+        data_cells = [f"A{row_ptr}", f"B{row_ptr}", f"C{row_ptr}", f"D{row_ptr}", f"{unit_col}{row_ptr}", f"{total_col}{row_ptr}", f"{margin_col}{row_ptr}"]
+        if fees_col:
+            data_cells.insert(data_cells.index(f"{total_col}{row_ptr}"), f"{fees_col}{row_ptr}")
         for addr in data_cells:
-            ws[addr].fill = helper_body_fill if addr == f"G{row_ptr}" else yellow
+            ws[addr].fill = helper_body_fill if addr == f"{margin_col}{row_ptr}" or (fees_col and addr == f"{fees_col}{row_ptr}") else yellow
             ws[addr].border = border_thin
             ws[addr].alignment = Alignment(horizontal="center", vertical="top")
         ws[f"C{row_ptr}"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
 
-        total_cells.append(f"F{row_ptr}")
+        total_cells.append(f"{total_col}{row_ptr}")
         sr_no += 1
         row_ptr += 1
 
@@ -480,13 +506,13 @@ def generate_dell_extended_services_quote(
         ws[f"B{total_row}"].alignment = Alignment(horizontal="right", vertical="center")
         ws[f"B{total_row}"].font = Font(bold=True, color="1F497D")
 
-        ws[f"F{total_row}"] = f"=SUM({','.join(total_cells)})"
-        ws[f"F{total_row}"].number_format = currency_fmt
-        ws[f"F{total_row}"].font = Font(bold=True, color="1F497D")
-        ws[f"F{total_row}"].alignment = Alignment(horizontal="center", vertical="center")
-        ws[f"F{total_row}"].border = border_thin
-        ws[f"G{total_row}"].fill = helper_body_fill
-        ws[f"G{total_row}"].border = border_thin
+        ws[f"{total_col}{total_row}"] = f"=SUM({','.join(total_cells)})"
+        ws[f"{total_col}{total_row}"] .number_format = currency_fmt
+        ws[f"{total_col}{total_row}"] .font = Font(bold=True, color="1F497D")
+        ws[f"{total_col}{total_row}"] .alignment = Alignment(horizontal="center", vertical="center")
+        ws[f"{total_col}{total_row}"] .border = border_thin
+        ws[f"{margin_col}{total_row}"] .fill = helper_body_fill
+        ws[f"{margin_col}{total_row}"] .border = border_thin
 
     # ===== FOOTER NOTES =====
     footer_notes = get_footer_notes(currency_code)
@@ -506,11 +532,16 @@ def generate_dell_extended_services_quote(
 
     # Column widths
     widths = {
-        "A": 8, "B": 15, "C": 50, "D": 8, "E": 15, "F": 18, "G": 12
+        "A": 8, "B": 15, "C": 50, "D": 8,
+        unit_col: 15,
+        total_col: 18,
+        margin_col: 12,
     }
+    if fees_col:
+        widths[fees_col] = 12
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
-    ws.column_dimensions["G"].hidden = False
+    ws.column_dimensions[margin_col].hidden = False
 
     # ===== CONFIGURATION SHEET =====
     ws2 = wb.create_sheet("Configuration")
