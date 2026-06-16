@@ -489,15 +489,15 @@ def generate_dell_extended_services_quote(
         ws[f"{unit_col}{row_ptr}"].number_format = currency_fmt
 
         # Total Price = Qty * Unit Price
-        ws[f"{total_col}{row_ptr}"].value = f\"=D{row_ptr}*{unit_col}{row_ptr}\"
+        ws[f"{total_col}{row_ptr}"].value = f'=D{row_ptr}*{unit_col}{row_ptr}'
         ws[f"{total_col}{row_ptr}"].number_format = currency_fmt
 
         # USD original prices (only for EUR)
         if usd_unit_col:
-            ws[f\"{usd_unit_col}{row_ptr}\"].value = price_usd
-            ws[f\"{usd_unit_col}{row_ptr}\"].number_format = currency_fmt
-            ws[f\"{usd_total_col}{row_ptr}\"].value = price_usd * qty
-            ws[f\"{usd_total_col}{row_ptr}\"].number_format = currency_fmt
+            ws[f'{usd_unit_col}{row_ptr}'].value = price_usd
+            ws[f'{usd_unit_col}{row_ptr}'].number_format = currency_fmt
+            ws[f'{usd_total_col}{row_ptr}'].value = price_usd * qty
+            ws[f'{usd_total_col}{row_ptr}'].number_format = currency_fmt
 
         # Margin column
         ws[f"{margin_col}{row_ptr}"].value = margin_percent / 100.0
