@@ -1260,43 +1260,56 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
             if len(collected) > 1:
                 return "\n".join(collected).strip()
             
-            # Single line: aggressively split it
+            # Single line: try to split intelligently, otherwise use commas
             shipping_text = collected[0]
             
-            # If it's a long single line, split every ~40 characters or on number/code boundaries
-            if len(shipping_text) > 60:
-                words = shipping_text.split()
-                parts = []
-                current = []
-                current_length = 0
-                
-                for word in words:
-                    word_len = len(word) + 1  # +1 for space
-                    
-                    # Always break on 4+ digit numbers or 2-letter country codes if we have content
-                    if ((word.isdigit() and len(word) >= 4) or (len(word) <= 3 and word.isupper() and word.isalpha() and len(current) > 0)):
-                        if current:
-                            parts.append(" ".join(current))
-                            current = []
-                            current_length = 0
-                        parts.append(word)
-                    # Or break after ~40 characters to keep lines readable
-                    elif current_length + word_len > 40:
-                        if current:
-                            parts.append(" ".join(current))
-                            current = [word]
-                            current_length = word_len
-                    else:
-                        current.append(word)
-                        current_length += word_len
-                
-                if current:
+            # Try to split on significant boundaries
+            words = shipping_text.split()
+            parts = []
+            current = []
+            
+            for word in words:
+                # Break on 4+ digit numbers (postal codes)
+                if word.isdigit() and len(word) >= 4:
+                    if current:
+                        parts.append(" ".join(current))
+                        current = []
+                    parts.append(word)
+                # Break on 2-3 letter country codes (if we have content already)
+                elif len(word) <= 3 and word.isupper() and word.isalpha() and current:
                     parts.append(" ".join(current))
-                
-                # Use split version if we got multiple parts
-                if len(parts) > 1:
-                    parts = [p.strip() for p in parts if p.strip()]
-                    shipping_text = "\n".join(parts)
+                    current = [word]
+                else:
+                    current.append(word)
+            
+            if current:
+                parts.append(" ".join(current))
+            
+            # If we got multiple parts, join with newlines
+            if len(parts) > 1:
+                shipping_text = "\n".join(p.strip() for p in parts if p.strip())
+            else:
+                # Fallback: if it's still one line and long, use comma separation for readability
+                if len(shipping_text) > 60:
+                    # Split on word boundaries every ~30-35 chars with comma
+                    words = shipping_text.split()
+                    groups = []
+                    current_group = []
+                    current_len = 0
+                    
+                    for word in words:
+                        if current_len + len(word) + 1 > 35 and current_group:
+                            groups.append(" ".join(current_group))
+                            current_group = [word]
+                            current_len = len(word)
+                        else:
+                            current_group.append(word)
+                            current_len += len(word) + 1
+                    
+                    if current_group:
+                        groups.append(" ".join(current_group))
+                    
+                    shipping_text = ", ".join(groups) if len(groups) > 1 else shipping_text
             
             return shipping_text.strip()
 
@@ -2319,19 +2332,14 @@ def generate_dell_quote(
 
     # ---- Quote metadata (varies by country/template) ----
     if style_currency == "EUR":
-        # Check if company name and customer name are both empty (PDF case with shipping info)
-        company_name = quote_meta.get("company name", "").strip()
-        customer_name = quote_meta.get("customer name", "").strip()
-        end_user = quote_meta.get("end user", "").strip()
-        
-        if not company_name and not customer_name and end_user:
-            # Use End Customer instead when company/customer info is missing but we have shipping info
+        # For PDF uploads: only show End Customer and Reseller
+        if is_pdf:
             meta_rows = [
-                ("End Customer:", end_user),
+                ("End Customer:", quote_meta.get("end user", "")),
                 ("Reseller:", quote_meta.get("reseller", "")),
             ]
         else:
-            # Standard EUR layout with all fields
+            # For Excel uploads: show all fields
             meta_rows = [
                 ("Company Name:", quote_meta.get("company name", "")),
                 ("Customer Name:", quote_meta.get("customer name", "")),
