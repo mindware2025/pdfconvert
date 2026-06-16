@@ -1225,22 +1225,29 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
 
         for idx, line in enumerate(lines):
             lower_line = line.lower()
-            if "shipping information" not in lower_line:
+            # Match various forms: "Shipping Information:", "Shipping Information", "Ship To:", etc.
+            if not any(marker in lower_line for marker in ["shipping information", "ship to"]):
                 continue
 
             collected: List[str] = []
 
-            # Skip the "Shipping Information:" header line
+            # Skip the label line, start collecting from next line
             next_idx = idx + 1
             while next_idx < len(lines):
                 candidate = lines[next_idx].strip()
                 candidate_lower = candidate.lower()
                 
-                # Stop at empty lines followed by markers or at markers directly
+                # Skip empty lines
                 if not candidate:
                     next_idx += 1
                     continue
+                    
+                # Stop at section markers
                 if any(marker in candidate_lower for marker in stop_markers):
+                    break
+                
+                # Stop at other common section headers
+                if any(x in candidate_lower for x in ["important notes", "governing terms", "payment"]):
                     break
                     
                 collected.append(candidate)
@@ -1249,7 +1256,7 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
             if not collected:
                 return ""
 
-            # Format shipping info as multi-line with line breaks
+            # Format shipping info as multi-line with newlines
             shipping_text = "\n".join(collected).strip()
             return shipping_text
 
@@ -1377,13 +1384,12 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
         metadata["reseller"] = reseller_from_layout
         logger.debug("PDF reseller layout extraction=%s", reseller_from_layout)
 
-    # Extract shipping information as fallback for customer/company info
+    # Extract shipping information (for EUR PDFs, this becomes the End Customer)
     shipping_info = _extract_pdf_shipping_info(lines)
     if shipping_info:
-        # Use shipping info as fallback if company/customer name are missing
-        if not metadata.get("company name", "").strip():
-            metadata["end_user"] = shipping_info
-            logger.debug("PDF shipping info used as end user=%s", shipping_info)
+        # For EUR/PDF cases: use shipping info as the primary customer info
+        metadata["end_user"] = shipping_info
+        logger.debug("PDF shipping info extracted=%s", shipping_info)
 
     # Extract consolidation fee when present; otherwise keep the zero fallback.
     for i, line in enumerate(lines):
