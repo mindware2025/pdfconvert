@@ -1260,41 +1260,43 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
             if len(collected) > 1:
                 return "\n".join(collected).strip()
             
-            # Single line: try to split on generic patterns (works for any language/format)
+            # Single line: aggressively split it
             shipping_text = collected[0]
-            import re
             
-            # Universal approach: split on patterns that work across different address formats
-            # Look for: postal codes (4+ digits), 2-letter country codes, or split into chunks
-            
-            parts = []
-            words = shipping_text.split()
-            current_part = []
-            
-            for word in words:
-                # If word is all digits and 4+ chars long (likely postal code), it's a break point
-                if word.isdigit() and len(word) >= 4:
-                    if current_part:
-                        parts.append(" ".join(current_part))
-                        current_part = []
-                    parts.append(word)
-                # If word is 2-3 uppercase letters (likely country/state code), check if we should break
-                elif len(word) <= 3 and word.isupper() and word.isalpha():
-                    # Break before country code if we have substantial content
-                    if current_part and len(current_part) > 1:
-                        parts.append(" ".join(current_part))
-                        current_part = [word]
+            # If it's a long single line, split every ~40 characters or on number/code boundaries
+            if len(shipping_text) > 60:
+                words = shipping_text.split()
+                parts = []
+                current = []
+                current_length = 0
+                
+                for word in words:
+                    word_len = len(word) + 1  # +1 for space
+                    
+                    # Always break on 4+ digit numbers or 2-letter country codes if we have content
+                    if ((word.isdigit() and len(word) >= 4) or (len(word) <= 3 and word.isupper() and word.isalpha() and len(current) > 0)):
+                        if current:
+                            parts.append(" ".join(current))
+                            current = []
+                            current_length = 0
+                        parts.append(word)
+                    # Or break after ~40 characters to keep lines readable
+                    elif current_length + word_len > 40:
+                        if current:
+                            parts.append(" ".join(current))
+                            current = [word]
+                            current_length = word_len
                     else:
-                        current_part.append(word)
-                else:
-                    current_part.append(word)
-            
-            if current_part:
-                parts.append(" ".join(current_part))
-            
-            # Join parts with newlines - fallback to original text if only 1 part
-            if len(parts) > 1:
-                shipping_text = "\n".join(p.strip() for p in parts if p.strip())
+                        current.append(word)
+                        current_length += word_len
+                
+                if current:
+                    parts.append(" ".join(current))
+                
+                # Use split version if we got multiple parts
+                if len(parts) > 1:
+                    parts = [p.strip() for p in parts if p.strip()]
+                    shipping_text = "\n".join(parts)
             
             return shipping_text.strip()
 
