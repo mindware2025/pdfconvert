@@ -657,6 +657,8 @@ def _extract_quote_metadata(ws):
 
     Dell quote layout puts labels in column B and values in column E, e.g.:
         B22: "Company Name:"   E22: "ACME"
+    
+    For PDF EUR uploads, also checks for "Shipping Information:" with multi-line data.
     """
     keys = {
         "company name": "Company Name",
@@ -668,10 +670,39 @@ def _extract_quote_metadata(ws):
 
     out = {k: "" for k in keys}
     max_row = min(ws.max_row, 120)
+    
+    # First pass: extract from standard Excel format (column B labels, column E values)
     for r in range(1, max_row + 1):
         label = _cell_to_text(ws.cell(r, 2).value).strip().lower().rstrip(":")
         if label in keys:
             out[label] = _cell_to_text(ws.cell(r, 5).value)
+    
+    # Second pass: check for "Shipping Information:" field (PDF EUR format - multi-line)
+    for r in range(1, max_row + 1):
+        row_values = [_cell_to_text(ws.cell(r, c).value) for c in range(1, 11)]
+        row_lower = [v.lower() for v in row_values]
+        row_text = " ".join(row_lower)
+        
+        if "shipping information" in row_text:
+            for idx, cell_text in enumerate(row_lower):
+                if "shipping information" in cell_text:
+                    col = idx + 1
+                    next_row = r + 1
+                    shipping_lines = []
+                    while next_row <= min(ws.max_row, r + 12):
+                        cell_value = _cell_to_text(ws.cell(next_row, col).value)
+                        if not cell_value:
+                            break
+                        cell_lower = cell_value.lower()
+                        if any(marker in cell_lower for marker in ("quote summary", "payment details", "terms of sale", "dell extended services", "product details")):
+                            break
+                        shipping_lines.append(cell_value.strip())
+                        next_row += 1
+                    if shipping_lines:
+                        out["end user"] = "\n".join(shipping_lines)
+                        break
+            break
+    
     return out
 
 
@@ -2283,9 +2314,14 @@ def generate_dell_quote(
         ws[f"B{idx}"] = value
         ws[f"B{idx}"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
 
+        # Calculate row height accounting for explicit newlines in shipping info
         text_len = len(_cell_to_text(value))
-        estimated_lines = max(1, min(4, (text_len // 32) + 1))
+        explicit_newlines = _cell_to_text(value).count("\n")
+        # Account for both word wrapping and explicit newlines
+        estimated_lines = max(1, explicit_newlines + 1 + max(0, (text_len // 32)))
+        estimated_lines = min(estimated_lines, 12)  # cap at 12 lines for very long shipping addresses
         ws.row_dimensions[idx].height = max(ws.row_dimensions[idx].height or 20, estimated_lines * 18)
+
 
     # ---- Recalculate helper row positions based on where metadata ends ----
     last_metadata_row = customer_title_row + len(meta_rows)
