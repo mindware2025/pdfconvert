@@ -141,6 +141,29 @@ def _extract_metadata(ws) -> Dict[str, str]:
                             break
                     break
 
+        # Handle "Shipping Information:" (PDF EUR format - multi-line)
+        if "shipping information" in row_text:
+            for idx, cell_text in enumerate(row_lower):
+                if "shipping information" in cell_text:
+                    col = idx + 1
+                    next_row = r + 1
+                    shipping_lines = []
+                    while next_row <= min(ws.max_row, r + 12):
+                        cell_value = _text(ws.cell(next_row, col).value)
+                        if not cell_value:
+                            break
+                        cell_lower = cell_value.lower()
+                        if any(marker in cell_lower for marker in ("quote summary", "payment details", "terms of sale", "dell extended services")):
+                            break
+                        shipping_lines.append(cell_value.strip())
+                        next_row += 1
+                    if shipping_lines:
+                        meta["end_user"] = "\n".join(shipping_lines)
+                        break
+            if meta["end_user"]:
+                break
+
+        # Handle "End User -" (Excel format - single line)
         if "end user -" in row_text:
             for idx, cell_text in enumerate(row_lower):
                 if "end user -" in cell_text:
