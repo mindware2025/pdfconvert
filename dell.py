@@ -1256,9 +1256,47 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
             if not collected:
                 return ""
 
-            # Format shipping info as line-by-line in the cell
-            shipping_text = "\n".join(collected).strip()
-            return shipping_text
+            # If multiple lines collected, join with newlines
+            if len(collected) > 1:
+                return "\n".join(collected).strip()
+            
+            # Single line: try to split on generic patterns (works for any language/format)
+            shipping_text = collected[0]
+            import re
+            
+            # Universal approach: split on patterns that work across different address formats
+            # Look for: postal codes (4+ digits), 2-letter country codes, or split into chunks
+            
+            parts = []
+            words = shipping_text.split()
+            current_part = []
+            
+            for word in words:
+                # If word is all digits and 4+ chars long (likely postal code), it's a break point
+                if word.isdigit() and len(word) >= 4:
+                    if current_part:
+                        parts.append(" ".join(current_part))
+                        current_part = []
+                    parts.append(word)
+                # If word is 2-3 uppercase letters (likely country/state code), check if we should break
+                elif len(word) <= 3 and word.isupper() and word.isalpha():
+                    # Break before country code if we have substantial content
+                    if current_part and len(current_part) > 1:
+                        parts.append(" ".join(current_part))
+                        current_part = [word]
+                    else:
+                        current_part.append(word)
+                else:
+                    current_part.append(word)
+            
+            if current_part:
+                parts.append(" ".join(current_part))
+            
+            # Join parts with newlines - fallback to original text if only 1 part
+            if len(parts) > 1:
+                shipping_text = "\n".join(p.strip() for p in parts if p.strip())
+            
+            return shipping_text.strip()
 
         return ""
 
