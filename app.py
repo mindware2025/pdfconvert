@@ -2733,6 +2733,7 @@ elif tool == "💻 Dell Quotation":
                                 currency_code=target_currency,
                                 exchange_rate=exchange_rate if target_currency == "EUR" else None,
                                 style_currency="EUR" if currency_code == "EUR" else None,
+                                include_footer_notes=False if currency_code == "EUR" else True,
                             )
                             generated_outputs[target_currency] = out_bytes
                         out_bytes = generated_outputs.get("EUR", next(iter(generated_outputs.values())))
@@ -2747,6 +2748,7 @@ elif tool == "💻 Dell Quotation":
                                 currency_code=target_currency,
                                 exchange_rate=exchange_rate if target_currency == "EUR" else None,
                                 style_currency="EUR" if currency_code == "EUR" else None,
+                                include_footer_notes=False if currency_code == "EUR" else True,
                             )
                             generated_outputs[target_currency] = out_bytes
                         out_bytes = generated_outputs.get("EUR", next(iter(generated_outputs.values())))
