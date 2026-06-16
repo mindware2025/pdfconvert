@@ -1256,7 +1256,7 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
             if not collected:
                 return ""
 
-            # Format shipping info as multi-line with newlines
+            # Format shipping info as line-by-line in the cell
             shipping_text = "\n".join(collected).strip()
             return shipping_text
 
@@ -2015,6 +2015,11 @@ def generate_dell_quote(
 
     quote_meta = {k: _strip_trailing_asterisk(v) for k, v in (quote_meta or {}).items()}
 
+    # Store original USD prices before conversion (for all EUR styling, PDF or Excel)
+    original_usd_items = None
+    if style_currency == "EUR" or (conversion_rate != 1.0):
+        original_usd_items = items.copy()
+
     if conversion_rate != 1.0:
         items = [
             (
@@ -2382,11 +2387,18 @@ def generate_dell_quote(
     row_ptr = header_row + 1
     sr_no = 1
     currency_fmt = CURRENCY_NUMBER_FORMATS.get(currency_code, f'"{currency_code}" #,##0.00')
+    # For EUR styling, USD columns need USD formatting
+    usd_currency_fmt = CURRENCY_NUMBER_FORMATS.get("USD", '"$"#,##0.00') if style_currency == "EUR" else currency_fmt
 
     margin_fmt = '0.00\\%'
     yellow = PatternFill(start_color="D9EAF7", end_color="D9EAF7", fill_type="solid")
     total_cells = []
-    for (desc_text, qty_val, unit_val, subtotal_val) in items:
+    for idx, (desc_text, qty_val, unit_val, subtotal_val) in enumerate(items):
+        # Get original USD price if available
+        original_usd_unit = None
+        if original_usd_items and idx < len(original_usd_items):
+            original_usd_unit = original_usd_items[idx][2]
+        
         ws[f"A{row_ptr}"] = sr_no
         if include_part_number:
             part_number_from_config = part_numbers_by_item.get(str(sr_no), "")
@@ -2416,13 +2428,12 @@ def generate_dell_quote(
         ws[f"{helper_fee_col}{row_ptr}"].value = 0
         ws[f"{helper_fee_col}{row_ptr}"].number_format = currency_fmt
 
-        # USD original prices (only for EUR)
-        if style_currency == "EUR":
-            # Store original USD unit and total prices
-            ws[f"{usd_unit_col}{row_ptr}"].value = unit_val
-            ws[f"{usd_unit_col}{row_ptr}"].number_format = currency_fmt
-            ws[f"{usd_total_col}{row_ptr}"].value = unit_val * qty_val
-            ws[f"{usd_total_col}{row_ptr}"].number_format = currency_fmt
+        # USD original prices (for EUR styling: use original USD prices from extraction)
+        if style_currency == "EUR" and currency_code == "EUR" and original_usd_unit is not None:
+            ws[f"{usd_unit_col}{row_ptr}"].value = original_usd_unit
+            ws[f"{usd_unit_col}{row_ptr}"].number_format = usd_currency_fmt
+            ws[f"{usd_total_col}{row_ptr}"].value = original_usd_unit * qty_val
+            ws[f"{usd_total_col}{row_ptr}"].number_format = usd_currency_fmt
 
         # ---- Unit Price shows the adjusted unit price
         ws[f"{unit_price_col}{row_ptr}"].value = f"=ROUND((((( {helper_unit_col}{row_ptr} + {helper_fee_col}{row_ptr} )*${helper_margin_col}${helper_value_row}) + {helper_unit_col}{row_ptr} + {helper_fee_col}{row_ptr})/(1-{helper_margin_col}{row_ptr}/100)),2)"
