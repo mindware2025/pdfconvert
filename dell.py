@@ -1388,7 +1388,7 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
     shipping_info = _extract_pdf_shipping_info(lines)
     if shipping_info:
         # For EUR/PDF cases: use shipping info as the primary customer info
-        metadata["end_user"] = shipping_info
+        metadata["end user"] = shipping_info
         logger.debug("PDF shipping info extracted=%s", shipping_info)
 
     # Extract consolidation fee when present; otherwise keep the zero fallback.
