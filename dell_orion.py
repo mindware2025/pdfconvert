@@ -32,6 +32,8 @@ from dell import (
     CURRENCY_NUMBER_FORMATS,
     _extract_all_config_rows,
     _extract_compact_quote_items_and_config,
+    _extract_excel_consolidation_fee,
+    _extract_excel_shipping_fee,
     _extract_grouped_template_items_and_config,
     _extract_pdf_quote_data,
     _extract_product_detail_headings,
@@ -434,6 +436,17 @@ def build_orion_description_from_config(desc: str, config_rows: list, idx: int) 
 
 # ── metadata extraction ───────────────────────────────────────────────────────
 
+def _extract_fee_values(input_excel_bytes: bytes) -> tuple[float, float]:
+    is_pdf = input_excel_bytes.lstrip().startswith(b"%PDF")
+    if is_pdf:
+        _, _, _, _, _, consolidation_fee = _extract_pdf_quote_data(input_excel_bytes)
+        return float(consolidation_fee or 0.0), 0.0
+
+    wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
+    ws = wb.active
+    return _extract_excel_consolidation_fee(ws), _extract_excel_shipping_fee(ws)
+
+
 def _extract_items_and_metadata(input_excel_bytes: bytes):
     is_pdf = input_excel_bytes.lstrip().startswith(b"%PDF")
     if is_pdf:
@@ -491,6 +504,7 @@ def build_dell_orion_output_filename(input_excel_bytes: bytes) -> str:
 
 def generate_orion_quote(input_excel_bytes: bytes, currency_code: str = "USD") -> bytes:
     items, _, config_rows, item_headings_by_item, _, _, _ = _extract_items_and_metadata(input_excel_bytes)
+    consolidation_fee, shipping_fee = _extract_fee_values(input_excel_bytes)
     currency_code = (currency_code or "USD").upper()
     conversion_rate = ORION_CURRENCY_CONVERSION_RATES.get(
         currency_code, CURRENCY_CONVERSION_RATES.get(currency_code, 1.0)
@@ -551,6 +565,28 @@ def generate_orion_quote(input_excel_bytes: bytes, currency_code: str = "USD") -
             unit_value,    # MSRP
             unit_value,    # Unit Cost
             "",            # Unit Selling
+        ])
+
+    if consolidation_fee:
+        ws.append([
+            "",
+            "",
+            "Consolidation Fee",
+            1,
+            float(consolidation_fee) * conversion_rate,
+            float(consolidation_fee) * conversion_rate,
+            "",
+        ])
+
+    if shipping_fee:
+        ws.append([
+            "",
+            "",
+            "Shipping",
+            1,
+            float(shipping_fee) * conversion_rate,
+            float(shipping_fee) * conversion_rate,
+            "",
         ])
 
     # Formatting
