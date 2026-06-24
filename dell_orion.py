@@ -52,7 +52,7 @@ ORION_HEADERS = [
 
 ORION_CURRENCY_CONVERSION_RATES = {
     "USD": 1.0,
-    "AED": 3.67,
+    "AED": 3.6725,
     "EUR": 0.92,
     "SAR": 3.75,
     "QAR": 3.64,
