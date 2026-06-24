@@ -231,9 +231,14 @@ def _extract_support_terms(text: str) -> str:
     if years == 0:
         return ""
 
+    support_parts = []
+    if re.search(r"\bupgrad(?:e|es)\b", combined, re.I):
+        support_parts.append("Service Upgrade Available")
+
     prefix_match = re.search(r"\bprosupport\b|\bpro\s*support\b", combined, re.I)
     prefix = prefix_match.group(0)[0].upper() if prefix_match else "P"
-    return _sanitize_text(f"{prefix} {years} Years")
+    support_parts.append(f"{prefix} {years} Years")
+    return _sanitize_text(", ".join(support_parts))
 
 
 def _extract_support_terms_from_parts(part1: str, part2: str) -> str:
