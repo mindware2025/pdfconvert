@@ -402,11 +402,22 @@ def _extract_items_and_metadata(input_excel_bytes: bytes):
     quote_ref_text = ""
     date_text = ""
     for r in range(1, min(ws.max_row, 60) + 1):
-        label = _cell_to_text(ws.cell(r, 2).value).lower()
-        if "quote" in label and "ref" in label:
-            quote_ref_text = _cell_to_text(ws.cell(r, 5).value)
-        if label.startswith("date"):
-            date_text = _cell_to_text(ws.cell(r, 5).value)
+        for col in range(1, min(ws.max_column, 10) + 1):
+            label = _cell_to_text(ws.cell(r, col).value).lower().strip().rstrip(":")
+            if not label:
+                continue
+            if any(label == kw or label.startswith(kw) for kw in ("quote ref", "quote no", "quote number", "quotation no", "quotation number")):
+                for vc in range(col + 1, min(ws.max_column, col + 6) + 1):
+                    val = _cell_to_text(ws.cell(r, vc).value).strip()
+                    if val:
+                        quote_ref_text = val
+                        break
+            if label.startswith("date") and not date_text:
+                for vc in range(col + 1, min(ws.max_column, col + 6) + 1):
+                    val = _cell_to_text(ws.cell(r, vc).value).strip()
+                    if val:
+                        date_text = val
+                        break
 
     return items, quote_meta, config_rows, item_headings_by_item, quote_ref_text, date_text, is_pdf
 
@@ -416,6 +427,7 @@ def build_dell_orion_output_filename(input_excel_bytes: bytes) -> str:
     partner_raw = _sanitize_text(
         quote_meta.get("reseller") or quote_meta.get("company name") or quote_meta.get("end user") or ""
     )
+    partner_raw = re.split(r"\s*[|*]\s*", partner_raw)[0].strip()
     quote_ref_raw = _sanitize_text(quote_ref_text or "")
     safe_partner = re.sub(r"[^A-Za-z0-9._-]+", " ", partner_raw).strip()
     safe_ref = re.sub(r"[^A-Za-z0-9._-]+", " ", quote_ref_raw).strip()
