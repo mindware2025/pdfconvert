@@ -29,7 +29,6 @@ from openpyxl.styles import Alignment, Font, PatternFill
 # ── keep all the original imports from your dell module ──────────────────────
 from dell import (
     CURRENCY_CONVERSION_RATES,
-    CURRENCY_NUMBER_FORMATS,
     _extract_all_config_rows,
     _extract_compact_quote_items_and_config,
     _extract_excel_consolidation_fee,
@@ -176,6 +175,8 @@ def _extract_graphics(text: str) -> str:
         clause = clause.strip()
         if not clause or not re.search(r"\b(?:nvidia|amd|radeon|rtx|gtx|graphics?|gpu)\b", clause, re.I):
             continue
+        if re.search(r"\bintegrated\b", clause, re.I):
+            continue
         phrase = re.sub(r"\s*\(.*?\)", "", clause)
         phrase = re.sub(r"\s*,.*$", "", phrase)
         phrase = re.sub(r"\b(?:graphics|gpu)\b.*$", "", phrase, flags=re.I)
@@ -209,44 +210,6 @@ def _extract_operating_system(text: str) -> str:
     return ""
 
 
-def _extract_support_terms(text: str) -> str:
-    """
-    Extract ProSupport years from a support row or combined support text.
-    Accepts strings like 'ProSupport Next Business Day 36 Months' or
-    'Hardware Support Services Upgrades ProSupport Next Business Day 36 Months'.
-    """
-    combined = _sanitize_text(text)
-    if not combined:
-        return ""
-
-    months_match = re.search(r"(\d+)\s*months?", combined, re.I)
-    if not months_match:
-        return ""
-
-    try:
-        years = int(int(months_match.group(1)) / 12)
-    except Exception:
-        return ""
-
-    if years == 0:
-        return ""
-
-    support_parts = []
-    if re.search(r"\bupgrad(?:e|es)\b", combined, re.I):
-        support_parts.append("Service Upgrade Available")
-
-    prefix_match = re.search(r"\bprosupport\b|\bpro\s*support\b", combined, re.I)
-    prefix = prefix_match.group(0)[0].upper() if prefix_match else "P"
-    support_parts.append(f"{prefix} {years} Years")
-    return _sanitize_text(", ".join(support_parts))
-
-
-def _extract_support_terms_from_parts(part1: str, part2: str) -> str:
-    """
-    Two-row variant: combines support config rows and uses the same year parser.
-    """
-    return _extract_support_terms(f"{part1} {part2}")
-
 
 def build_orion_description(text: str) -> str:
     cleaned = _sanitize_text(text)
@@ -259,7 +222,6 @@ def build_orion_description(text: str) -> str:
         _extract_graphics(cleaned),
         _extract_storage(cleaned),
         _extract_operating_system(cleaned),
-        _extract_support_terms(cleaned),
     ]
     return ", ".join(part for part in parts if part)
 
@@ -320,11 +282,6 @@ def _os_match(module: str, description: str) -> bool:
     )
 
 
-def _support_match(module: str, description: str) -> bool:
-    text = f"{module} {description}".lower()
-    return "hardware support" in text or "prosupport" in text
-
-
 # ── config-row detail finder ──────────────────────────────────────────────────
 
 def _find_config_detail(config_rows: list, item_no: int, matcher) -> str:
@@ -354,42 +311,6 @@ def _find_config_detail(config_rows: list, item_no: int, matcher) -> str:
 
     return matches[0][2]
 
-
-def _find_support_detail(config_rows: list, item_no: int) -> str:
-    """
-    Collect all support-related rows for this item, then extract years.
-    Handles both the single-string pattern and the two-row pattern.
-    """
-    support_texts = []
-    for row in config_rows:
-        if len(row) < 4:
-            continue
-        row_item = str(row[0]).strip()
-        if row_item and row_item != str(item_no):
-            continue
-        module = _sanitize_text(str(row[2] or ""))
-        description = _sanitize_text(str(row[3] or ""))
-        if _support_match(module, description):
-            support_texts.append(description or module)
-
-    if not support_texts:
-        return ""
-
-    # Try single-string match first (all info in one row)
-    for text in support_texts:
-        result = _extract_support_terms(text)
-        if result:
-            return result
-
-    # Two-row pattern: find the ProSupport row and the months row separately
-    if len(support_texts) >= 2:
-        return _extract_support_terms_from_parts(support_texts[0], support_texts[1])
-
-    # Single row but no months yet — try combining all support texts
-    if len(support_texts) == 1:
-        return _extract_support_terms(support_texts[0])
-
-    return ""
 
 
 def _find_base_options_summary(config_rows: list, item_no: int) -> str:
@@ -428,10 +349,6 @@ def build_orion_description_from_config(desc: str, config_rows: list, idx: int) 
     os_text = _extract_operating_system(os_raw) if os_raw else ""
     if os_text:
         parts.append(os_text)
-
-    support_text = _find_support_detail(config_rows, idx)
-    if support_text:
-        parts.append(support_text)
 
     combined = ", ".join(part for part in parts if part)
     if combined:
@@ -496,13 +413,15 @@ def _extract_items_and_metadata(input_excel_bytes: bytes):
 
 def build_dell_orion_output_filename(input_excel_bytes: bytes) -> str:
     _, quote_meta, _, _, quote_ref_text, _, _ = _extract_items_and_metadata(input_excel_bytes)
-    partner_name = _sanitize_text(
-        quote_meta.get("reseller") or quote_meta.get("company name") or quote_meta.get("end user") or "Dell"
+    partner_raw = _sanitize_text(
+        quote_meta.get("reseller") or quote_meta.get("company name") or quote_meta.get("end user") or ""
     )
-    quote_ref = _sanitize_text(quote_ref_text) or "Quote"
-    safe_partner = re.sub(r"[^A-Za-z0-9._-]+", " ", partner_name).strip() or "Dell"
-    safe_ref = re.sub(r"[^A-Za-z0-9._-]+", " ", quote_ref).strip() or "Quote"
-    return f"{safe_partner}-{safe_ref}-{datetime.now().strftime('%Y%m%d')}.xlsx"
+    quote_ref_raw = _sanitize_text(quote_ref_text or "")
+    safe_partner = re.sub(r"[^A-Za-z0-9._-]+", " ", partner_raw).strip()
+    safe_ref = re.sub(r"[^A-Za-z0-9._-]+", " ", quote_ref_raw).strip()
+    date_str = datetime.now().strftime("%Y%m%d")
+    parts = [p for p in [safe_partner, safe_ref, date_str] if p]
+    return " - ".join(parts) + ".xlsx"
 
 
 # ── main generator ────────────────────────────────────────────────────────────
@@ -514,7 +433,6 @@ def generate_orion_quote(input_excel_bytes: bytes, currency_code: str = "USD") -
     conversion_rate = ORION_CURRENCY_CONVERSION_RATES.get(
         currency_code, CURRENCY_CONVERSION_RATES.get(currency_code, 1.0)
     )
-    number_format = CURRENCY_NUMBER_FORMATS.get(currency_code, "#,##0.00")
 
     wb = Workbook()
     ws = wb.active
@@ -548,12 +466,26 @@ def generate_orion_quote(input_excel_bytes: bytes, currency_code: str = "USD") -
     for item_key, part_number in heading_part_numbers_by_item.items():
         part_numbers_by_item.setdefault(item_key, part_number)
 
+    # Distribute consolidation + shipping fees proportionally into each item's unit price
+    total_fees_converted = (float(consolidation_fee or 0.0) + float(shipping_fee or 0.0)) * conversion_rate
+    grand_total = sum(
+        (int(qty) if qty not in (None, "") else 0) * float(unit_price or 0.0)
+        for _, qty, unit_price, _ in items
+    )
+
     # Write rows
     for idx, (desc, qty, unit_price, total_price) in enumerate(items, start=1):
         qty_value = int(qty) if qty not in (None, "") else 0
+        base_unit_value = float(unit_price or 0.0) * conversion_rate
 
-        # Use unit_price for both MSRP and Unit Cost
-        unit_value = float(unit_price or 0.0) * conversion_rate
+        if total_fees_converted and grand_total:
+            item_total = qty_value * float(unit_price or 0.0)
+            fee_share = (item_total / grand_total) * total_fees_converted
+            fee_per_unit = fee_share / qty_value if qty_value else 0.0
+        else:
+            fee_per_unit = 0.0
+
+        unit_value = base_unit_value + fee_per_unit
 
         vendor_code = part_numbers_by_item.get(str(idx), "") or _extract_part_number_from_description(desc)
 
@@ -572,28 +504,6 @@ def generate_orion_quote(input_excel_bytes: bytes, currency_code: str = "USD") -
             "",            # Unit Selling
         ])
 
-    if consolidation_fee:
-        ws.append([
-            "",
-            "",
-            "Consolidation Fee",
-            1,
-            float(consolidation_fee) * conversion_rate,
-            float(consolidation_fee) * conversion_rate,
-            "",
-        ])
-
-    if shipping_fee:
-        ws.append([
-            "",
-            "",
-            "Shipping",
-            1,
-            float(shipping_fee) * conversion_rate,
-            float(shipping_fee) * conversion_rate,
-            "",
-        ])
-
     # Formatting
     header_fill = PatternFill(fill_type="solid", start_color="D9EAF7", end_color="D9EAF7")
     for cell in ws[1]:
@@ -602,9 +512,10 @@ def generate_orion_quote(input_excel_bytes: bytes, currency_code: str = "USD") -
         cell.alignment = Alignment(horizontal="center", vertical="center")
 
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+        row[2].alignment = Alignment(wrap_text=True)
+        row[3].number_format = "0"
         for cell in row[4:7]:
-            cell.number_format = number_format
-        row[3].number_format = "#,##0"
+            cell.number_format = "0.00"
 
     ws.column_dimensions["A"].width = 18
     ws.column_dimensions["B"].width = 18
