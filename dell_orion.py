@@ -466,25 +466,16 @@ def generate_orion_quote(input_excel_bytes: bytes, currency_code: str = "USD") -
     for item_key, part_number in heading_part_numbers_by_item.items():
         part_numbers_by_item.setdefault(item_key, part_number)
 
-    # Distribute consolidation + shipping fees proportionally into each item's unit price
+    # Distribute consolidation + shipping fees equally across items
     total_fees_converted = (float(consolidation_fee or 0.0) + float(shipping_fee or 0.0)) * conversion_rate
-    grand_total = sum(
-        (int(qty) if qty not in (None, "") else 0) * float(unit_price or 0.0)
-        for _, qty, unit_price, _ in items
-    )
+    num_items = len(items)
+    fee_per_item = total_fees_converted / num_items if (total_fees_converted and num_items) else 0.0
 
     # Write rows
     for idx, (desc, qty, unit_price, total_price) in enumerate(items, start=1):
         qty_value = int(qty) if qty not in (None, "") else 0
         base_unit_value = float(unit_price or 0.0) * conversion_rate
-
-        if total_fees_converted and grand_total:
-            item_total = qty_value * float(unit_price or 0.0)
-            fee_share = (item_total / grand_total) * total_fees_converted
-            fee_per_unit = fee_share / qty_value if qty_value else 0.0
-        else:
-            fee_per_unit = 0.0
-
+        fee_per_unit = fee_per_item / qty_value if qty_value else 0.0
         unit_value = base_unit_value + fee_per_unit
 
         vendor_code = part_numbers_by_item.get(str(idx), "") or _extract_part_number_from_description(desc)
