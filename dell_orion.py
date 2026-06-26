@@ -466,16 +466,10 @@ def generate_orion_quote(input_excel_bytes: bytes, currency_code: str = "USD") -
     for item_key, part_number in heading_part_numbers_by_item.items():
         part_numbers_by_item.setdefault(item_key, part_number)
 
-    # Distribute consolidation + shipping fees equally across items
-    total_fees_converted = (float(consolidation_fee or 0.0) + float(shipping_fee or 0.0)) * conversion_rate
-    num_items = len(items)
-    fee_per_item = total_fees_converted / num_items if (total_fees_converted and num_items) else 0.0
-
     # Write rows
     for idx, (desc, qty, unit_price, total_price) in enumerate(items, start=1):
         qty_value = int(qty) if qty not in (None, "") else 0
-        base_unit_value = float(unit_price or 0.0) * conversion_rate
-        unit_value = base_unit_value + fee_per_item
+        unit_value = float(unit_price or 0.0) * conversion_rate
 
         vendor_code = part_numbers_by_item.get(str(idx), "") or _extract_part_number_from_description(desc)
 
@@ -492,6 +486,22 @@ def generate_orion_quote(input_excel_bytes: bytes, currency_code: str = "USD") -
             unit_value,    # MSRP
             unit_value,    # Unit Cost
             "",            # Unit Selling
+        ])
+
+    if consolidation_fee:
+        ws.append([
+            "", "", "Consolidation Fee", 1,
+            float(consolidation_fee) * conversion_rate,
+            float(consolidation_fee) * conversion_rate,
+            "",
+        ])
+
+    if shipping_fee:
+        ws.append([
+            "", "", "Shipping", 1,
+            float(shipping_fee) * conversion_rate,
+            float(shipping_fee) * conversion_rate,
+            "",
         ])
 
     # Formatting
