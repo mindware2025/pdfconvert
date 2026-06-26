@@ -1210,8 +1210,9 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
                 if uppercase_start:
                     reseller_text = reseller_text[uppercase_start.start():].strip()
 
-            reseller_text = re.sub(r"\s*-\s*Authorized Partner\+?$", "", reseller_text, flags=re.IGNORECASE).strip()
-            reseller_text = reseller_text.rstrip("+").strip()
+            # Strip Page Name prefix (e.g. "MSC - Global Portal+ HDF - Authorized Partner+" → "HDF - Authorized Partner+")
+            if "+" in reseller_text:
+                reseller_text = re.sub(r"^.+?\+\s*", "", reseller_text).strip()
             return reseller_text
 
         return ""
