@@ -475,8 +475,7 @@ def generate_orion_quote(input_excel_bytes: bytes, currency_code: str = "USD") -
     for idx, (desc, qty, unit_price, total_price) in enumerate(items, start=1):
         qty_value = int(qty) if qty not in (None, "") else 0
         base_unit_value = float(unit_price or 0.0) * conversion_rate
-        fee_per_unit = fee_per_item / qty_value if qty_value else 0.0
-        unit_value = base_unit_value + fee_per_unit
+        unit_value = base_unit_value + fee_per_item
 
         vendor_code = part_numbers_by_item.get(str(idx), "") or _extract_part_number_from_description(desc)
 
