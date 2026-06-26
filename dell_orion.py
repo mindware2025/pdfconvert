@@ -431,7 +431,7 @@ def build_dell_orion_output_filename(input_excel_bytes: bytes) -> str:
     quote_ref_raw = _sanitize_text(quote_ref_text or "")
     safe_partner = re.sub(r"[^A-Za-z0-9._-]+", " ", partner_raw).strip()
     safe_ref = re.sub(r"[^A-Za-z0-9._-]+", " ", quote_ref_raw).strip()
-    date_str = datetime.now().strftime("%Y%m%d")
+    date_str = datetime.now().strftime("%d%m%Y")
     parts = [p for p in [safe_partner, safe_ref, date_str] if p]
     return " - ".join(parts) + ".xlsx"
 

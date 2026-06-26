@@ -1143,6 +1143,8 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
         "customer number": "",
         "end user": "",
         "reseller": "",
+        "quote creator": "",
+        "shipping info": "",
     }
     quote_ref_text = ""
     date_text = ""
@@ -1225,8 +1227,8 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
 
         for idx, line in enumerate(lines):
             lower_line = line.lower()
-            # Match various forms: "Shipping Information:", "Shipping Information", "Ship To:", etc.
-            if not any(marker in lower_line for marker in ["shipping information", "ship to"]):
+            # Only match "Shipping Information:" — not "Ship To:" which appears in the quote summary
+            if "shipping information" not in lower_line:
                 continue
 
             collected: List[str] = []
@@ -1357,6 +1359,11 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
                         val = DATE_RX.search(line_val).group(0)
                     date_text = val
                     logger.debug("PDF metadata multiline: quote date=%s", date_text)
+                elif key == "quote creator":
+                    # PDF two-column layout may prefix the Quote Name — extract the email or last token
+                    email_match = re.search(r"[\w.+-]+@[\w.-]+\.\w+", val)
+                    metadata["quote creator"] = email_match.group(0) if email_match else val.split()[-1] if val.split() else val
+                    logger.debug("PDF metadata multiline: quote creator=%s", metadata["quote creator"])
                 elif key in metadata:
                     metadata[key] = val
                     logger.debug("PDF metadata multiline: %s=%s", key, val)
@@ -1394,7 +1401,7 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
 
             if stripped.endswith(":"):
                 for key in normalized:
-                    if key in ("quote number", "quote date", "company name", "customer name", "customer number", "reseller"):
+                    if key in ("quote number", "quote date", "company name", "customer name", "customer number", "reseller", "quote creator"):
                         pending_keys.append(key)
                         logger.debug("PDF metadata pending label: %s", key)
                 continue
@@ -1410,6 +1417,10 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
                     m = DATE_RX.search(val)
                     date_text = m.group(0) if m else val
                     logger.debug("PDF metadata same-line: quote date=%s", date_text)
+                elif key == "quote creator":
+                    email_match = re.search(r"[\w.+-]+@[\w.-]+\.\w+", val)
+                    metadata["quote creator"] = email_match.group(0) if email_match else val
+                    logger.debug("PDF metadata same-line: quote creator=%s", metadata["quote creator"])
                 elif key in metadata:
                     metadata[key] = val
                     logger.debug("PDF metadata same-line: %s=%s", key, val)
@@ -1418,7 +1429,7 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
 
         # ---------------- LABEL-ONLY LINE ----------------
         normalized_lower = _normalize_pdf_label(lower)
-        if normalized_lower in ("quote number", "quote date", "company name", "customer name", "customer number", "reseller"):
+        if normalized_lower in ("quote number", "quote date", "company name", "customer name", "customer number", "reseller", "quote creator"):
             prev_label = normalized_lower
             logger.debug("PDF metadata label-only line detected: %s", normalized_lower)
             continue
@@ -1437,11 +1448,10 @@ def _extract_pdf_quote_data(pdf_bytes: bytes):
         metadata["reseller"] = reseller_from_layout
         logger.debug("PDF reseller layout extraction=%s", reseller_from_layout)
 
-    # Extract shipping information (for EUR PDFs, this becomes the End Customer)
+    # Extract shipping information as its own field
     shipping_info = _extract_pdf_shipping_info(lines)
     if shipping_info:
-        # For EUR/PDF cases: use shipping info as the primary customer info
-        metadata["end user"] = shipping_info
+        metadata["shipping info"] = shipping_info
         logger.debug("PDF shipping info extracted=%s", shipping_info)
 
     # Extract consolidation fee when present; otherwise keep the zero fallback.
@@ -2246,7 +2256,7 @@ def generate_dell_quote(
 
     # ===== HEADER: use the full banner logo across A:H =====
     ws.merge_cells("A1:H2")
-    _add_logo(ws, logo_bytes, anchor="A1", width=780, height=52, currency_code=currency_code)
+    _add_logo(ws, logo_bytes, anchor="A1", width=780, height=52, currency_code=style_currency or currency_code)
 
     is_eur_location = style_currency == "EUR"
 
@@ -2306,8 +2316,8 @@ def generate_dell_quote(
         )
 
     # ---- Quote Summary Section (Same layout for all currencies) ----
-    has_currency_expiry = bool(expiry_text) and style_currency in ("AED", "EUR", "SAR")
-    
+    has_currency_expiry = (style_currency == "EUR") or (bool(expiry_text) and style_currency in ("AED", "SAR"))
+
     summary_title_row = 9 if is_eur_location else 8
     ws.merge_cells(f"A{summary_title_row}:D{summary_title_row}")
     ws[f"A{summary_title_row}"] = "Quote Summary"
@@ -2327,6 +2337,8 @@ def generate_dell_quote(
         ws.merge_cells(start_row=row_idx, start_column=2, end_row=row_idx, end_column=4)
         ws[f"B{row_idx}"] = value
         ws[f"B{row_idx}"].alignment = Alignment(horizontal="left", vertical="center")
+        if label == "Expires By" and currency_code == "EUR":
+            ws[f"B{row_idx}"].font = Font(bold=True)
 
     customer_title_row = (summary_title_row + 4) if has_currency_expiry else (summary_title_row + 3)
 
@@ -2337,7 +2349,10 @@ def generate_dell_quote(
             meta_rows = [
                 ("End Customer:", quote_meta.get("end user", "")),
                 ("Reseller:", quote_meta.get("reseller", "")),
+                ("Quote Creator:", quote_meta.get("quote creator", "")),
             ]
+            if quote_meta.get("shipping info"):
+                meta_rows.append(("Shipping Information:", quote_meta.get("shipping info", "")))
         else:
             # For Excel uploads: show all fields
             meta_rows = [
