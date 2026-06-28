@@ -24,7 +24,7 @@ import openpyxl
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 # ── keep all the original imports from your dell module ──────────────────────
-from dell import (
+from sales.dell import (
     CURRENCY_CONVERSION_RATES,
     _extract_all_config_rows,
     _extract_compact_quote_items_and_config,
