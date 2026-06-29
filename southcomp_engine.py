@@ -727,6 +727,98 @@ def _extract_items_pdf(pdf_bytes: bytes) -> Tuple[List, Dict, List, str, str, st
     return items, metadata, config_rows, quote_ref, date_text, expiry_text, consolidation_fee
 
 
+def _extract_config_from_pdf(pdf_bytes: bytes) -> List[Tuple]:
+    """
+    Parse the 'Product Details' section of a Dell portal PDF and return config rows.
+    Each tuple: (item_number_str, "", category, description, "", "")
+    Uses the x-position split (Category col < desc_x, Description col >= desc_x).
+    """
+    config_rows: List[Tuple] = []
+    in_product_details = False
+    in_config_section = False
+    item_number = 0
+    desc_x = 134.0  # will be detected from "Category Description" header
+
+    try:
+        import pdfplumber
+        with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
+            for page in pdf.pages:
+                words = page.extract_words(use_text_flow=True)
+                if not words:
+                    continue
+                rows: Dict[int, List] = {}
+                for w in words:
+                    y = round(w.get("top", 0))
+                    rows.setdefault(y, []).append(w)
+
+                for y in sorted(rows):
+                    row_words = sorted(rows[y], key=lambda w: w.get("x0", 0))
+                    line = " ".join(w["text"] for w in row_words).strip()
+                    low = line.lower().strip()
+
+                    if not in_product_details:
+                        if "product details" in low:
+                            in_product_details = True
+                        continue
+
+                    # Item block header — each product's detail section starts with this
+                    if "unit price" in low and "qty" in low and "item total" in low:
+                        item_number += 1
+                        in_config_section = False
+                        continue
+
+                    # Stop entirely at end-of-document sections
+                    if any(stop in low for stop in (
+                        "ship to:", "important notes", "governing terms",
+                        "sincerely,", "thanks for shopping", "all orders are subject",
+                    )):
+                        in_config_section = False
+                        in_product_details = False
+                        break
+
+                    # Skip page footers, catalog numbers, standalone "Description" header
+                    if re.match(r"^page\s+\d+$", low):
+                        continue
+                    if low.startswith("catalog number"):
+                        in_config_section = False
+                        continue
+                    if low == "description":
+                        continue
+
+                    # Skip item price lines inside product details
+                    if re.search(r"[$][\d,]+[.]\d+\s+\d+\s+[$][\d,]+", line):
+                        continue
+
+                    # "Category Description" header — captures x boundary for this page
+                    if "category" in low and "description" in low and len(line.split()) <= 4:
+                        for w in row_words:
+                            if "description" in w["text"].lower():
+                                desc_x = w.get("x0", 134.0)
+                                break
+                        in_config_section = True
+                        continue
+
+                    if not in_config_section:
+                        continue
+
+                    # Split by x boundary into category vs description
+                    cat_words = [w["text"] for w in row_words if w.get("x0", 0) < desc_x]
+                    dsc_words = [w["text"] for w in row_words if w.get("x0", 0) >= desc_x]
+                    cat_part = " ".join(cat_words).strip()
+                    dsc_part = " ".join(dsc_words).strip()
+
+                    if cat_part and dsc_part:
+                        config_rows.append((str(item_number), "", cat_part, dsc_part, "", ""))
+                    elif cat_part and not dsc_part and config_rows and config_rows[-1][0] == str(item_number):
+                        # Category name wraps to next line — append to previous row's category
+                        last = config_rows[-1]
+                        config_rows[-1] = (last[0], last[1], last[2] + " " + cat_part, last[3], last[4], last[5])
+    except Exception:
+        pass
+
+    return config_rows
+
+
 def _extract_pdf_lines(pdf_bytes: bytes) -> List[str]:
     try:
         import pdfplumber
@@ -1168,9 +1260,16 @@ def _build_quote_workbook(
         ws[fee_helper].border = border_thin
         ws[fee_helper].alignment = Alignment(horizontal="center", vertical="center")
 
-        # "Prix unitaire" — selling price = (original + fees) * (1 + margin%)
-        # References static F-col (original price) and static J17 (margin%) — no circular ref
-        ws[f"{unit_col}{row_ptr}"] = f"=({helper_unit_col}{row_ptr}+{helper_fee_col}{row_ptr})*(1+{helper_margin_col}${helper_value_row})"
+        # Per-item margin cell: defaults to J17 but user can override individually
+        ws[f"{helper_margin_col}{row_ptr}"] = f"={helper_margin_col}${helper_value_row}"
+        ws[f"{helper_margin_col}{row_ptr}"].number_format = "0.00%"
+        ws[f"{helper_margin_col}{row_ptr}"].font = helper_font
+        ws[f"{helper_margin_col}{row_ptr}"].fill = helper_body_fill
+        ws[f"{helper_margin_col}{row_ptr}"].border = border_thin
+        ws[f"{helper_margin_col}{row_ptr}"].alignment = Alignment(horizontal="center", vertical="center")
+
+        # "Prix unitaire" — selling price = (original + fees) * (1 + this row's margin)
+        ws[f"{unit_col}{row_ptr}"] = f"=({helper_unit_col}{row_ptr}+{helper_fee_col}{row_ptr})*(1+{helper_margin_col}{row_ptr})"
         ws[f"{unit_col}{row_ptr}"].number_format = currency_fmt
         ws[f"{unit_col}{row_ptr}"].border = border_thin
         ws[f"{unit_col}{row_ptr}"].alignment = Alignment(horizontal="center", vertical="center")
@@ -1196,10 +1295,6 @@ def _build_quote_workbook(
         ws[f"{usd_total_col}{row_ptr}"].fill = helper_body_fill
         ws[f"{usd_total_col}{row_ptr}"].border = border_thin
         ws[f"{usd_total_col}{row_ptr}"].alignment = Alignment(horizontal="center", vertical="center")
-
-        # Helper margin column (empty — value is in the header row)
-        ws[f"{helper_margin_col}{row_ptr}"].fill = helper_body_fill
-        ws[f"{helper_margin_col}{row_ptr}"].border = border_thin
 
         for addr in [f"A{row_ptr}", f"{desc_col}{row_ptr}", f"{qty_col}{row_ptr}"]:
             ws[addr].border = border_thin
@@ -1237,24 +1332,87 @@ def _build_quote_workbook(
     ws[f"{helper_unit_col}{row_ptr}"].border = border_thin
     ws[f"{helper_margin_col}{row_ptr}"].border = border_thin
 
-    # --- Configuration sheet ---
+    # --- Configuration sheet (same layout as dell.py AED output) ---
     ws2 = wb.create_sheet("Configuration")
     ws2.sheet_view.showGridLines = False
-    config_cols = ["Item", "Type", "Module", "Description", "SKU", "Qty"]
-    for c_idx, col_name in enumerate(config_cols, start=1):
-        cell = ws2.cell(1, c_idx, col_name)
-        cell.font = Font(bold=True)
-        cell.fill = header_fill
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-    for r_idx, row_data in enumerate(config_rows, start=2):
-        for c_idx, value in enumerate(row_data[:6], start=1):
-            ws2.cell(r_idx, c_idx, _sanitize_excel_text(str(value)) if value else "")
-    ws2.column_dimensions["A"].width = 8
-    ws2.column_dimensions["B"].width = 12
-    ws2.column_dimensions["C"].width = 20
-    ws2.column_dimensions["D"].width = 44
-    ws2.column_dimensions["E"].width = 18
-    ws2.column_dimensions["F"].width = 8
+
+    ws2.column_dimensions["A"].width = 22   # Item #
+    ws2.column_dimensions["B"].width = 70   # Module
+    ws2.column_dimensions["C"].width = 100  # Description
+    ws2.column_dimensions["D"].width = 10   # Qty
+
+    title_fill2 = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+    thin_gray = Border(
+        left=Side(style="thin", color="DDDDDD"),
+        right=Side(style="thin", color="DDDDDD"),
+        top=Side(style="thin", color="DDDDDD"),
+        bottom=Side(style="thin", color="DDDDDD"),
+    )
+
+    # Table header
+    r2 = 1
+    for col, label in (("A", "Item #"), ("B", "Module"), ("C", "Description"), ("D", "Qty")):
+        ws2[f"{col}{r2}"] = label
+        ws2[f"{col}{r2}"].font = Font(bold=True)
+        ws2[f"{col}{r2}"].fill = title_fill2
+        ws2[f"{col}{r2}"].alignment = Alignment(horizontal="center", vertical="center")
+        ws2[f"{col}{r2}"].border = Border(
+            left=Side(style="thin", color="000000"),
+            right=Side(style="thin", color="000000"),
+            top=Side(style="thin", color="000000"),
+            bottom=Side(style="thin", color="000000"),
+        )
+    r2 += 1
+
+    # Group config rows by item number
+    config_by_item: Dict[str, List] = {}
+    for row in config_rows:
+        config_by_item.setdefault(row[0], []).append(row)
+
+    # Item descriptions for headings (from the items list)
+    original_descs = [_sanitize_excel_text(it[0]) for it in original_usd_items]
+
+    total_items = max(len(original_descs), len(config_by_item)) if (original_descs or config_by_item) else 0
+    for idx in range(1, total_items + 1):
+        item_key = str(idx)
+        rows_for_item = config_by_item.get(item_key, [])
+        heading = original_descs[idx - 1] if idx - 1 < len(original_descs) else f"Item {idx}"
+
+        # "Item N" row
+        ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=4)
+        ws2[f"A{r2}"] = f"Item {idx}"
+        ws2[f"A{r2}"].font = Font(bold=True, color="1F497D")
+        ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
+        r2 += 1
+
+        # Item description heading
+        ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=4)
+        ws2[f"A{r2}"] = heading
+        ws2[f"A{r2}"].font = Font(italic=True, color="1F497D")
+        ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
+        r2 += 1
+
+        if not rows_for_item:
+            ws2.merge_cells(start_row=r2, start_column=2, end_row=r2, end_column=4)
+            ws2[f"B{r2}"] = "(No configuration details found for this item)"
+            ws2[f"B{r2}"].font = Font(italic=True, color="7F7F7F")
+            ws2[f"B{r2}"].alignment = Alignment(horizontal="left", vertical="center")
+            for col in ("A", "B", "C", "D"):
+                ws2[f"{col}{r2}"].border = thin_gray
+            r2 += 1
+        else:
+            for row_data in rows_for_item:
+                _, _, module, dsc, sku, qty = (row_data + ("", "", "", ""))[:6]
+                ws2[f"A{r2}"] = ""
+                ws2[f"B{r2}"] = _sanitize_excel_text(module)
+                ws2[f"C{r2}"] = _sanitize_excel_text(dsc)
+                ws2[f"D{r2}"] = _sanitize_excel_text(qty)
+                for col in ("A", "B", "C", "D"):
+                    ws2[f"{col}{r2}"].alignment = Alignment(vertical="top", wrap_text=True)
+                    ws2[f"{col}{r2}"].border = thin_gray
+                r2 += 1
+
+        r2 += 1  # blank gap between items
 
     out = BytesIO()
     wb.save(out)
@@ -1288,6 +1446,7 @@ def generate_southcomp_quote(
 
     if is_pdf:
         items, raw_meta, config_rows, quote_ref, date_text, expiry_text, consolidation_fee = _extract_items_pdf(input_bytes)
+        config_rows = _extract_config_from_pdf(input_bytes)
         quote_meta = raw_meta
     else:
         src_wb = openpyxl.load_workbook(BytesIO(input_bytes), data_only=True)
