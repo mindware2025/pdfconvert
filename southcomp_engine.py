@@ -942,65 +942,85 @@ def _extract_pdf_lines(pdf_bytes: bytes) -> List[str]:
 # ==================== CONFIGURATION SHEET ====================
 
 def _find_config_sheet(wb) -> Optional[object]:
-    normalized_names = {
-        "configuration", "config", "configsheet", "configurationsheet",
-        "configurationdetails", "configdetails", "productdetails",
-    }
+    """Exact copy of dell.py _find_configuration_sheet logic."""
     for name in wb.sheetnames:
-        if re.sub(r"[^a-z0-9]", "", name.lower().strip()) in normalized_names:
+        if re.sub(r"[^a-z0-9]", "", name.lower().strip()) in {
+            "configuration", "config", "configsheet", "configurationsheet",
+            "configurationdetails", "configdetails", "productdetails",
+        }:
             return wb[name]
     return None
 
 
-def _find_config_table_header(ws, start_row: int = 1) -> Optional[Tuple[int, Dict[str, int]]]:
-    for r in range(start_row, min(ws.max_row, start_row + 50) + 1):
+def _find_product_details_anchor(ws) -> Optional[int]:
+    """Exact copy from dell.py."""
+    max_c = min(ws.max_column, 40)
+    for r in range(1, ws.max_row + 1):
+        for c in range(1, max_c + 1):
+            v = ws.cell(r, c).value
+            if v and "product details" in str(v).lower():
+                return r
+    return None
+
+
+def _find_config_table_header(ws, start_row: int = 1, search_rows: int = 30) -> Optional[Tuple[int, Dict[str, int]]]:
+    """Exact copy from dell.py."""
+    last_row = min(ws.max_row, start_row + search_rows)
+    for r in range(start_row, last_row + 1):
         labels: Dict[str, int] = {}
         for c in range(1, ws.max_column + 1):
             name = _cell_to_text(ws.cell(r, c).value).lower()
             if not name:
                 continue
-            name_n = re.sub(r"\s+", " ", name.strip())
             if "module" in name and "module" not in labels:
                 labels["module"] = c
             if "description" in name and "description" not in labels:
                 labels["description"] = c
-            if ("sku" in name_n or "part" in name_n and "number" in name_n) and "sku" not in labels:
+            normalized_name = re.sub(r"\s+", " ", name.strip())
+            if (
+                normalized_name in ("sku", "part", "part #", "part#", "part number", "part no", "part no.", "dell part number")
+                or ("sku" in normalized_name)
+                or ("part" in normalized_name and "number" in normalized_name)
+            ) and "sku" not in labels:
                 labels["sku"] = c
-            if name_n in ("qty", "quantity") and "qty" not in labels:
+            if name.strip() in ("qty", "quantity") and "qty" not in labels:
                 labels["qty"] = c
-        if "description" in labels and "sku" in labels:
+        if all(k in labels for k in ("description", "sku")):
             labels.setdefault("module", labels["description"])
             return r, labels
     return None
 
 
 def _extract_config_rows(ws) -> List[Tuple]:
-    header_info = _find_config_table_header(ws)
+    """Extract config rows from a dedicated Configuration sheet. Exact copy of dell.py _extract_config_rows_from_configuration_sheet."""
+    header_info = _find_config_table_header(ws, 1, search_rows=50)
     if not header_info:
         return []
     header_row, colmap = header_info
-    has_module = bool(colmap.get("module")) and colmap.get("module") != colmap.get("description")
-    rows = []
-    current_item = "1"
     item_col: Optional[int] = None
     for c in range(1, ws.max_column + 1):
-        if _cell_to_text(ws.cell(header_row, c).value).lower() in ("item", "item#", "sr no", "sr"):
+        header_text = _cell_to_text(ws.cell(header_row, c).value).lower()
+        if header_text in ("item", "item#", "item #", "item no", "item number", "sr. no.", "sr no", "srno", "sr"):
             item_col = c
             break
+    rows = []
+    current_item = "1"
+    has_real_module_col = bool(colmap.get("module")) and colmap.get("module") != colmap.get("description")
     for r in range(header_row + 1, ws.max_row + 1):
         row_text = _row_text(ws, r, 1, ws.max_column)
         if not row_text:
             continue
         if item_col:
-            iv = _cell_to_text(ws.cell(r, item_col).value).strip()
-            if iv:
-                current_item = iv.rstrip(".")
-        module = _cell_to_text(ws.cell(r, colmap.get("module", 0)).value) if has_module else ""
+            item_value = _cell_to_text(ws.cell(r, item_col).value).strip()
+            if item_value:
+                current_item = item_value.rstrip(".")
+        module = _cell_to_text(ws.cell(r, colmap.get("module", 0)).value) if has_real_module_col else ""
         description = _cell_to_text(ws.cell(r, colmap.get("description", 0)).value)
         sku = _cell_to_text(ws.cell(r, colmap.get("sku", 0)).value)
         qty = _cell_to_text(ws.cell(r, colmap.get("qty", 0)).value)
-        if not has_module and description and not any([sku, qty]):
-            module, description = description, ""
+        if not has_real_module_col and description and not any([sku, qty]):
+            module = description
+            description = ""
         if not any([module, description, sku, qty]):
             continue
         rows.append((current_item, "", module, description, sku, qty))
@@ -1008,27 +1028,119 @@ def _extract_config_rows(ws) -> List[Tuple]:
 
 
 def _extract_all_config_rows(ws) -> List[Tuple]:
-    """Extract all config rows from the main sheet (no separate config sheet)."""
-    header_info = _find_config_table_header(ws)
-    if header_info:
-        return _extract_config_rows(ws)
-    # Collect from product details block
-    rows = []
-    anchor = None
-    for r in range(1, ws.max_row + 1):
-        for c in range(1, min(ws.max_column, 40) + 1):
-            v = ws.cell(r, c).value
-            if v and "product details" in str(v).lower():
-                anchor = r
-                break
-        if anchor:
-            break
+    """Exact copy of dell.py _extract_all_config_rows — handles Product Details per-item tables."""
+    anchor = _find_product_details_anchor(ws)
     if not anchor:
         return []
-    header_info2 = _find_config_table_header(ws, anchor)
-    if not header_info2:
-        return []
-    return _extract_config_rows(ws)
+
+    rows: List[Tuple] = []
+    r = anchor + 1
+    max_col = min(ws.max_column, 40)
+
+    def _clean_heading_text(text: str) -> str:
+        return re.sub(r"\s+\d+(\.\d+)?\s+\$?[\d,\.]+\s+\$?[\d,\.]+$", "", text).strip()
+
+    def _is_table_stop(text: str) -> bool:
+        low = text.lower()
+        return (
+            _is_price_or_qty_line(text)
+            or "estimated delivery" in low
+            or "subtotal" in low
+            or "total" in low
+            or "ship to" in low
+        )
+
+    def _extract_item_heading(row_idx: int) -> Optional[Tuple[str, str]]:
+        item_marker = _cell_to_text(ws.cell(row_idx, 1).value)
+        if not re.match(r"^\d+\.$", item_marker):
+            return None
+        heading = _cell_to_text(ws.cell(row_idx, 2).value)
+        if not heading:
+            heading = _row_text(ws, row_idx, 1, max_col)
+        return item_marker.rstrip("."), _clean_heading_text(heading)
+
+    def _find_next_item_row(start_row: int) -> Optional[int]:
+        for row_idx in range(start_row, ws.max_row + 1):
+            if _extract_item_heading(row_idx):
+                return row_idx
+        return None
+
+    item_counter = 0
+    while r <= ws.max_row:
+        item_info = _extract_item_heading(r)
+        if not item_info:
+            r += 1
+            continue
+
+        _source_item_number, current_heading = item_info
+        item_counter += 1
+        current_item = str(item_counter)
+        next_item_row = _find_next_item_row(r + 1)
+        search_end = (next_item_row - 1) if next_item_row is not None else ws.max_row
+
+        header_info = None
+        scan_row = r + 1
+        while scan_row <= search_end:
+            maybe_header = _find_config_table_header(ws, scan_row, search_rows=0)
+            if maybe_header:
+                header_info = maybe_header
+                break
+            scan_row += 1
+
+        if not header_info:
+            r = next_item_row if next_item_row is not None else ws.max_row + 1
+            continue
+
+        header_row, colmap = header_info
+        data_row = header_row + 1
+        has_real_module_col = bool(colmap.get("module")) and colmap.get("module") != colmap.get("description")
+
+        while data_row <= search_end and not _row_text(ws, data_row, 1, max_col):
+            data_row += 1
+
+        blank_streak = 0
+        while data_row <= search_end:
+            row_text_all = _row_text(ws, data_row, 1, max_col)
+            if not row_text_all:
+                blank_streak += 1
+                if blank_streak >= 2:
+                    break
+                data_row += 1
+                continue
+            blank_streak = 0
+            if _is_table_stop(row_text_all):
+                data_row += 1
+                continue
+            mod = _cell_to_text(ws.cell(data_row, colmap.get("module", 0)).value) if has_real_module_col else ""
+            desc = _cell_to_text(ws.cell(data_row, colmap.get("description", 0)).value)
+            sku = _cell_to_text(ws.cell(data_row, colmap.get("sku", 0)).value)
+            qty = _cell_to_text(ws.cell(data_row, colmap.get("qty", 0)).value)
+            if not has_real_module_col and desc and not any([sku, qty]):
+                mod = desc
+                desc = ""
+            if not any([mod, desc, sku, qty]):
+                break
+            rows.append((current_item, current_heading, mod, desc, sku, qty))
+            data_row += 1
+
+        r = next_item_row if next_item_row is not None else ws.max_row + 1
+
+    # Merge 2-line fragmented rows (common in Dell exports)
+    cleaned: List[Tuple] = []
+    i = 0
+    while i < len(rows):
+        item, head, mod, desc, sku, qty = rows[i]
+        mod, desc = mod.strip(), desc.strip()
+        if i + 1 < len(rows):
+            ni, nh, nmod, ndesc, nsku, nqty = rows[i + 1]
+            if ni == item and nh == head:
+                if desc == "" and ndesc == "" and ":" not in mod and ":" not in nmod:
+                    mod = f"{mod} {nmod}".strip()
+                    i += 1
+        cleaned.append((item, head, mod, desc, sku, qty))
+        i += 1
+
+    return cleaned
 
 
 def _extract_consolidation_fee(ws) -> float:
