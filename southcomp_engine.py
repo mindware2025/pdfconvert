@@ -1423,36 +1423,57 @@ def _build_quote_workbook(
     ws[f"{helper_unit_col}{row_ptr}"].border = border_thin
     ws[f"{helper_margin_col}{row_ptr}"].border = border_thin
 
-    # --- Configuration sheet (same layout as dell.py AED output) ---
+    # --- Configuration sheet (identical layout to dell.py AED output) ---
     ws2 = wb.create_sheet("Configuration")
     ws2.sheet_view.showGridLines = False
+
+    # Show SKU column only when at least one config row carries a real SKU value
+    show_sku_col = any(
+        len(row) >= 5 and str(row[4]).strip()
+        for row in config_rows
+    )
 
     ws2.column_dimensions["A"].width = 22   # Item #
     ws2.column_dimensions["B"].width = 70   # Module
     ws2.column_dimensions["C"].width = 100  # Description
-    ws2.column_dimensions["D"].width = 10   # Qty
+    if show_sku_col:
+        ws2.column_dimensions["D"].width = 20  # SKU
+        ws2.column_dimensions["E"].width = 10  # Qty
+    else:
+        ws2.column_dimensions["D"].width = 10  # Qty
+
+    last_col = 5 if show_sku_col else 4     # numeric index of last column
+    last_col_letter = "E" if show_sku_col else "D"
+    data_cols = ("A", "B", "C", "D", "E") if show_sku_col else ("A", "B", "C", "D")
 
     title_fill2 = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+    section_fill2 = PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid")
     thin_gray = Border(
         left=Side(style="thin", color="DDDDDD"),
         right=Side(style="thin", color="DDDDDD"),
         top=Side(style="thin", color="DDDDDD"),
         bottom=Side(style="thin", color="DDDDDD"),
     )
+    hdr_border = Border(
+        left=Side(style="thin", color="000000"),
+        right=Side(style="thin", color="000000"),
+        top=Side(style="thin", color="000000"),
+        bottom=Side(style="thin", color="000000"),
+    )
 
     # Table header
     r2 = 1
-    for col, label in (("A", "Item #"), ("B", "Module"), ("C", "Description"), ("D", "Qty")):
+    if show_sku_col:
+        header_cols = (("A", "Item #"), ("B", "Module"), ("C", "Description"), ("D", "SKU"), ("E", "Qty"))
+    else:
+        header_cols = (("A", "Item #"), ("B", "Module"), ("C", "Description"), ("D", "Qty"))
+    for col, label in header_cols:
         ws2[f"{col}{r2}"] = label
         ws2[f"{col}{r2}"].font = Font(bold=True)
         ws2[f"{col}{r2}"].fill = title_fill2
         ws2[f"{col}{r2}"].alignment = Alignment(horizontal="center", vertical="center")
-        ws2[f"{col}{r2}"].border = Border(
-            left=Side(style="thin", color="000000"),
-            right=Side(style="thin", color="000000"),
-            top=Side(style="thin", color="000000"),
-            bottom=Side(style="thin", color="000000"),
-        )
+        ws2[f"{col}{r2}"].border = hdr_border
+    ws2.row_dimensions[r2].height = 20
     r2 += 1
 
     # Group config rows by item number
@@ -1469,36 +1490,53 @@ def _build_quote_workbook(
         rows_for_item = config_by_item.get(item_key, [])
         heading = original_descs[idx - 1] if idx - 1 < len(original_descs) else f"Item {idx}"
 
-        # "Item N" row
-        ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=4)
+        # "Item N" row — merged across all columns
+        ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=last_col)
         ws2[f"A{r2}"] = f"Item {idx}"
         ws2[f"A{r2}"].font = Font(bold=True, color="1F497D")
         ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
         r2 += 1
 
-        # Item description heading
-        ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=4)
+        # Item description heading — merged across all columns
+        ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=last_col)
         ws2[f"A{r2}"] = heading
         ws2[f"A{r2}"].font = Font(italic=True, color="1F497D")
         ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
         r2 += 1
 
         if not rows_for_item:
-            ws2.merge_cells(start_row=r2, start_column=2, end_row=r2, end_column=4)
+            ws2.merge_cells(start_row=r2, start_column=2, end_row=r2, end_column=last_col)
             ws2[f"B{r2}"] = "(No configuration details found for this item)"
             ws2[f"B{r2}"].font = Font(italic=True, color="7F7F7F")
             ws2[f"B{r2}"].alignment = Alignment(horizontal="left", vertical="center")
-            for col in ("A", "B", "C", "D"):
+            for col in data_cols:
                 ws2[f"{col}{r2}"].border = thin_gray
             r2 += 1
         else:
             for row_data in rows_for_item:
                 _, _, module, dsc, sku, qty = (row_data + ("", "", "", ""))[:6]
+                # Section header row: module name only, no description or SKU
+                if module and not dsc and not sku:
+                    ws2[f"A{r2}"] = ""
+                    ws2.merge_cells(start_row=r2, start_column=2, end_row=r2, end_column=last_col)
+                    ws2[f"B{r2}"] = _sanitize_excel_text(module)
+                    ws2[f"B{r2}"].font = Font(bold=True, color="1F1F1F")
+                    ws2[f"B{r2}"].fill = section_fill2
+                    ws2[f"B{r2}"].alignment = Alignment(horizontal="left", vertical="center")
+                    for col in data_cols:
+                        ws2[f"{col}{r2}"].border = thin_gray
+                    r2 += 1
+                    continue
+
                 ws2[f"A{r2}"] = ""
                 ws2[f"B{r2}"] = _sanitize_excel_text(module)
                 ws2[f"C{r2}"] = _sanitize_excel_text(dsc)
-                ws2[f"D{r2}"] = _sanitize_excel_text(qty)
-                for col in ("A", "B", "C", "D"):
+                if show_sku_col:
+                    ws2[f"D{r2}"] = _sanitize_excel_text(sku)
+                    ws2[f"E{r2}"] = _sanitize_excel_text(qty)
+                else:
+                    ws2[f"D{r2}"] = _sanitize_excel_text(qty)
+                for col in data_cols:
                     ws2[f"{col}{r2}"].alignment = Alignment(vertical="top", wrap_text=True)
                     ws2[f"{col}{r2}"].border = thin_gray
                 r2 += 1
