@@ -580,6 +580,85 @@ def _extract_items_pricing_summary(ws) -> Optional[List[Tuple]]:
     return items if items else None
 
 
+def _extract_pdf_metadata_by_position(pdf_bytes: bytes) -> Dict[str, str]:
+    """
+    Extract customer metadata from page 1 of a Dell portal PDF using word X-positions.
+    The PDF uses a 2-column layout; the right column (x >= ~200) holds the actual values.
+    Returns keys: quote_creator, end_user (shipping address), quote_name.
+    """
+    out = {"quote_creator": "", "end_user": "", "quote_name": ""}
+    try:
+        import pdfplumber
+        with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
+            page = pdf.pages[0]
+            words = page.extract_words(use_text_flow=True)
+    except Exception:
+        return out
+
+    # Group words by y position
+    rows: Dict[int, List] = {}
+    for w in words:
+        y = round(w.get("top", 0))
+        rows.setdefault(y, []).append(w)
+
+    # Detect the right-column x boundary from the "Quote Creator:" label
+    col2_x = 200.0
+    for y in sorted(rows):
+        row_words = sorted(rows[y], key=lambda w: w.get("x0", 0))
+        line = " ".join(w["text"] for w in row_words).lower()
+        if "quote creator" in line and "quote name" in line:
+            for w in row_words:
+                if "quote" in w["text"].lower() and w.get("x0", 0) > 100:
+                    col2_x = w.get("x0", 200.0)
+                    break
+            break
+
+    # State machine over sorted rows
+    next_row_is_quote_name_creator = False
+    in_shipping = False
+
+    for y in sorted(rows):
+        row_words = sorted(rows[y], key=lambda w: w.get("x0", 0))
+        line = " ".join(w["text"] for w in row_words).strip()
+        low = line.lower()
+
+        # Stop at "Quote Summary" or "Custom Fields"
+        if any(stop in low for stop in ("quote summary", "custom fields")):
+            break
+
+        left_words = [w["text"] for w in row_words if w.get("x0", 0) < col2_x]
+        right_words = [w["text"] for w in row_words if w.get("x0", 0) >= col2_x]
+        left_text = " ".join(left_words).strip().lower().rstrip(":")
+        right_text = " ".join(right_words).strip()
+
+        # "Quote Name:" (left) / "Quote Creator:" (right) — label row
+        if "quote name" in left_text and "quote creator" in right_text.lower():
+            next_row_is_quote_name_creator = True
+            in_shipping = False
+            continue
+
+        if next_row_is_quote_name_creator:
+            next_row_is_quote_name_creator = False
+            out["quote_name"] = " ".join(left_words).strip()
+            out["quote_creator"] = right_text
+            continue
+
+        # "Billing Information:" (left) / "Shipping Information:" (right) — label row
+        if "billing information" in left_text and "shipping information" in right_text.lower():
+            in_shipping = True
+            continue
+
+        if in_shipping:
+            # Right column = shipping address; left column is billing (usually "-", skip)
+            if right_text and right_text != "-":
+                if out["end_user"]:
+                    out["end_user"] += "\n" + right_text
+                else:
+                    out["end_user"] = right_text
+
+    return out
+
+
 def _extract_items_generic(ws) -> List[Tuple]:
     first_data_row, desc_col, qty_col, unit_col = _find_generic_header(ws)
     items = []
@@ -1447,7 +1526,14 @@ def generate_southcomp_quote(
     if is_pdf:
         items, raw_meta, config_rows, quote_ref, date_text, expiry_text, consolidation_fee = _extract_items_pdf(input_bytes)
         config_rows = _extract_config_from_pdf(input_bytes)
+        pos_meta = _extract_pdf_metadata_by_position(input_bytes)
         quote_meta = raw_meta
+        if pos_meta.get("quote_creator"):
+            quote_meta["quote creator"] = pos_meta["quote_creator"]
+        if pos_meta.get("end_user"):
+            quote_meta["end user"] = pos_meta["end_user"]
+        if pos_meta.get("quote_name") and not quote_meta.get("company name"):
+            quote_meta["company name"] = pos_meta["quote_name"]
     else:
         src_wb = openpyxl.load_workbook(BytesIO(input_bytes), data_only=True)
         src_ws = src_wb.active
