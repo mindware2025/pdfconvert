@@ -22,6 +22,7 @@ from dell import (
     generate_dell_quote,
 )
 from dell_orion import build_dell_orion_output_filename, generate_orion_quote
+from dell_southcomp import render_southcomp_tool
 
 from dell_extended_services import build_dell_extended_services_output_filename, generate_dell_extended_services_quote
 from extractors.barcodeper50 import barcode_tooll
@@ -904,6 +905,7 @@ elif team == "Sales":
         "💻 IBM Quotation",
         "💻 Dell Quotation (Orion)",
         "💻 Dell Quotation",
+        "💻 Dell Quotation Southcomp Polaris",
     ]
 else:
     TOOL_OPTIONS = ["-- Select a tool --"]
@@ -2463,22 +2465,11 @@ elif tool == "💻 Dell Quotation":
 
         "Currency",
 
-        ["USD", "QAR", "AED", "SAR", "EUR"],
+        ["USD", "QAR", "AED", "SAR"],
 
         horizontal=True
 
     )
-
-    exchange_rate = None
-    if currency_code == "EUR":
-        exchange_rate = st.number_input(
-            "Exchange Rate (EUR)",
-            min_value=0.0,
-            value=0.92,
-            step=0.01,
-            format="%.4f",
-            key="dell_eur_exchange_rate",
-        )
 
     if "dell_output_bytes" not in st.session_state:
 
@@ -2519,26 +2510,6 @@ elif tool == "💻 Dell Quotation":
     if "dell_last_margin_percent" not in st.session_state:
 
         st.session_state["dell_last_margin_percent"] = None
-
-    if "dell_output_bytes_eur" not in st.session_state:
-
-        st.session_state["dell_output_bytes_eur"] = None
-
-    if "dell_output_bytes_usd" not in st.session_state:
-
-        st.session_state["dell_output_bytes_usd"] = None
-
-    if "dell_output_name_eur" not in st.session_state:
-
-        st.session_state["dell_output_name_eur"] = None
-
-    if "dell_output_name_usd" not in st.session_state:
-
-        st.session_state["dell_output_name_usd"] = None
-
-    if "dell_last_exchange_rate" not in st.session_state:
-
-        st.session_state["dell_last_exchange_rate"] = None
 
     if "dell_last_template_label" not in st.session_state:
 
@@ -2584,15 +2555,11 @@ elif tool == "💻 Dell Quotation":
 
 
 
-    current_exchange_rate = exchange_rate if currency_code == "EUR" else None
-
     if (
 
         st.session_state.get("dell_last_currency_code") not in (None, currency_code)
 
         or st.session_state.get("dell_last_margin_percent") not in (None, margin_percent)
-
-        or st.session_state.get("dell_last_exchange_rate") not in (None, current_exchange_rate)
 
     ):
 
@@ -2677,80 +2644,43 @@ elif tool == "💻 Dell Quotation":
 
                     template_type = detect_dell_template(input_bytes)
 
-                    if currency_code == "EUR":
-                        currencies_to_generate = ["EUR", "USD"]
-                    else:
-                        currencies_to_generate = [currency_code]
-
                     if template_type == "extended_services":
                         template_label = "extended_services"
-                        generated_outputs = {}
-                        for target_currency in currencies_to_generate:
-                            out_bytes = generate_dell_extended_services_quote(
-                                input_excel_bytes=input_bytes,
-                                margin_percent=margin_percent,
-                                currency_code=target_currency,
-                                exchange_rate=exchange_rate if target_currency == "EUR" else None,
-                                style_currency="EUR" if currency_code == "EUR" else None,
-                                include_footer_notes=False if currency_code == "EUR" else True,
-                            )
-                            generated_outputs[target_currency] = out_bytes
-                        out_bytes = generated_outputs.get("EUR", next(iter(generated_outputs.values())))
+                        out_bytes = generate_dell_extended_services_quote(
+                            input_excel_bytes=input_bytes,
+                            margin_percent=margin_percent,
+                            currency_code=currency_code,
+                            exchange_rate=None,
+                            style_currency=None,
+                            include_footer_notes=True,
+                        )
                         output_name = build_dell_extended_services_output_filename(input_bytes, currency_code=currency_code)
                     else:
                         template_label = detect_dell_standard_variant(input_bytes)
-                        generated_outputs = {}
-                        for target_currency in currencies_to_generate:
-                            out_bytes = generate_dell_quote(
-                                input_excel_bytes=input_bytes,
-                                margin_percent=margin_percent,
-                                currency_code=target_currency,
-                                exchange_rate=exchange_rate if target_currency == "EUR" else None,
-                                style_currency="EUR" if currency_code == "EUR" else None,
-                                include_footer_notes=False if currency_code == "EUR" else True,
-                            )
-                            generated_outputs[target_currency] = out_bytes
-                        out_bytes = generated_outputs.get("EUR", next(iter(generated_outputs.values())))
+                        out_bytes = generate_dell_quote(
+                            input_excel_bytes=input_bytes,
+                            margin_percent=margin_percent,
+                            currency_code=currency_code,
+                            exchange_rate=None,
+                            style_currency=None,
+                            include_footer_notes=True,
+                        )
                         output_name = build_dell_output_filename(input_bytes, currency_code=currency_code)
-
-
 
                     if isinstance(out_bytes, io.BytesIO):
 
                         out_bytes = out_bytes.getvalue()
 
-
-
                     if not out_bytes:
 
                         raise ValueError("Quotation generation completed but produced no file data.")
 
-
-
                     st.session_state["dell_output_bytes"] = out_bytes
-                    st.session_state["dell_output_bytes_eur"] = generated_outputs.get("EUR")
-                    st.session_state["dell_output_bytes_usd"] = generated_outputs.get("USD")
                     st.session_state["dell_output_name"] = output_name
-                    st.session_state["dell_output_name_eur"] = (
-                        build_dell_output_filename(input_bytes, currency_code="EUR")
-                        if template_type != "extended_services"
-                        else build_dell_extended_services_output_filename(input_bytes, currency_code="EUR")
-                    )
-                    st.session_state["dell_output_name_usd"] = (
-                        build_dell_output_filename(input_bytes, currency_code="USD")
-                        if template_type != "extended_services"
-                        else build_dell_extended_services_output_filename(input_bytes, currency_code="USD")
-                    )
-
                     st.session_state["dell_generation_done"] = True
-
                     st.session_state["dell_generation_success"] = True
-
                     st.session_state["dell_last_currency_code"] = currency_code
-
                     st.session_state["dell_last_margin_percent"] = margin_percent
-                    st.session_state["dell_last_exchange_rate"] = current_exchange_rate
-
                     st.session_state["dell_last_template_label"] = template_label
 
 
@@ -2771,36 +2701,14 @@ elif tool == "💻 Dell Quotation":
 
         st.markdown("### Download your file")
 
-        if currency_code == "EUR":
-            eur_bytes = st.session_state.get("dell_output_bytes_eur")
-            usd_bytes = st.session_state.get("dell_output_bytes_usd")
-            if eur_bytes is not None:
-                st.download_button(
-                    label="⬇️ Download EUR quotation",
-                    data=eur_bytes,
-                    file_name=st.session_state.get("dell_output_name_eur", "quotation_eur.xlsx"),
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="download_dell_quote_eur_bottom",
-                    use_container_width=True,
-                )
-            if usd_bytes is not None:
-                st.download_button(
-                    label="⬇️ Download USD quotation",
-                    data=usd_bytes,
-                    file_name=st.session_state.get("dell_output_name_usd", "quotation_usd.xlsx"),
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="download_dell_quote_usd_bottom",
-                    use_container_width=True,
-                )
-        else:
-            st.download_button(
-                label="⬇️ Download quotation",
-                data=st.session_state.get("dell_output_bytes"),
-                file_name=st.session_state.get("dell_output_name", "quotation.xlsx"),
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="download_dell_quote_bottom",
-                use_container_width=True,
-            )
+        st.download_button(
+            label="⬇️ Download quotation",
+            data=st.session_state.get("dell_output_bytes"),
+            file_name=st.session_state.get("dell_output_name", "quotation.xlsx"),
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="download_dell_quote_bottom",
+            use_container_width=True,
+        )
 
         st.caption(f"Prepared file: {st.session_state.get('dell_output_name', 'quotation.xlsx')}")
 
@@ -2810,7 +2718,8 @@ elif tool == "💻 Dell Quotation":
 
         st.info("Upload Dell BOQ Excel or PDF, then click Generate Quotation.")
 
-
+elif tool == "💻 Dell Quotation Southcomp Polaris":
+    render_southcomp_tool()
 
 st.markdown("""
 <footer style='text-align:center; margin-top:3rem; color:#1a73e8; font-size:20px; font-weight:bold; font-family: Google Sans, sans-serif;'>
