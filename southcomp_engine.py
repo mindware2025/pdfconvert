@@ -615,6 +615,7 @@ def _extract_pdf_metadata_by_position(pdf_bytes: bytes) -> Dict[str, str]:
 
     # State machine over sorted rows
     next_row_is_quote_name_creator = False
+    next_row_is_reseller = False
     in_shipping = False
 
     for y in sorted(rows):
@@ -641,6 +642,19 @@ def _extract_pdf_metadata_by_position(pdf_bytes: bytes) -> Dict[str, str]:
             next_row_is_quote_name_creator = False
             out["quote_name"] = " ".join(left_words).strip()
             out["quote_creator"] = right_text
+            continue
+
+        if next_row_is_reseller:
+            next_row_is_reseller = False
+            reseller_raw = right_text.rstrip("+").strip()
+            reseller_raw = re.sub(r"\s*[-–]\s*Authorized Partner\+?$", "", reseller_raw, flags=re.I).strip()
+            out["reseller"] = reseller_raw
+            continue
+
+        # "Page Name:" (left) / "Authorized Partner:" (right) — label row → next row has reseller
+        if "authorized partner" in right_text.lower() and not out.get("reseller"):
+            next_row_is_reseller = True
+            in_shipping = False
             continue
 
         # "Billing Information:" (left) / "Shipping Information:" (right) — label row
@@ -1532,6 +1546,8 @@ def generate_southcomp_quote(
             quote_meta["quote creator"] = pos_meta["quote_creator"]
         if pos_meta.get("end_user"):
             quote_meta["end user"] = pos_meta["end_user"]
+        if pos_meta.get("reseller"):
+            quote_meta["reseller"] = pos_meta["reseller"]
         if pos_meta.get("quote_name") and not quote_meta.get("company name"):
             quote_meta["company name"] = pos_meta["quote_name"]
     else:
