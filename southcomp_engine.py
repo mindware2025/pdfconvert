@@ -646,9 +646,7 @@ def _extract_pdf_metadata_by_position(pdf_bytes: bytes) -> Dict[str, str]:
 
         if next_row_is_reseller:
             next_row_is_reseller = False
-            reseller_raw = right_text.rstrip("+").strip()
-            reseller_raw = re.sub(r"\s*[-–]\s*Authorized Partner\+?$", "", reseller_raw, flags=re.I).strip()
-            out["reseller"] = reseller_raw
+            out["reseller"] = right_text.strip()
             continue
 
         # "Page Name:" (left) / "Authorized Partner:" (right) — label row → next row has reseller
@@ -657,8 +655,8 @@ def _extract_pdf_metadata_by_position(pdf_bytes: bytes) -> Dict[str, str]:
             in_shipping = False
             continue
 
-        # "Billing Information:" (left) / "Shipping Information:" (right) — label row
-        if "billing information" in left_text and "shipping information" in right_text.lower():
+        # "Shipping Information:" label row — left column may say "Billing Information:" or be blank
+        if "shipping information" in right_text.lower():
             in_shipping = True
             continue
 
