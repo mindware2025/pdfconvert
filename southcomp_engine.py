@@ -914,14 +914,16 @@ def _build_quote_workbook(
     currency_code: str,
     exchange_rate: float,
     consolidation_fee: float,
+    margin_percent: float,
     is_pdf: bool,
     part_numbers: Optional[Dict[str, str]] = None,
 ) -> bytes:
     """Build the EUR-style 2-sheet workbook (Quote + Configuration)."""
     currency_code = currency_code.upper()
     conversion_rate = exchange_rate if currency_code == "EUR" else 1.0
+    margin_decimal = margin_percent / 100.0
 
-    # Convert items to selected currency
+    # Convert items to selected currency; keep originals for the USD helper columns
     original_usd_items = list(items)
     if conversion_rate != 1.0:
         items = [
@@ -1083,11 +1085,16 @@ def _build_quote_workbook(
     helper_value_row = last_meta_row + 1
     helper_aux_row = helper_value_row + 1
 
+    # F/G col of helper row: consolidation fee total (editable by user in Excel)
     ws[f"{helper_unit_col}{helper_value_row}"] = consolidation_fee
     ws[f"{helper_unit_col}{helper_value_row}"].font = helper_font
     ws[f"{helper_unit_col}{helper_value_row}"].alignment = Alignment(horizontal="center", vertical="center")
     ws[f"{helper_unit_col}{helper_value_row}"].fill = helper_body_fill
     ws[f"{helper_unit_col}{helper_value_row}"].border = border_thin
+
+    # Marge col of helper row: margin % as a static decimal — NO circular formula
+    ws[f"{helper_margin_col}{helper_value_row}"] = margin_decimal
+    ws[f"{helper_margin_col}{helper_value_row}"].number_format = "0.00%"
     ws[f"{helper_margin_col}{helper_value_row}"].font = helper_font
     ws[f"{helper_margin_col}{helper_value_row}"].alignment = Alignment(horizontal="center", vertical="center")
     ws[f"{helper_margin_col}{helper_value_row}"].fill = helper_body_fill
@@ -1143,16 +1150,16 @@ def _build_quote_workbook(
         ws[f"{qty_col}{row_ptr}"] = qty_val or 0
         unit_val = unit_val or 0.0
 
-        # Helper: original unit price (unconverted) for margin calc
+        # "Prix unitaire d'origine" — static original cost price (in output currency, pre-margin)
         orig_helper = f"{helper_unit_col}{row_ptr}"
-        ws[orig_helper] = f"=({helper_unit_col}{helper_value_row}+{helper_fee_col}{row_ptr})*{qty_col}{row_ptr}+{unit_col}{row_ptr}*{qty_col}{row_ptr}"
+        ws[orig_helper] = unit_val
         ws[orig_helper].font = helper_font
         ws[orig_helper].fill = helper_body_fill
         ws[orig_helper].number_format = currency_fmt
         ws[orig_helper].border = border_thin
         ws[orig_helper].alignment = Alignment(horizontal="center", vertical="center")
 
-        # Helper: fees (default 0)
+        # "Fees" per unit — static 0, user can edit in Excel
         fee_helper = f"{helper_fee_col}{row_ptr}"
         ws[fee_helper] = 0
         ws[fee_helper].font = helper_font
@@ -1161,13 +1168,14 @@ def _build_quote_workbook(
         ws[fee_helper].border = border_thin
         ws[fee_helper].alignment = Alignment(horizontal="center", vertical="center")
 
-        # Unit price (with margin applied via formula)
-        ws[f"{unit_col}{row_ptr}"] = f"=({unit_val:.6f}+{helper_fee_col}{row_ptr})*(1+{helper_margin_col}{helper_value_row})"
+        # "Prix unitaire" — selling price = (original + fees) * (1 + margin%)
+        # References static F-col (original price) and static J17 (margin%) — no circular ref
+        ws[f"{unit_col}{row_ptr}"] = f"=({helper_unit_col}{row_ptr}+{helper_fee_col}{row_ptr})*(1+{helper_margin_col}${helper_value_row})"
         ws[f"{unit_col}{row_ptr}"].number_format = currency_fmt
         ws[f"{unit_col}{row_ptr}"].border = border_thin
         ws[f"{unit_col}{row_ptr}"].alignment = Alignment(horizontal="center", vertical="center")
 
-        # Total price
+        # "Prix total"
         total_addr = f"{total_col}{row_ptr}"
         ws[total_addr] = f"={unit_col}{row_ptr}*{qty_col}{row_ptr}"
         ws[total_addr].number_format = currency_fmt
@@ -1175,7 +1183,7 @@ def _build_quote_workbook(
         ws[total_addr].alignment = Alignment(horizontal="center", vertical="center")
         total_cells.append(total_addr)
 
-        # USD original columns
+        # USD original columns (always USD values from original BOQ)
         usd_unit = original_usd_unit or (unit_val / conversion_rate if conversion_rate and conversion_rate != 1.0 else unit_val)
         ws[f"{usd_unit_col}{row_ptr}"] = usd_unit
         ws[f"{usd_unit_col}{row_ptr}"].number_format = usd_fmt
@@ -1209,20 +1217,6 @@ def _build_quote_workbook(
 
         row_ptr += 1
         sr_no += 1
-
-    # Update helper margin formula
-    first_data_row = header_row + 1
-    last_data_row = row_ptr - 1
-    if last_data_row >= first_data_row:
-        ws[f"{helper_margin_col}{helper_value_row}"] = (
-            f"=IFERROR(${helper_unit_col}${helper_value_row}/"
-            f"SUMPRODUCT(${qty_col}${first_data_row}:${qty_col}${last_data_row},"
-            f"${helper_unit_col}${first_data_row}:${helper_unit_col}${last_data_row}"
-            f"+${helper_fee_col}{first_data_row}:${helper_fee_col}{last_data_row}),0)"
-        )
-    else:
-        ws[f"{helper_margin_col}{helper_value_row}"] = 0
-    ws[f"{helper_margin_col}{helper_value_row}"].number_format = "0.00\\%"
 
     # --- Total row ---
     total_label_col = "C" if include_part_number else "B"
@@ -1347,6 +1341,7 @@ def generate_southcomp_quote(
         currency_code=currency_code,
         exchange_rate=effective_rate,
         consolidation_fee=adjusted_consolidation_fee,
+        margin_percent=margin_percent,
         is_pdf=is_pdf,
         part_numbers=part_numbers or None,
     )
