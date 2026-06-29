@@ -2415,19 +2415,27 @@ def generate_dell_quote(
 
     # ===== TABLE HEADER (Same position logic for all currencies) =====
     header_row = helper_aux_row + 1
-    ws[f"A{header_row}"] = "N°"
+    if style_currency == "EUR":
+        lbl_no, lbl_part, lbl_qty = "N°", "N° de pièce", "Qté"
+        lbl_unit_price, lbl_total_price = "Prix unitaire", "Prix total"
+        lbl_orig_unit, lbl_margin = "Prix unitaire d’origine", "Marge"
+    else:
+        lbl_no, lbl_part, lbl_qty = "No.", "Part Number", "Qty"
+        lbl_unit_price, lbl_total_price = "Unit Price", "Total Price"
+        lbl_orig_unit, lbl_margin = "Original Unit Price", "Margin"
+    ws[f"A{header_row}"] = lbl_no
     if include_part_number:
-        ws[f"B{header_row}"] = "N° de pièce"
+        ws[f"B{header_row}"] = lbl_part
     ws[f"{desc_col}{header_row}"] = "Description"
-    ws[f"{qty_col}{header_row}"] = "Qté"
-    ws[f"{unit_price_col}{header_row}"] = "Prix unitaire"
-    ws[f"{total_price_col}{header_row}"] = "Prix total"
-    ws[f"{helper_unit_col}{header_row}"] = "Prix unitaire d’origine"
+    ws[f"{qty_col}{header_row}"] = lbl_qty
+    ws[f"{unit_price_col}{header_row}"] = lbl_unit_price
+    ws[f"{total_price_col}{header_row}"] = lbl_total_price
+    ws[f"{helper_unit_col}{header_row}"] = lbl_orig_unit
     ws[f"{helper_fee_col}{header_row}"] = "Fees"
     if style_currency == "EUR":
         ws[f"{usd_unit_col}{header_row}"] = "Unit Price USD original"
         ws[f"{usd_total_col}{header_row}"] = "Total Price USD original"
-    ws[f"{helper_margin_col}{header_row}"] = "Marge"
+    ws[f"{helper_margin_col}{header_row}"] = lbl_margin
     header_fill = PatternFill(start_color="9BC2E6", end_color="9BC2E6", fill_type="solid")
     header_font = Font(bold=True, color="000000")
 
@@ -2541,7 +2549,7 @@ def generate_dell_quote(
         ws.merge_cells(start_row=row_ptr, start_column=3, end_row=row_ptr, end_column=5)
     else:
         ws.merge_cells(start_row=row_ptr, start_column=2, end_row=row_ptr, end_column=4)
-    ws[f"{total_label_col}{row_ptr}"] = "Prix total"
+    ws[f"{total_label_col}{row_ptr}"] = "Prix total" if style_currency == "EUR" else "Total Price"
     ws[f"{total_label_col}{row_ptr}"].alignment = Alignment(horizontal="right", vertical="center")
     ws[f"{total_label_col}{row_ptr}"].font = Font(bold=True, color="1F497D")
 
