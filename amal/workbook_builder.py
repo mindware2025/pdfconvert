@@ -462,7 +462,7 @@ def fill_pack_list_sheet(worksheet, fields: dict, address_rows: int) -> None:
     worksheet.merge_cells(start_row=addr_s, start_column=7, end_row=addr_e, end_column=8)
     apply_outer_border_to_range(worksheet, addr_s, addr_e, 1, 8)
 
-    worksheet["G5"] = '="No. : " & \'comm-inv\'!G5'
+    worksheet["G5"] = '="" & \'comm-inv\'!G5'
     worksheet["G6"] = '="Date : " & \'comm-inv\'!G6'
 
     c = worksheet.cell(row=addr_s, column=1)
