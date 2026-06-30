@@ -234,7 +234,9 @@ def extract_sob_line_items(sob_text: str) -> list[dict]:
                 row_chunks.append(" ".join(current_row))
             break
 
-        if re.match(r"^\d+\s+", line):
+        row_start = re.match(r"^(\d+)\s+(\S+)", line)
+        is_new_row = bool(row_start and re.fullmatch(r"[A-Z0-9][A-Z0-9-]*", row_start.group(2)))
+        if is_new_row:
             if current_row:
                 row_chunks.append(" ".join(current_row))
             current_row = [line]

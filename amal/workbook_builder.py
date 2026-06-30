@@ -553,7 +553,30 @@ def fill_pack_list_items(worksheet, items: list[dict], address_rows: int) -> Non
 
     qty_total = round(sum(i["qty"] for i in items if isinstance(i.get("qty"), (int, float))), 2)
     weight_total = round(sum(i["gross_weight"] for i in items if isinstance(i.get("gross_weight"), (int, float))), 2)
-    pkg_total = round(sum(i["package"] for i in items if isinstance(i.get("package"), (int, float))), 2)
+    total_packages = len({i.get("case_no") for i in items if i.get("case_no")})
+
+    # Merge Package column cells for consecutive items sharing the same case_no
+    if items:
+        groups: list[list[int]] = []
+        current_group = [items_start]
+        current_case = items[0].get("case_no", "")
+        for offset in range(1, len(items)):
+            case_no = items[offset].get("case_no", "")
+            if case_no == current_case:
+                current_group.append(items_start + offset)
+            else:
+                groups.append(current_group)
+                current_group = [items_start + offset]
+                current_case = case_no
+        groups.append(current_group)
+
+        for group in groups:
+            if len(group) > 1:
+                worksheet.merge_cells(start_row=group[0], start_column=8, end_row=group[-1], end_column=8)
+                c = worksheet.cell(row=group[0], column=8)
+                c.value = 1
+                c.alignment = CENTER
+                c.border = THIN_BORDER
 
     c = worksheet.cell(row=total_row, column=5)
     c.value = "Total"
@@ -561,7 +584,7 @@ def fill_pack_list_items(worksheet, items: list[dict], address_rows: int) -> Non
     c.alignment = CENTER
     c.border = THIN_BORDER
 
-    for col, val, align in [(6, qty_total, CENTER), (7, weight_total, RIGHT), (8, pkg_total, CENTER)]:
+    for col, val, align in [(6, qty_total, CENTER), (7, weight_total, RIGHT), (8, total_packages, CENTER)]:
         c = worksheet.cell(row=total_row, column=col)
         c.value = val
         c.font = BOLD_FONT

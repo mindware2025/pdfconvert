@@ -246,9 +246,8 @@ def process_uploaded_pairs(file_pairs: list[tuple]) -> ProcessingResult:
     pack_list_fields = dict(first_result.pack_list_fields)
     pack_list_fields["commercial_invoice_no"] = comm_inv_fields.get("commercial_invoice_no", "")
     pack_list_fields["date"] = comm_inv_fields.get("date", "")
-    pack_list_fields["total_packages"] = round(
-        sum(item["package"] for item in combined_pack_list_items if isinstance(item.get("package"), (int, float))),
-        2,
+    pack_list_fields["total_packages"] = len(
+        {item["case_no"] for item in combined_pack_list_items if item.get("case_no")}
     )
     pack_list_fields["total_gross_weight"] = round(
         sum(item["gross_weight"] for item in combined_pack_list_items if isinstance(item.get("gross_weight"), (int, float))),
@@ -316,14 +315,22 @@ def build_output_workbook(result: ProcessingResult) -> io.BytesIO:
 
 def build_pack_list_data(comm_inv_fields: dict, comm_inv_items: list[dict], case_details: list[dict]) -> tuple[dict, list[dict]]:
     case_lookup = {detail["case_no"]: detail for detail in case_details}
-    case_occurrences: dict[str, int] = {}
+    case_item_counts: dict[str, int] = {}
+    for item in comm_inv_items:
+        case_no = item.get("case_no", "")
+        case_item_counts[case_no] = case_item_counts.get(case_no, 0) + 1
+
     pack_list_items: list[dict] = []
 
     for item in comm_inv_items:
         case_no = item.get("case_no", "")
-        case_occurrences[case_no] = case_occurrences.get(case_no, 0) + 1
-        package_number = case_occurrences[case_no]
         case_detail = case_lookup.get(case_no, {})
+        raw_weight = case_detail.get("gross_weight", "")
+        count_in_case = case_item_counts.get(case_no, 1)
+        if isinstance(raw_weight, (int, float)) and raw_weight:
+            weight_per_item = round(raw_weight / count_in_case, 2)
+        else:
+            weight_per_item = raw_weight
 
         pack_list_items.append(
             {
@@ -333,16 +340,13 @@ def build_pack_list_data(comm_inv_fields: dict, comm_inv_items: list[dict], case
                 "origin": item.get("origin", ""),
                 "hs_code": item.get("hs_code", ""),
                 "qty": item.get("qty", ""),
-                "gross_weight": case_detail.get("gross_weight", ""),
-                "package": float(package_number),
+                "gross_weight": weight_per_item,
+                "package": 1.0,
                 "dimensions_cm": case_detail.get("dimensions_cm", ""),
             }
         )
 
-    total_packages = round(
-        sum(item["package"] for item in pack_list_items if isinstance(item.get("package"), (int, float))),
-        2,
-    )
+    total_packages = len({item["case_no"] for item in pack_list_items if item.get("case_no")})
     total_gross_weight = round(
         sum(item["gross_weight"] for item in pack_list_items if isinstance(item.get("gross_weight"), (int, float))),
         2,
