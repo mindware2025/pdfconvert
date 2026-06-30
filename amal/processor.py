@@ -7,6 +7,7 @@ import pandas as pd
 
 try:
     from .ibm_parser import (
+        extract_case_details_from_ibm_pdf,
         extract_case_details_from_ibm_text,
         extract_item_rows_from_ibm_pdf,
         extract_item_rows_from_ibm_text,
@@ -19,7 +20,7 @@ try:
     )
     from .workbook_builder import create_workbook_bytes
 except ImportError:
-    from ibm_parser import extract_case_details_from_ibm_text, extract_item_rows_from_ibm_pdf, extract_item_rows_from_ibm_text
+    from ibm_parser import extract_case_details_from_ibm_pdf, extract_case_details_from_ibm_text, extract_item_rows_from_ibm_pdf, extract_item_rows_from_ibm_text
     from pdf_utils import extract_text_from_pdf
     from sob_parser import extract_comm_inv_fields_from_sob, extract_sob_line_items, map_ibm_items_to_sob
     from workbook_builder import create_workbook_bytes
@@ -126,7 +127,7 @@ def process_uploaded_pdfs(sob_file, ibm_file) -> ProcessingResult:
     ibm_pdf_items = extract_item_rows_from_ibm_pdf(ibm_file)
     ibm_text_items = extract_item_rows_from_ibm_text(ibm_text)
     ibm_items = merge_ibm_item_sources(ibm_pdf_items, ibm_text_items)
-    case_details = extract_case_details_from_ibm_text(ibm_text)
+    case_details = extract_case_details_from_ibm_pdf(ibm_file) or extract_case_details_from_ibm_text(ibm_text)
     sob_items = extract_sob_line_items(sob_text)
     comm_inv_items, comm_inv_unmatched_items = map_ibm_items_to_sob(ibm_items, sob_items)
     sob_reference = Path(str(sob_file.name)).stem

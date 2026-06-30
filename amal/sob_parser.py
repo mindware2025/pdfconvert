@@ -45,6 +45,14 @@ def extract_block(text: str, start_marker: str, end_marker: str) -> str:
 
 
 def split_merged_contact_and_company(line: str) -> list[str]:
+    # Phone/number directly concatenated with a name (no space) — two-column PDF merge artifact
+    phone_name = re.match(r"^([\d\s+().-]+\d)([A-Za-z].{3,})$", line)
+    if phone_name:
+        left = phone_name.group(1).strip()
+        right = phone_name.group(2).strip()
+        if left and right:
+            return [left, right]
+
     match = re.match(r"^(.*\d)([A-Z][A-Z '&().,/:-]{5,})$", line)
     if match:
         left = match.group(1).strip()
@@ -108,7 +116,10 @@ def normalize_address_block(value: str) -> str:
 
 
 def split_bill_to_ship_to(block: str) -> tuple[str, str]:
-    raw_lines = [line.strip() for line in block.splitlines() if line.strip()]
+    raw_lines = [
+        line.strip() for line in block.splitlines()
+        if line.strip() and not re.match(r"^TRN:[A-Z:]+$", line.strip())
+    ]
     lines: list[str] = []
     for line in raw_lines:
         lines.extend(split_merged_contact_and_company(line))

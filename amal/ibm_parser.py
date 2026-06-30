@@ -335,6 +335,52 @@ def parse_case_detail_segment(segment: str) -> dict | None:
     }
 
 
+def extract_case_details_from_ibm_pdf(uploaded_file) -> list[dict]:
+    uploaded_file.seek(0)
+    details: list[dict] = []
+    seen: set = set()
+
+    with pdfplumber.open(uploaded_file) as pdf:
+        for page in pdf.pages:
+            for table in page.extract_tables():
+                if not table or not table[0]:
+                    continue
+                header = [clean_cell(cell) for cell in table[0]]
+                if "Case No" not in header or "Gross Weight (kg)" not in header:
+                    continue
+
+                case_idx = header.index("Case No")
+                weight_idx = header.index("Gross Weight (kg)")
+                dim_idx = header.index("Dimensions (cm)") if "Dimensions (cm)" in header else -1
+
+                for row in table[1:]:
+                    cells = [clean_cell(cell) for cell in row]
+                    if len(cells) <= case_idx:
+                        continue
+                    if not CASE_NO_PATTERN.match(cells[case_idx]):
+                        continue
+
+                    raw_weight = cells[weight_idx] if weight_idx < len(cells) else ""
+                    gross_weight = clean_numeric_token(raw_weight)
+                    if not gross_weight:
+                        continue
+
+                    dimensions_cm = cells[dim_idx] if dim_idx >= 0 and dim_idx < len(cells) else ""
+
+                    key = (cells[case_idx], gross_weight, dimensions_cm)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    details.append({
+                        "case_no": cells[case_idx],
+                        "gross_weight": float(gross_weight),
+                        "dimensions_cm": dimensions_cm,
+                    })
+
+    uploaded_file.seek(0)
+    return details
+
+
 def extract_case_details_from_ibm_text(ibm_text: str) -> list[dict]:
     normalized_text = re.sub(r"\s+", " ", ibm_text)
     segments = re.findall(r"(970[A-Z0-9]{10}.*?)(?=970[A-Z0-9]{10}|$)", normalized_text)
