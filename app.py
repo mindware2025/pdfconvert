@@ -38,6 +38,7 @@ from sales.dell_extended_services import generate_dell_extended_services_quote
 from sales.dell import build_dell_output_filename, detect_dell_standard_variant, generate_dell_quote
 from sales.dell_extended_services import build_dell_extended_services_output_filename
 from sales.dell_orion import build_dell_orion_output_filename, generate_orion_quote
+from sales.mibb import check_mibb_hardware_quote_match, correct_mibb_descriptions, create_mibb_excel, create_mibb_hardware_excel, extract_mibb_hardware_table_from_excel, extract_mibb_header_from_pdf, extract_mibb_table_from_pdf, extract_mibb_terms_from_pdf
 from sales.quotetemplate import detect_dell_template
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
@@ -891,7 +892,13 @@ if st.session_state.show_team_selection:
 
 # Continue with the rest of your existing code for team-specific tools...
 
-
+def load_master_map(master_file):
+    df = pd.read_excel(master_file) if master_file.name.endswith(".xlsx") else pd.read_csv(master_file)
+    df = df.iloc[:, :2]
+    df.columns = ["part", "desc"]
+    df["part"] = df["part"].astype(str).str.upper().str.replace(" ", "").str.replace("-", "")
+    df["desc"] = df["desc"].fillna("").astype(str)
+    return dict(zip(df["part"], df["desc"]))
 def extractor_workflow(
     extractor_name,
     extractor_info,
@@ -1465,7 +1472,131 @@ elif tool == "💻 Dell Invoice Extractor":
             else:
                 st.warning("No items found in the uploaded PDF(s).")
 
-    
+elif tool == "MIBB Quotations":
+    st.header("MIBB Quotations")
+    quote_type = st.radio("Quotation type", ["Software", "Hardware"], horizontal=True)
+    st.info("Upload a MIBB quotation PDF. The tool will extract header information and table data automatically.")
+
+    logo_path = "image.png"
+    margin_pct = st.number_input(
+        "Margin (%)",
+        min_value=0.0,
+        max_value=99.0,
+        value=1.0,
+        step=0.1,
+        help="Used in the generated Excel formulas.",
+    )
+
+    st.subheader("Upload MIBB Quotation PDF")
+    uploaded_pdf = st.file_uploader(
+        "Upload MIBB Quotation PDF (.pdf)",
+        type=["pdf"],
+        help="Upload a MIBB quotation PDF. The tool will extract header information and table data automatically.",
+    )
+
+    if quote_type == "Software":
+        st.subheader("Upload Pricelist / Master File (Descriptions)")
+        master_file = st.file_uploader(
+            "Upload (.csv or .xlsx) - only first 2 columns used",
+            type=["csv", "xlsx"],
+        )
+
+        if uploaded_pdf:
+            pdf_bytes = io.BytesIO(uploaded_pdf.getbuffer())
+            header_info = extract_mibb_header_from_pdf(pdf_bytes)
+
+            pdf_bytes.seek(0)
+            table_data = extract_mibb_table_from_pdf(pdf_bytes)
+
+            if master_file:
+                master_map = load_master_map(master_file)
+            else:
+                master_map = None
+                st.warning("please upload pricelist")
+
+            table_data = correct_mibb_descriptions(table_data, master_map)
+
+            missing = []
+            if master_map:
+                for row in table_data:
+                    part = str(row[0]).strip().upper()
+                    if part not in master_map:
+                        missing.append(part)
+
+            missing = list(dict.fromkeys(missing))
+            if missing:
+                st.warning(
+                    "Some part numbers were not found in the master file. "
+                    "Descriptions were kept blank in Excel. Please double-check:\n\n"
+                    + ", ".join(missing)
+                )
+
+            if table_data:
+                output = io.BytesIO()
+                create_mibb_excel(
+                    data=table_data,
+                    header_info=header_info,
+                    logo_path=logo_path,
+                    output=output,
+                    margin_pct=margin_pct,
+                )
+                st.success("Excel file generated successfully!")
+                st.download_button(
+                    label="Download MIBB Quotation Excel",
+                    data=output.getvalue(),
+                    file_name="MIBB_Quotation.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+        else:
+            st.info("Please upload a MIBB quotation PDF to get started.")
+    else:
+        st.subheader("Upload Hardware Quotation Excel")
+        uploaded_hardware_excel = st.file_uploader(
+            "Upload Hardware Quote Excel (.xlsx, .xlsm, .xls)",
+            type=["xlsx", "xlsm", "xls"],
+            help="Upload the hardware quotation Excel or XML-based .xls export.",
+        )
+
+        if uploaded_pdf and uploaded_hardware_excel:
+            pdf_bytes = io.BytesIO(uploaded_pdf.getbuffer())
+            header_info = extract_mibb_header_from_pdf(pdf_bytes)
+
+            pdf_bytes.seek(0)
+            terms_text = extract_mibb_terms_from_pdf(pdf_bytes)
+
+            excel_bytes = io.BytesIO(uploaded_hardware_excel.getbuffer())
+            is_match, match_error = check_mibb_hardware_quote_match(
+                excel_bytes,
+                header_info.get("Bid Number", ""),
+            )
+
+            if not is_match:
+                st.error(match_error)
+            else:
+                excel_bytes.seek(0)
+                table_data = extract_mibb_hardware_table_from_excel(excel_bytes)
+                if not table_data:
+                    st.error("No hardware rows were found in the uploaded Excel.")
+                else:
+                    output = io.BytesIO()
+                    create_mibb_hardware_excel(
+                        data=table_data,
+                        header_info=header_info,
+                        logo_path=logo_path,
+                        output=output,
+                        margin_pct=margin_pct,
+                        terms_text=terms_text,
+                    )
+                    st.success("Hardware quotation Excel generated successfully!")
+                    st.download_button(
+                        label="Download MIBB Hardware Quotation Excel",
+                        data=output.getvalue(),
+                        file_name="MIBB_Hardware_Quotation.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+        else:
+            st.info("Please upload both the MIBB PDF and hardware Excel to get started.")
+
 elif tool == "🟨 AWS Invoice Tool":
         st.title("AWS Invoice Tool")
         st.write("Upload AWS invoice PDF(s) and download the extracted data as Excel.")
