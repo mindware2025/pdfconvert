@@ -184,7 +184,7 @@ def normalize_item_code(value: str) -> str:
 
 
 def split_sob_item_code_and_description(body: str) -> tuple[str, str]:
-    compact_match = re.match(r"^(?P<digits>\d{6,8})(?P<desc>[A-Z].*)$", body)
+    compact_match = re.match(r"^(?P<digits>\d{6,8})\s+(?P<desc>[A-Z].*)$", body)
     if compact_match:
         item_code = compact_match.group("digits").strip()
         description = normalize_whitespace(compact_match.group("desc"))
