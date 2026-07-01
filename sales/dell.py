@@ -528,6 +528,20 @@ def _locate_pricing_summary(ws):
     return None
 
 
+def _pricing_summary_is_ksa_layout(ws, header_row: int, start_row: int) -> bool:
+    """Detect the KSA pricing summary layout, which adds a 'Dell Local**' (SAR)
+    column and shifts Qty/Unit Price/Subtotal one column to the left (J/K/L
+    instead of K/L/N). Signalled by a "SAR" value in the header/first data row.
+    """
+    max_c = min(ws.max_column, 20)
+    for r in (header_row, start_row):
+        for c in range(1, max_c + 1):
+            v = ws.cell(r, c).value
+            if v and re.search(r'\bSAR\b', str(v), re.IGNORECASE):
+                return True
+    return False
+
+
 def _try_extract_items_from_pricing_summary(ws):
     logger = _get_logger()
     located = _locate_pricing_summary(ws)
@@ -537,7 +551,12 @@ def _try_extract_items_from_pricing_summary(ws):
 
     header_row, start_row = located
     logger.debug("_try_extract_items_from_pricing_summary: header_row=%d start_row=%d", header_row, start_row)
-    A, B, K, L, N = (colidx('A'), colidx('B'), colidx('K'), colidx('L'), colidx('N'))
+    A, B = colidx('A'), colidx('B')
+    if _pricing_summary_is_ksa_layout(ws, header_row, start_row):
+        logger.debug("_try_extract_items_from_pricing_summary: detected KSA layout (Qty/Unit Price/Subtotal at J/K/L)")
+        K, L, N = colidx('J'), colidx('K'), colidx('L')
+    else:
+        K, L, N = colidx('K'), colidx('L'), colidx('N')
 
     items = []
     r = start_row
@@ -1891,6 +1910,10 @@ def detect_dell_standard_variant(input_excel_bytes: bytes) -> str:
 
         if _is_grouped_config_template(src_ws):
             return "grouped_config"
+
+        located = _locate_pricing_summary(src_ws)
+        if located and _pricing_summary_is_ksa_layout(src_ws, *located):
+            return "pricing_summary_ksa"
 
         if _try_extract_items_from_pricing_summary(src_ws):
             return "pricing_summary"
