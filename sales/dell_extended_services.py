@@ -10,7 +10,7 @@ from openpyxl import Workbook
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.drawing.image import Image as XLImage
-from dell import CURRENCY_CONVERSION_RATES, CURRENCY_NUMBER_FORMATS
+from sales.dell import CURRENCY_CONVERSION_RATES, CURRENCY_NUMBER_FORMATS
 AED_RATE = 3.68
 # ---------------- Helpers ----------------
 def _text(v):

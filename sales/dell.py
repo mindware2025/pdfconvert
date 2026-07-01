@@ -15,7 +15,7 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter, column_index_from_string as colidx
 from openpyxl.drawing.image import Image as XLImage
 
-from dell_template_support import (
+from sales.dell_template_support import (
     find_compact_quote_header,
     find_grouped_config_header,
     find_label_value,
