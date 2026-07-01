@@ -10,6 +10,7 @@ from openpyxl import Workbook
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.drawing.image import Image as XLImage
+from dell import CURRENCY_CONVERSION_RATES, CURRENCY_NUMBER_FORMATS
 AED_RATE = 3.68
 
 # ---------------- Helpers ----------------
@@ -156,14 +157,14 @@ def build_dell_extended_services_output_filename(input_excel_bytes: bytes) -> st
     ]
     return "- ".join(parts) + ".xlsx"
 
-def _aed_footer_notes() -> List[str]:
+def _aed_footer_notes(currency_code: str = "AED") -> List[str]:
     return [
         "Ø  Payment terms will be as per our finance approval.",
         "Ø  These prices are till DDP Dubai.",
         "Ø  Hardware will take 4-12 weeks delivery time from the date of Booking.",
         "Ø  These prices do not include Mindware installation of any kind.",
         "Ø  Change in Qty or partial shipment is not acceptable.",
-        "Ø  PO Should be addressed to Mindware Technology Trading LLC and should be in AED.",
+        f"Ø  PO Should be addressed to Mindware Technology Trading LLC and should be in {currency_code}.",
         "Ø  For all B2B orders complete end customer details should be mentioned on the PO.",
         "Ø  Orders once placed with Dell cannot be cancelled.",
         "Ø  Kindly also ensure to review the proposal specifications from your end and ensure that they match the requirements exactly as per the End User.",
@@ -236,7 +237,21 @@ def generate_dell_extended_services_quote(
     input_excel_bytes: bytes,
     logo_bytes: Optional[bytes] = None,
     margin_percent: float = 0.0,
+    currency_code: str = "USD",
+    exchange_rate: Optional[float] = None,
+    style_currency: Optional[str] = None,
+    include_footer_notes: bool = True,
 ) -> bytes:
+    currency_code = (currency_code or "USD").upper()
+    style_currency = (style_currency or currency_code).upper()
+    if currency_code == "EUR" and exchange_rate not in (None, ""):
+        try:
+            conversion_rate = float(exchange_rate)
+        except Exception:
+            conversion_rate = CURRENCY_CONVERSION_RATES.get(currency_code, AED_RATE)
+    else:
+        conversion_rate = CURRENCY_CONVERSION_RATES.get(currency_code, AED_RATE)
+
     src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
     src_ws = src_wb.active
     meta = _extract_metadata(src_ws)
@@ -337,7 +352,7 @@ def generate_dell_extended_services_quote(
     # ===== DATA ROWS =====
     row_ptr = header_row + 1
     sr_no = 1
-    currency_fmt = '"AED" #,##0.00'
+    currency_fmt = CURRENCY_NUMBER_FORMATS.get(currency_code, f'"{currency_code}" #,##0.00')
     margin_fmt = '0.00%'
     yellow = PatternFill(start_color="D9EAF7", end_color="D9EAF7", fill_type="solid")
     helper_body_fill = PatternFill(start_color="FCE5E5", end_color="FCE5E5", fill_type="solid")
@@ -354,8 +369,8 @@ def generate_dell_extended_services_quote(
         ws[f"B{row_ptr}"] = services_sku
         ws[f"C{row_ptr}"] = service_desc
         ws[f"D{row_ptr}"] = qty
-        # Unit Price with AED conversion and margin (like Standard Quote logic)
-        ws[f"E{row_ptr}"].value = f"=ROUND(({price_usd}*{AED_RATE})/(1-{margin_percent}/100),2)"
+        # Unit Price with currency conversion and margin (like Standard Quote logic)
+        ws[f"E{row_ptr}"].value = f"=ROUND(({price_usd}*{conversion_rate})/(1-{margin_percent}/100),2)"
         ws[f"E{row_ptr}"].number_format = currency_fmt
         # Total Price = Qty * Unit Price
         ws[f"F{row_ptr}"].value = f"=D{row_ptr}*E{row_ptr}"
@@ -388,19 +403,20 @@ def generate_dell_extended_services_quote(
         ws[f"G{total_row}"].fill = helper_body_fill
         ws[f"G{total_row}"].border = border_thin
     # ===== FOOTER NOTES =====
-    footer_notes = _aed_footer_notes()
-    notes_title_row = (total_row + 2) if total_cells else (row_ptr + 2)
-    ws.merge_cells(start_row=notes_title_row, start_column=1, end_row=notes_title_row, end_column=7)
-    ws.cell(notes_title_row, 1).value = "Terms and Conditions"
-    ws.cell(notes_title_row, 1).font = Font(bold=True, color="1F497D")
-    ws.cell(notes_title_row, 1).alignment = Alignment(horizontal="left", vertical="center")
-    notes_body_row = notes_title_row + 1
-    ws.merge_cells(start_row=notes_body_row, start_column=1, end_row=notes_body_row, end_column=7)
-    body_cell = ws.cell(notes_body_row, 1)
-    body_cell.value = "\n".join(footer_notes)
-    body_cell.alignment = Alignment(wrap_text=True, vertical="top")
-    body_cell.border = border_thin
-    ws.row_dimensions[notes_body_row].height = max(180, min(520, len(footer_notes) * 22))
+    if include_footer_notes:
+        footer_notes = _aed_footer_notes(currency_code)
+        notes_title_row = (total_row + 2) if total_cells else (row_ptr + 2)
+        ws.merge_cells(start_row=notes_title_row, start_column=1, end_row=notes_title_row, end_column=7)
+        ws.cell(notes_title_row, 1).value = "Terms and Conditions"
+        ws.cell(notes_title_row, 1).font = Font(bold=True, color="1F497D")
+        ws.cell(notes_title_row, 1).alignment = Alignment(horizontal="left", vertical="center")
+        notes_body_row = notes_title_row + 1
+        ws.merge_cells(start_row=notes_body_row, start_column=1, end_row=notes_body_row, end_column=7)
+        body_cell = ws.cell(notes_body_row, 1)
+        body_cell.value = "\n".join(footer_notes)
+        body_cell.alignment = Alignment(wrap_text=True, vertical="top")
+        body_cell.border = border_thin
+        ws.row_dimensions[notes_body_row].height = max(180, min(520, len(footer_notes) * 22))
     # Column widths
     widths = {
         "A": 8, "B": 15, "C": 50, "D": 8, "E": 15, "F": 18, "G": 12
