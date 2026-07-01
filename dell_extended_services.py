@@ -137,8 +137,9 @@ def _extract_metadata(ws) -> Dict[str, str]:
             break
     return meta
 
-def build_dell_extended_services_output_filename(input_excel_bytes: bytes) -> str:
+def build_dell_extended_services_output_filename(input_excel_bytes: bytes, currency_code: str = "USD") -> str:
     """Build the download filename for the extended-services workbook."""
+    currency_code = (currency_code or "USD").upper()
     quote_no = ""
     end_user = ""
     try:
@@ -153,6 +154,7 @@ def build_dell_extended_services_output_filename(input_excel_bytes: bytes) -> st
         "Mindware costing",
         _sanitize_filename_part(quote_no),
         _sanitize_filename_part(end_user),
+        currency_code,
         datetime.now().strftime("%Y-%m-%d"),
     ]
     return "- ".join(parts) + ".xlsx"
