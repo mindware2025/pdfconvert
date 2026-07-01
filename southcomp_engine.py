@@ -7,6 +7,8 @@ from io import BytesIO
 from typing import Dict, List, Optional, Tuple
 import os
 import re
+import xml.etree.ElementTree as ET
+import zipfile
 
 import openpyxl
 from openpyxl import Workbook
@@ -1197,6 +1199,186 @@ def _extract_part_numbers(ws) -> Dict[str, str]:
     return out
 
 
+# ==================== DOCX EXTRACTION (Dell "Prospective Customer Quote" Word form) ====================
+
+_DOCX_W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+# Labels from the optional "Quote details" key/value block -> quote_meta-ish keys.
+_DOCX_DETAIL_LABELS = {
+    "partner name": "reseller",
+    "dell customer number": "customer number",
+}
+
+
+def _is_docx(input_bytes: bytes) -> bool:
+    try:
+        with zipfile.ZipFile(BytesIO(input_bytes)) as z:
+            return "word/document.xml" in z.namelist()
+    except Exception:
+        return False
+
+
+def _docx_cell_text(tc) -> str:
+    lines = ["".join(t.text or "" for t in p.iter(_DOCX_W + "t")) for p in tc.findall(_DOCX_W + "p")]
+    return "\n".join(lines).strip()
+
+
+def _docx_tables(input_bytes: bytes) -> List[List[List[str]]]:
+    with zipfile.ZipFile(BytesIO(input_bytes)) as z:
+        xml_bytes = z.read("word/document.xml")
+    root = ET.fromstring(xml_bytes)
+    body = root.find(_DOCX_W + "body")
+    tables: List[List[List[str]]] = []
+    if body is None:
+        return tables
+    for tbl in body.findall(_DOCX_W + "tbl"):
+        rows = [[_docx_cell_text(tc) for tc in tr.findall(_DOCX_W + "tc")] for tr in tbl.findall(_DOCX_W + "tr")]
+        tables.append(rows)
+    return tables
+
+
+def _docx_norm_label(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "").strip().lower()).rstrip(":")
+
+
+def _docx_find_item_columns(header_row: List[str]) -> Optional[Dict[str, int]]:
+    cols: Dict[str, int] = {}
+    for i, cell in enumerate(header_row):
+        name = _docx_norm_label(cell)
+        if "part" in name and "number" in name:
+            cols.setdefault("sku", i)
+        elif name == "description":
+            cols.setdefault("description", i)
+        elif name in ("qty", "quantity"):
+            cols.setdefault("qty", i)
+        elif "unit price" in name:
+            cols.setdefault("unit", i)
+        elif name == "total" or "total price" in name:
+            cols.setdefault("total", i)
+    if all(k in cols for k in ("description", "qty", "unit", "total")):
+        return cols
+    return None
+
+
+def _docx_clean_description(text: str) -> str:
+    """Strip the 'Unit Shipping Price : $' note some exports glue onto the description."""
+    text = re.split(r"unit shipping price", text, flags=re.IGNORECASE)[0]
+    text = re.sub(r"\s*\n\s*", " ", text).strip()
+    return re.sub(r"\s{2,}", " ", text)
+
+
+def _docx_consume_item_rows(
+    rows: List[List[str]],
+    cols: Dict[str, int],
+    items: List[Tuple],
+    part_numbers: Dict[str, str],
+    price_text_blob: List[str],
+) -> None:
+    expected_cols = max(cols.values()) + 1
+    for row in rows:
+        # Merged summary/total rows collapse to fewer <w:tc> cells than the item rows.
+        if len(row) < expected_cols:
+            continue
+        desc = _docx_clean_description(row[cols["description"]])
+        qty_raw = row[cols["qty"]].strip()
+        if not desc or not qty_raw or "total" in _docx_norm_label(row[0]):
+            continue
+        try:
+            qty_val = int(_parse_money(qty_raw) or 0)
+        except Exception:
+            qty_val = 0
+        if qty_val <= 0:
+            continue
+        unit_raw = row[cols["unit"]].strip()
+        total_raw = row[cols["total"]].strip()
+        unit_val = _parse_money(unit_raw) or 0.0
+        total_val = _parse_money(total_raw) or (unit_val * qty_val)
+        price_text_blob.append(unit_raw)
+        price_text_blob.append(total_raw)
+        items.append((desc, qty_val, unit_val, total_val))
+        if "sku" in cols:
+            sku = row[cols["sku"]].replace("\n", "").strip()
+            if sku:
+                part_numbers[str(len(items))] = sku
+
+
+def _extract_southcomp_docx(
+    input_bytes: bytes,
+) -> Tuple[List[Tuple], Dict[str, str], str, str, str, Dict[str, str]]:
+    """Parse a Dell 'Prospective Customer Quote' Word order form.
+
+    Returns (items, quote_meta, quote_ref, date_text, source_currency, part_numbers).
+    """
+    tables = _docx_tables(input_bytes)
+
+    quote_ref = ""
+    date_text = ""
+    bill_to = ""
+    ship_to = ""
+    detail_kv: Dict[str, str] = {}
+    items: List[Tuple] = []
+    part_numbers: Dict[str, str] = {}
+    price_text_blob: List[str] = []
+    pending_cols: Optional[Dict[str, int]] = None
+
+    for rows in tables:
+        if not rows or not rows[0]:
+            continue
+        first_row = rows[0]
+        first_row_norm = [_docx_norm_label(c) for c in first_row]
+
+        if not quote_ref or not date_text:
+            for cell in first_row:
+                if not quote_ref:
+                    m = re.search(r"quote\s*#\s*:?\s*([A-Za-z0-9\-]+)", cell, re.IGNORECASE)
+                    if m:
+                        quote_ref = m.group(1)
+                if not date_text:
+                    m = re.search(r"\bdate\s*:\s*(.+)", cell, re.IGNORECASE)
+                    if m:
+                        date_text = m.group(1).strip()
+
+        if (len(first_row_norm) >= 2 and first_row_norm[0].startswith("bill to")
+                and first_row_norm[1].startswith("ship to")):
+            if len(rows) >= 2:
+                bill_to = rows[1][0] if len(rows[1]) > 0 else ""
+                ship_to = rows[1][1] if len(rows[1]) > 1 else ""
+            continue
+
+        item_cols = _docx_find_item_columns(first_row)
+        if item_cols is not None:
+            if len(rows) > 1:
+                _docx_consume_item_rows(rows[1:], item_cols, items, part_numbers, price_text_blob)
+            else:
+                pending_cols = item_cols
+            continue
+
+        if pending_cols is not None:
+            _docx_consume_item_rows(rows, pending_cols, items, part_numbers, price_text_blob)
+            pending_cols = None
+            continue
+
+        for row in rows:
+            if len(row) != 2:
+                continue
+            label = _docx_norm_label(row[0])
+            value = row[1].strip()
+            if label in _DOCX_DETAIL_LABELS and value:
+                detail_kv[_DOCX_DETAIL_LABELS[label]] = value
+
+    source_currency = "EUR" if "€" in " ".join(price_text_blob) else "USD"
+
+    bill_to_lines = bill_to.split("\n") if bill_to else []
+    quote_meta: Dict[str, str] = {
+        "customer name": bill_to_lines[0].strip() if bill_to_lines else "",
+        "company name": (bill_to_lines[1].strip() if len(bill_to_lines) > 1 else "") or detail_kv.get("reseller", ""),
+        "end user": ship_to,
+        "reseller": detail_kv.get("reseller", ""),
+    }
+
+    return items, quote_meta, quote_ref, date_text, source_currency, part_numbers
+
+
 # ==================== QUOTE GENERATION ====================
 
 def _build_quote_workbook(
@@ -1212,8 +1394,9 @@ def _build_quote_workbook(
     margin_percent: float,
     is_pdf: bool,
     part_numbers: Optional[Dict[str, str]] = None,
+    include_config_sheet: bool = True,
 ) -> bytes:
-    """Build the EUR-style 2-sheet workbook (Quote + Configuration)."""
+    """Build the EUR-style quote workbook (Quote + optional Configuration sheet)."""
     currency_code = currency_code.upper()
     conversion_rate = exchange_rate if currency_code == "EUR" else 1.0
     margin_decimal = margin_percent / 100.0
@@ -1536,124 +1719,125 @@ def _build_quote_workbook(
     ws[f"{helper_margin_col}{row_ptr}"].border = border_thin
 
     # --- Configuration sheet (identical layout to dell.py AED output) ---
-    ws2 = wb.create_sheet("Configuration")
-    ws2.sheet_view.showGridLines = False
+    if include_config_sheet:
+        ws2 = wb.create_sheet("Configuration")
+        ws2.sheet_view.showGridLines = False
 
-    # Show SKU column only when at least one config row carries a real SKU value
-    show_sku_col = any(
-        len(row) >= 5 and str(row[4]).strip()
-        for row in config_rows
-    )
+        # Show SKU column only when at least one config row carries a real SKU value
+        show_sku_col = any(
+            len(row) >= 5 and str(row[4]).strip()
+            for row in config_rows
+        )
 
-    ws2.column_dimensions["A"].width = 22   # Item #
-    ws2.column_dimensions["B"].width = 70   # Module
-    ws2.column_dimensions["C"].width = 100  # Description
-    if show_sku_col:
-        ws2.column_dimensions["D"].width = 20  # SKU
-        ws2.column_dimensions["E"].width = 10  # Qty
-    else:
-        ws2.column_dimensions["D"].width = 10  # Qty
-
-    last_col = 5 if show_sku_col else 4     # numeric index of last column
-    last_col_letter = "E" if show_sku_col else "D"
-    data_cols = ("A", "B", "C", "D", "E") if show_sku_col else ("A", "B", "C", "D")
-
-    title_fill2 = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
-    section_fill2 = PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid")
-    thin_gray = Border(
-        left=Side(style="thin", color="DDDDDD"),
-        right=Side(style="thin", color="DDDDDD"),
-        top=Side(style="thin", color="DDDDDD"),
-        bottom=Side(style="thin", color="DDDDDD"),
-    )
-    hdr_border = Border(
-        left=Side(style="thin", color="000000"),
-        right=Side(style="thin", color="000000"),
-        top=Side(style="thin", color="000000"),
-        bottom=Side(style="thin", color="000000"),
-    )
-
-    # Table header
-    r2 = 1
-    if show_sku_col:
-        header_cols = (("A", "Item #"), ("B", "Module"), ("C", "Description"), ("D", "SKU"), ("E", "Qty"))
-    else:
-        header_cols = (("A", "Item #"), ("B", "Module"), ("C", "Description"), ("D", "Qty"))
-    for col, label in header_cols:
-        ws2[f"{col}{r2}"] = label
-        ws2[f"{col}{r2}"].font = Font(bold=True)
-        ws2[f"{col}{r2}"].fill = title_fill2
-        ws2[f"{col}{r2}"].alignment = Alignment(horizontal="center", vertical="center")
-        ws2[f"{col}{r2}"].border = hdr_border
-    ws2.row_dimensions[r2].height = 20
-    r2 += 1
-
-    # Group config rows by item number
-    config_by_item: Dict[str, List] = {}
-    for row in config_rows:
-        config_by_item.setdefault(row[0], []).append(row)
-
-    # Item descriptions for headings (from the items list)
-    original_descs = [_sanitize_excel_text(it[0]) for it in original_usd_items]
-
-    total_items = max(len(original_descs), len(config_by_item)) if (original_descs or config_by_item) else 0
-    for idx in range(1, total_items + 1):
-        item_key = str(idx)
-        rows_for_item = config_by_item.get(item_key, [])
-        heading = original_descs[idx - 1] if idx - 1 < len(original_descs) else f"Item {idx}"
-
-        # "Item N" row — merged across all columns
-        ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=last_col)
-        ws2[f"A{r2}"] = f"Item {idx}"
-        ws2[f"A{r2}"].font = Font(bold=True, color="1F497D")
-        ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
-        r2 += 1
-
-        # Item description heading — merged across all columns
-        ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=last_col)
-        ws2[f"A{r2}"] = heading
-        ws2[f"A{r2}"].font = Font(italic=True, color="1F497D")
-        ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
-        r2 += 1
-
-        if not rows_for_item:
-            ws2.merge_cells(start_row=r2, start_column=2, end_row=r2, end_column=last_col)
-            ws2[f"B{r2}"] = "(No configuration details found for this item)"
-            ws2[f"B{r2}"].font = Font(italic=True, color="7F7F7F")
-            ws2[f"B{r2}"].alignment = Alignment(horizontal="left", vertical="center")
-            for col in data_cols:
-                ws2[f"{col}{r2}"].border = thin_gray
-            r2 += 1
+        ws2.column_dimensions["A"].width = 22   # Item #
+        ws2.column_dimensions["B"].width = 70   # Module
+        ws2.column_dimensions["C"].width = 100  # Description
+        if show_sku_col:
+            ws2.column_dimensions["D"].width = 20  # SKU
+            ws2.column_dimensions["E"].width = 10  # Qty
         else:
-            for row_data in rows_for_item:
-                _, _, module, dsc, sku, qty = (row_data + ("", "", "", ""))[:6]
-                # Section header row: module name only, no description or SKU
-                if module and not dsc and not sku:
-                    ws2[f"A{r2}"] = ""
-                    ws2.merge_cells(start_row=r2, start_column=2, end_row=r2, end_column=last_col)
-                    ws2[f"B{r2}"] = _sanitize_excel_text(module)
-                    ws2[f"B{r2}"].font = Font(bold=True, color="1F1F1F")
-                    ws2[f"B{r2}"].fill = section_fill2
-                    ws2[f"B{r2}"].alignment = Alignment(horizontal="left", vertical="center")
-                    for col in data_cols:
-                        ws2[f"{col}{r2}"].border = thin_gray
-                    r2 += 1
-                    continue
+            ws2.column_dimensions["D"].width = 10  # Qty
 
-                ws2[f"A{r2}"] = ""
-                ws2[f"B{r2}"] = _sanitize_excel_text(module)
-                ws2[f"C{r2}"] = _sanitize_excel_text(dsc)
-                if show_sku_col:
-                    ws2[f"D{r2}"] = _sanitize_excel_text(sku)
-                    ws2[f"E{r2}"] = _sanitize_excel_text(qty)
-                else:
-                    ws2[f"D{r2}"] = _sanitize_excel_text(qty)
+        last_col = 5 if show_sku_col else 4     # numeric index of last column
+        last_col_letter = "E" if show_sku_col else "D"
+        data_cols = ("A", "B", "C", "D", "E") if show_sku_col else ("A", "B", "C", "D")
+
+        title_fill2 = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+        section_fill2 = PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid")
+        thin_gray = Border(
+            left=Side(style="thin", color="DDDDDD"),
+            right=Side(style="thin", color="DDDDDD"),
+            top=Side(style="thin", color="DDDDDD"),
+            bottom=Side(style="thin", color="DDDDDD"),
+        )
+        hdr_border = Border(
+            left=Side(style="thin", color="000000"),
+            right=Side(style="thin", color="000000"),
+            top=Side(style="thin", color="000000"),
+            bottom=Side(style="thin", color="000000"),
+        )
+
+        # Table header
+        r2 = 1
+        if show_sku_col:
+            header_cols = (("A", "Item #"), ("B", "Module"), ("C", "Description"), ("D", "SKU"), ("E", "Qty"))
+        else:
+            header_cols = (("A", "Item #"), ("B", "Module"), ("C", "Description"), ("D", "Qty"))
+        for col, label in header_cols:
+            ws2[f"{col}{r2}"] = label
+            ws2[f"{col}{r2}"].font = Font(bold=True)
+            ws2[f"{col}{r2}"].fill = title_fill2
+            ws2[f"{col}{r2}"].alignment = Alignment(horizontal="center", vertical="center")
+            ws2[f"{col}{r2}"].border = hdr_border
+        ws2.row_dimensions[r2].height = 20
+        r2 += 1
+
+        # Group config rows by item number
+        config_by_item: Dict[str, List] = {}
+        for row in config_rows:
+            config_by_item.setdefault(row[0], []).append(row)
+
+        # Item descriptions for headings (from the items list)
+        original_descs = [_sanitize_excel_text(it[0]) for it in original_usd_items]
+
+        total_items = max(len(original_descs), len(config_by_item)) if (original_descs or config_by_item) else 0
+        for idx in range(1, total_items + 1):
+            item_key = str(idx)
+            rows_for_item = config_by_item.get(item_key, [])
+            heading = original_descs[idx - 1] if idx - 1 < len(original_descs) else f"Item {idx}"
+
+            # "Item N" row — merged across all columns
+            ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=last_col)
+            ws2[f"A{r2}"] = f"Item {idx}"
+            ws2[f"A{r2}"].font = Font(bold=True, color="1F497D")
+            ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
+            r2 += 1
+
+            # Item description heading — merged across all columns
+            ws2.merge_cells(start_row=r2, start_column=1, end_row=r2, end_column=last_col)
+            ws2[f"A{r2}"] = heading
+            ws2[f"A{r2}"].font = Font(italic=True, color="1F497D")
+            ws2[f"A{r2}"].alignment = Alignment(horizontal="left", vertical="center")
+            r2 += 1
+
+            if not rows_for_item:
+                ws2.merge_cells(start_row=r2, start_column=2, end_row=r2, end_column=last_col)
+                ws2[f"B{r2}"] = "(No configuration details found for this item)"
+                ws2[f"B{r2}"].font = Font(italic=True, color="7F7F7F")
+                ws2[f"B{r2}"].alignment = Alignment(horizontal="left", vertical="center")
                 for col in data_cols:
-                    ws2[f"{col}{r2}"].alignment = Alignment(vertical="top", wrap_text=True)
                     ws2[f"{col}{r2}"].border = thin_gray
                 r2 += 1
+            else:
+                for row_data in rows_for_item:
+                    _, _, module, dsc, sku, qty = (row_data + ("", "", "", ""))[:6]
+                    # Section header row: module name only, no description or SKU
+                    if module and not dsc and not sku:
+                        ws2[f"A{r2}"] = ""
+                        ws2.merge_cells(start_row=r2, start_column=2, end_row=r2, end_column=last_col)
+                        ws2[f"B{r2}"] = _sanitize_excel_text(module)
+                        ws2[f"B{r2}"].font = Font(bold=True, color="1F1F1F")
+                        ws2[f"B{r2}"].fill = section_fill2
+                        ws2[f"B{r2}"].alignment = Alignment(horizontal="left", vertical="center")
+                        for col in data_cols:
+                            ws2[f"{col}{r2}"].border = thin_gray
+                        r2 += 1
+                        continue
 
-        r2 += 1  # blank gap between items
+                    ws2[f"A{r2}"] = ""
+                    ws2[f"B{r2}"] = _sanitize_excel_text(module)
+                    ws2[f"C{r2}"] = _sanitize_excel_text(dsc)
+                    if show_sku_col:
+                        ws2[f"D{r2}"] = _sanitize_excel_text(sku)
+                        ws2[f"E{r2}"] = _sanitize_excel_text(qty)
+                    else:
+                        ws2[f"D{r2}"] = _sanitize_excel_text(qty)
+                    for col in data_cols:
+                        ws2[f"{col}{r2}"].alignment = Alignment(vertical="top", wrap_text=True)
+                        ws2[f"{col}{r2}"].border = thin_gray
+                    r2 += 1
+
+            r2 += 1  # blank gap between items
 
     out = BytesIO()
     wb.save(out)
@@ -1678,6 +1862,7 @@ def generate_southcomp_quote(
     effective_rate = exchange_rate if currency_code == "EUR" else 1.0
 
     is_pdf = input_bytes.lstrip().startswith(b"%PDF")
+    is_docx = not is_pdf and _is_docx(input_bytes)
     items: List[Tuple] = []
     config_rows: List[Tuple] = []
     quote_ref = date_text = expiry_text = ""
@@ -1685,7 +1870,16 @@ def generate_southcomp_quote(
     consolidation_fee = 0.0
     part_numbers: Dict[str, str] = {}
 
-    if is_pdf:
+    if is_docx:
+        items, quote_meta, quote_ref, date_text, source_currency, part_numbers = _extract_southcomp_docx(input_bytes)
+        if source_currency == "EUR" and exchange_rate:
+            # The Word form's own prices are already EUR; normalize to the USD baseline
+            # the rest of the pipeline expects so downstream conversion isn't doubled up.
+            items = [
+                (desc, qty, (unit or 0.0) / exchange_rate, (total or 0.0) / exchange_rate)
+                for desc, qty, unit, total in items
+            ]
+    elif is_pdf:
         items, raw_meta, config_rows, quote_ref, date_text, expiry_text, consolidation_fee = _extract_items_pdf(input_bytes)
         config_rows = _extract_config_from_pdf(input_bytes)
         pos_meta = _extract_pdf_metadata_by_position(input_bytes)
@@ -1753,6 +1947,7 @@ def generate_southcomp_quote(
         margin_percent=margin_percent,
         is_pdf=is_pdf,
         part_numbers=part_numbers or None,
+        include_config_sheet=not is_docx,
     )
 
 

@@ -13,8 +13,8 @@ def render_southcomp_tool() -> None:
     st.title("💼 Dell Quotation Southcomp Polaris")
 
     uploaded = st.file_uploader(
-        "Upload Dell BOQ Excel or PDF",
-        type=["xlsx", "xlsm", "xls", "pdf"],
+        "Upload Dell BOQ Excel, PDF or Word (.docx)",
+        type=["xlsx", "xlsm", "xls", "pdf", "docx"],
         key="southcomp_uploader",
     )
 
@@ -157,4 +157,4 @@ def render_southcomp_tool() -> None:
             )
 
     if uploaded is None and not eur_bytes and not usd_bytes:
-        st.info("Upload Dell BOQ Excel or PDF, then click Generate Quotation.")
+        st.info("Upload Dell BOQ Excel, PDF or Word (.docx), then click Generate Quotation.")
