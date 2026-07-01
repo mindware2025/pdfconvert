@@ -41,6 +41,9 @@ def _usd_to_aed(val):
     except Exception:
         return 0.0
 
+def _normalize_ws(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip()
+
 def _to_number(v):
     try:
         if v is None or v == "":
@@ -192,7 +195,7 @@ def _extract_extended_services_rows(ws) -> List[List]:
     header_row = None
     for r in range(start_row + 1, min(ws.max_row, start_row + 15) + 1):
         row_text = " ".join(_text(ws.cell(r, c).value).lower() for c in range(1, 22))
-        if "asset" in row_text and "price after discount" in row_text:
+        if "asset" in row_text and "quantity" in row_text and "price" in row_text:
             header_row = r
             break
     if not header_row:
@@ -205,15 +208,21 @@ def _extract_extended_services_rows(ws) -> List[List]:
         "Services SKU", "New Contract Start Date", "New Contract End Date",
         "Quantity", "Price After Discount", "EOSS Date", "Product Type"
     ]
+    # Some Dell quote templates label the price column differently
+    # (e.g. "Price (USD)" instead of "Price After Discount").
+    header_aliases = {
+        "Price After Discount": ["price after discount", "price (usd)", "price"],
+    }
     header_cols = []
     for target in target_headers:
         found_col = 0
         target_lower = target.lower()
+        aliases = [_normalize_ws(a) for a in header_aliases.get(target, [target_lower])]
         for c in range(1, ws.max_column + 1):
-            header_text = _text(ws.cell(header_row, c).value).lower()
+            header_text = _normalize_ws(_text(ws.cell(header_row, c).value).lower())
             if not header_text:
                 continue
-            if target_lower in header_text or header_text in target_lower:
+            if any(alias in header_text or header_text in alias for alias in aliases):
                 found_col = c
                 break
         header_cols.append(found_col)
