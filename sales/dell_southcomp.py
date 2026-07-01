@@ -2,7 +2,7 @@ import hashlib
 
 import streamlit as st
 
-from southcomp_engine import (
+from sales.southcomp_engine import (
     build_output_filename,
     detect_template_type,
     generate_southcomp_quote,

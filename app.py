@@ -18,6 +18,7 @@ from openpyxl.styles import PatternFill
 from openpyxl.utils import get_column_letter
 import gspread
 from google.oauth2.service_account import Credentials
+from sales.dell_southcomp import render_southcomp_tool
 from extractors.barcodeper50 import barcode_tooll
 from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_multiple_aws_pdfs
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
@@ -1007,7 +1008,8 @@ elif team == "Sales":
         "IBM Quotation",
         "MIBB Quotations",
         "💻 Dell Quotation",
-        "💻 Dell Quotation (Orion)"
+        "💻 Dell Quotation (Orion)",
+        "💻 Dell Quotation Southcomp Polaris"
     ]
 else:
     TOOL_OPTIONS = ["-- Select a tool --"]
@@ -2212,6 +2214,10 @@ elif tool == "💻 Dell Quotation (Orion)":
                 except Exception as e:
                     st.error(f"Generation failed: {e}")
                     st.exception(e)
+                    
+
+elif tool == "💻 Dell Quotation Southcomp Polaris":
+    render_southcomp_tool()
 
 st.markdown("""
 <footer style='text-align:center; margin-top:3rem; color:#1a73e8; font-size:20px; font-weight:bold; font-family: Google Sans, sans-serif;'>
