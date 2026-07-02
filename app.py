@@ -3,6 +3,7 @@ import base64
 import csv
 import logging
 import os
+import random
 from pathlib import Path
 import zipfile
 import streamlit as st
@@ -196,120 +197,243 @@ CORRECT_PASSWORD = os.getenv("PASSWORD")
 
 if "login_state" not in st.session_state:
     st.session_state.login_state = "login" 
-from pathlib import Path
-import streamlit as st
-
-@st.cache_data(ttl=3600)
-def _img_to_base64(path: str) -> str:
-    p = Path(path)
-    if not p.exists():
-        return ""
-    return base64.b64encode(p.read_bytes()).decode("utf-8")
-
-def show_login():  # <-- right-side login
-    backg = "im.png"  # your AI-face image file name (put it in same folder as app.py)
-    bg_b64 = _img_to_base64(backg)
-
-    if not bg_b64:
-        st.warning(f"Background image not found: {backg}. Put it next to your app.py")
-        # continue anyway without background
+def show_login():
+    particles = "".join(
+        f'<div class="mw-particle" style="'
+        f'left:{random.uniform(2, 98):.2f}%;'
+        f'--size:{random.uniform(2, 5):.1f}px;'
+        f'--delay:{random.uniform(0, 14):.2f}s;'
+        f'--duration:{random.uniform(9, 20):.1f}s;'
+        f'--drift:{random.uniform(-70, 70):.0f}px;'
+        f'"></div>'
+        for _ in range(48)
+    )
 
     st.markdown(f"""
     <style>
-    /* Make Streamlit background transparent (login only) */
+    :root {{
+        --mw-accent1: #3b82f6;
+        --mw-accent2: #8b5cf6;
+        --mw-accent3: #06b6d4;
+        --mw-text: #eef2ff;
+        --mw-text-dim: rgba(238,242,255,0.62);
+    }}
+
+    /* Make Streamlit chrome transparent / out of the way (login only) */
     [data-testid="stAppViewContainer"],
     [data-testid="stApp"],
     [data-testid="stHeader"] {{
         background: transparent !important;
     }}
+    [data-testid="stToolbar"], #MainMenu {{
+        display: none !important;
+    }}
+    .block-container {{
+        padding-top: 5vh !important;
+    }}
 
-    /* Fullscreen background image */
-    .mw-login-bg {{
+    @keyframes mw-spin {{ to {{ transform: rotate(360deg); }} }}
+    @keyframes mw-pulse {{
+        0%, 100% {{ opacity: 1; transform: scale(1); }}
+        50% {{ opacity: .35; transform: scale(.7); }}
+    }}
+    @keyframes mw-card-in {{
+        from {{ opacity: 0; transform: translateY(28px) scale(.96); }}
+        to {{ opacity: 1; transform: none; }}
+    }}
+    @keyframes mw-shimmer {{ to {{ background-position: 300% center; }} }}
+    @keyframes mw-type {{ from {{ width: 0; }} to {{ width: 27ch; }} }}
+    @keyframes mw-caret {{ 50% {{ border-color: transparent; }} }}
+    @keyframes mw-grid-drift {{
+        from {{ background-position: 0 0, 0 0; }}
+        to   {{ background-position: 420px 420px, 420px 420px; }}
+    }}
+    @keyframes mw-drift-1 {{
+        from {{ transform: translate(0,0) scale(1); }}
+        to   {{ transform: translate(6vw,8vh) scale(1.15); }}
+    }}
+    @keyframes mw-drift-2 {{
+        from {{ transform: translate(0,0) scale(1); }}
+        to   {{ transform: translate(-7vw,-6vh) scale(1.1); }}
+    }}
+    @keyframes mw-drift-3 {{
+        from {{ transform: translate(-4vw,3vh) scale(1); }}
+        to   {{ transform: translate(5vw,-5vh) scale(1.2); }}
+    }}
+    @keyframes mw-particle-float {{
+        0%   {{ transform: translate(0,0); opacity: 0; }}
+        10%  {{ opacity: 1; }}
+        85%  {{ opacity: 1; }}
+        100% {{ transform: translate(var(--drift), -108vh); opacity: 0; }}
+    }}
+
+    /* ---- Fullscreen animated scene ---- */
+    .mw-scene {{
         position: fixed;
         inset: 0;
-        z-index: -10;
-        background-image: url("data:image/png;base64,{bg_b64}");
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
+        z-index: -5;
+        overflow: hidden;
+        background: radial-gradient(ellipse at 30% 20%, #0d1430 0%, #05070d 55%, #020308 100%);
     }}
-
-    /* Dark overlay to improve contrast */
-    .mw-login-bg::after {{
-        content: "";
+    .mw-grid {{
         position: absolute;
-        inset: 0;
-        background: linear-gradient(90deg,
-            rgba(0,0,0,0.05) 0%,
-            rgba(0,0,0,0.22) 45%,
-            rgba(0,0,0,0.62) 100%
-        );
+        inset: -10%;
+        background-image:
+            linear-gradient(rgba(120,140,255,0.07) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(120,140,255,0.07) 1px, transparent 1px);
+        background-size: 42px 42px;
+        -webkit-mask-image: radial-gradient(circle at 50% 40%, black 0%, transparent 70%);
+        mask-image: radial-gradient(circle at 50% 40%, black 0%, transparent 70%);
+        animation: mw-grid-drift 44s linear infinite;
+    }}
+    .mw-aurora {{
+        position: absolute;
+        width: 60vw; height: 60vw;
+        max-width: 820px; max-height: 820px;
+        border-radius: 50%;
+        filter: blur(90px);
+        opacity: .55;
+        mix-blend-mode: screen;
+        will-change: transform;
+    }}
+    .mw-aurora-1 {{
+        background: radial-gradient(circle, var(--mw-accent1), transparent 70%);
+        top: -15%; left: -10%;
+        animation: mw-drift-1 22s ease-in-out infinite alternate;
+    }}
+    .mw-aurora-2 {{
+        background: radial-gradient(circle, var(--mw-accent2), transparent 70%);
+        bottom: -20%; right: -10%;
+        animation: mw-drift-2 26s ease-in-out infinite alternate;
+    }}
+    .mw-aurora-3 {{
+        width: 45vw; height: 45vw; opacity: .35;
+        background: radial-gradient(circle, var(--mw-accent3), transparent 70%);
+        top: 30%; left: 35%;
+        animation: mw-drift-3 30s ease-in-out infinite alternate;
+    }}
+    .mw-particles {{ position: absolute; inset: 0; }}
+    .mw-particle {{
+        position: absolute;
+        bottom: -10px;
+        width: var(--size); height: var(--size);
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(255,255,255,0.95), rgba(139,92,246,0.15));
+        box-shadow: 0 0 6px 1px rgba(139,92,246,0.55);
+        animation: mw-particle-float var(--duration) linear var(--delay) infinite;
+    }}
+    .mw-vignette {{
+        position: absolute; inset: 0;
+        background: radial-gradient(ellipse at center, transparent 40%, rgba(3,5,12,0.55) 100%);
     }}
 
-    /* Right-side wrapper */
-    .mw-right-wrap {{
-        margin-top: 10vh;
-        display: flex;
-        justify-content: flex-end;
-    }}
-
-    /* Glass login card - subtle Ramadan accent */
-    .mw-card {{
-        width: min(430px, 92%);
-        background: rgba(255,255,255,0.10);
-        border: 1px solid rgba(245,215,142,0.35);
-        border-radius: 18px;
-        padding: 28px 28px 18px 28px;
-        backdrop-filter: blur(18px) saturate(170%);
-        -webkit-backdrop-filter: blur(18px) saturate(170%);
-        box-shadow: 0 22px 55px rgba(0,0,0,0.35);
-    }}
-
-    .mw-title {{
-        font-size: 40px;
-        font-weight: 800;
-        letter-spacing: -0.7px;
+    /* ---- Brand header ---- */
+    .mw-header {{
+        max-width: 420px;
+        margin: 4vh auto 22px auto;
         text-align: center;
-        margin: 0 0 4px 0;
-        color: #EAF2FF;
-        text-shadow: 0 6px 22px rgba(0,0,0,0.45);
+        animation: mw-card-in .6s ease both;
     }}
-
+    .mw-logo {{ position: relative; width: 60px; height: 60px; margin: 0 auto 18px auto; }}
+    .mw-logo-ring {{
+        position: absolute; inset: -4px;
+        border-radius: 50%;
+        background: conic-gradient(from 0deg, transparent, var(--mw-accent1), transparent 40%, var(--mw-accent2) 70%, transparent 100%);
+        animation: mw-spin 5s linear infinite;
+    }}
+    .mw-logo-mark {{
+        position: absolute; inset: 0;
+        border-radius: 50%;
+        background: rgba(8,11,22,0.92);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 24px; font-weight: 800; color: #fff;
+    }}
+    .mw-title {{
+        font-size: 42px;
+        font-weight: 800;
+        letter-spacing: -1px;
+        margin: 0 0 4px 0;
+        background: linear-gradient(90deg, var(--mw-accent1), var(--mw-accent3), var(--mw-accent2), var(--mw-accent1));
+        background-size: 300% auto;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        animation: mw-shimmer 6s linear infinite;
+    }}
     .mw-subtitle {{
-        text-align:center;
-        color: rgba(255,255,255,0.78);
-        margin: 0 0 18px 0;
+        color: var(--mw-text-dim);
+        margin: 0 0 14px 0;
         font-weight: 500;
         font-size: 13.5px;
     }}
+    .mw-status {{
+        display: flex; align-items: center; justify-content: center; gap: 8px;
+    }}
+    .mw-status-dot {{
+        width: 8px; height: 8px; border-radius: 50%;
+        background: var(--mw-accent3);
+        box-shadow: 0 0 8px 2px var(--mw-accent3);
+        animation: mw-pulse 1.8s ease-in-out infinite;
+    }}
+    .mw-typewriter {{
+        font-family: 'JetBrains Mono', 'Courier New', monospace;
+        font-size: 12.5px;
+        color: var(--mw-text-dim);
+        white-space: nowrap;
+        overflow: hidden;
+        border-right: 2px solid var(--mw-accent3);
+        width: 0;
+        animation: mw-type 2.2s steps(27, end) .4s forwards, mw-caret .75s step-end infinite;
+    }}
 
-    /* Ramadan greeting */
-    .mw-ramadan {{
-        text-align: center;
-        color: #f5d78e;
-        font-size: 15px;
-        font-weight: 600;
-        margin: 0 0 8px 0;
-        letter-spacing: 0.5px;
-        text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    /* ---- Glass card (Streamlit's own form container) ---- */
+    div[data-testid="stForm"] {{
+        max-width: 420px;
+        margin: 0 auto;
+        position: relative;
+        isolation: isolate;
+        background: rgba(10,14,28,0.72);
+        backdrop-filter: blur(22px) saturate(160%);
+        -webkit-backdrop-filter: blur(22px) saturate(160%);
+        border-radius: 20px;
+        padding: 30px 28px 18px 28px;
+        border: 1px solid rgba(255,255,255,0.06);
+        box-shadow: 0 30px 70px rgba(0,0,0,0.5);
+        animation: mw-card-in .75s cubic-bezier(.16,1,.3,1) both;
+    }}
+    div[data-testid="stForm"]::before {{
+        content: "";
+        position: absolute;
+        inset: -2px;
+        border-radius: 22px;
+        z-index: -1;
+        background: conic-gradient(from 0deg, transparent, var(--mw-accent1), transparent 35%, var(--mw-accent2) 60%, transparent 80%, var(--mw-accent3) 95%, transparent);
+        animation: mw-spin 6s linear infinite;
     }}
 
     /* Labels */
-    label, .stTextInput label {{
-        color: rgba(255,255,255,0.88) !important;
+    label p, label {{
+        color: rgba(238,242,255,0.85) !important;
         font-weight: 600 !important;
+        font-size: 13px !important;
     }}
 
     /* Inputs */
     div[data-testid="stTextInput"] input {{
-        background: rgba(255,255,255,0.14) !important;
-        border-radius: 10px !important;
-        border: 1px solid rgba(255,255,255,0.28) !important;
+        background: rgba(255,255,255,0.06) !important;
+        border-radius: 12px !important;
+        border: 1px solid rgba(255,255,255,0.14) !important;
         color: #ffffff !important;
-        padding: 12px 14px !important;
+        padding: 13px 16px !important;
+        transition: box-shadow .25s ease, border-color .25s ease, background .25s ease;
     }}
     div[data-testid="stTextInput"] input::placeholder {{
-        color: rgba(255,255,255,0.65) !important;
+        color: rgba(255,255,255,0.4) !important;
+    }}
+    div[data-testid="stTextInput"] input:focus {{
+        border-color: var(--mw-accent1) !important;
+        background: rgba(255,255,255,0.09) !important;
+        box-shadow: 0 0 0 4px rgba(59,130,246,0.18), 0 0 18px rgba(59,130,246,0.35) !important;
     }}
 
     /* Fix browser autofill */
@@ -318,61 +442,78 @@ def show_login():  # <-- right-side login
     input:-webkit-autofill:focus {{
         -webkit-text-fill-color: #ffffff !important;
         transition: background-color 9999s ease-in-out 0s;
-        box-shadow: 0 0 0px 1000px rgba(255,255,255,0.12) inset !important;
-        border: 1px solid rgba(255,255,255,0.28) !important;
+        box-shadow: 0 0 0px 1000px rgba(255,255,255,0.08) inset !important;
+        border: 1px solid rgba(255,255,255,0.14) !important;
     }}
 
     /* Button */
-    .stButton > button {{
-        border-radius: 12px !important;
-        padding: 12px 18px !important;
-        font-weight: 800 !important;
-        background: linear-gradient(90deg, #1a73e8, #2b7de9) !important;
+    div[data-testid="stFormSubmitButton"] button {{
+        width: 100%;
         border: none !important;
+        border-radius: 12px !important;
+        padding: 13px 18px !important;
+        font-weight: 700 !important;
+        letter-spacing: .3px;
         color: white !important;
-        box-shadow: 0 10px 24px rgba(26,115,232,0.25);
+        background: linear-gradient(90deg, var(--mw-accent1), var(--mw-accent2), var(--mw-accent3), var(--mw-accent1)) !important;
+        background-size: 300% auto !important;
+        box-shadow: 0 12px 28px rgba(59,130,246,0.28);
+        transition: background-position .6s ease, transform .15s ease, box-shadow .3s ease;
     }}
-    .stButton > button:hover {{
-        background: linear-gradient(90deg, #2b7de9, #1a73e8) !important;
+    div[data-testid="stFormSubmitButton"] button:hover {{
+        background-position: 100% center !important;
+        transform: translateY(-2px);
+        box-shadow: 0 16px 34px rgba(139,92,246,0.4);
+    }}
+    div[data-testid="stFormSubmitButton"] button:active {{
+        transform: translateY(0px) scale(.98);
     }}
 
     .mw-footer {{
+        max-width: 420px;
+        margin: 16px auto 0 auto;
         text-align: center;
-        margin-top: 12px;
-        color: rgba(255,255,255,0.60);
+        color: rgba(238,242,255,0.35);
         font-size: 12px;
-    }}
-
-    /* Hide top toolbar */
-    [data-testid="stToolbar"] {{
-        display: none !important;
     }}
     </style>
 
-    <div class="mw-login-bg"></div>
+    <div class="mw-scene">
+        <div class="mw-grid"></div>
+        <div class="mw-aurora mw-aurora-1"></div>
+        <div class="mw-aurora mw-aurora-2"></div>
+        <div class="mw-aurora mw-aurora-3"></div>
+        <div class="mw-particles">{particles}</div>
+        <div class="mw-vignette"></div>
+    </div>
+
+    <div class="mw-header">
+        <div class="mw-logo">
+            <div class="mw-logo-ring"></div>
+            <div class="mw-logo-mark">M</div>
+        </div>
+        <div class="mw-title">Mindbot</div>
+        <div class="mw-subtitle">AI-Powered Productivity Suite</div>
+        <div class="mw-status">
+            <span class="mw-status-dot"></span>
+            <span class="mw-typewriter">Secure encrypted connection</span>
+        </div>
+    </div>
     """, unsafe_allow_html=True)
 
-    # Layout: left space for image, right for card
-    left, right = st.columns([2.2, 1])
-    with right:
-        
-        st.markdown('<div class="mw-title">Mindbot</div>', unsafe_allow_html=True)
-        st.markdown('<div class="mw-subtitle">Powered Productivity Tools</div>', unsafe_allow_html=True)
+    with st.form("login_form", clear_on_submit=False):
+        username = st.text_input("Username", key="login_user", placeholder="Enter your username")
+        password = st.text_input("Password", type="password", key="login_pass", placeholder="Enter your password")
+        submitted = st.form_submit_button("Sign In", type="primary")
 
-        with st.form("login_form", clear_on_submit=False):
-            username = st.text_input("👤 Username", key="login_user", placeholder="Enter your username…")
-            password = st.text_input("🔐 Password", type="password", key="login_pass", placeholder="Enter your password…")
-            submitted = st.form_submit_button("Login", type="primary")
+    st.markdown('<div class="mw-footer">Mindware &copy; 2025 &middot; All systems operational</div>', unsafe_allow_html=True)
 
-        if submitted:
-            if username == CORRECT_USERNAME and password == CORRECT_PASSWORD:
-                st.session_state.login_state = "success"
-            else:
-                st.session_state.login_state = "fail"
-            st.rerun()
-
-        st.markdown('<div class="mw-footer">Made with ❤️ by Mindware • © 2025</div>', unsafe_allow_html=True)
-        st.markdown("</div></div>", unsafe_allow_html=True)
+    if submitted:
+        if username == CORRECT_USERNAME and password == CORRECT_PASSWORD:
+            st.session_state.login_state = "success"
+        else:
+            st.session_state.login_state = "fail"
+        st.rerun()
 
 
 
