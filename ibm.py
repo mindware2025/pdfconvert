@@ -1597,8 +1597,8 @@ def create_styled_excel_template2(
         ws.cell(row=excel_row, column=9, value=total_price_aed_formula)  # Column I
         add_debug(f"[TEMPLATE2 FORMULA] Total Price in AED: {total_price_aed_formula}")
         
-        # J (Partner disc) = ROUNDUP(Unit Price * 0.99, 2)
-        partner_disc_formula = f"=ROUNDUP(G{excel_row}*0.99,2)"
+        # J (Partner disc) = ROUNDUP(Unit Price * rate, 2) — 0.9 for KSA (10% discount), 0.99 elsewhere
+        partner_disc_formula = f"=ROUNDUP(G{excel_row}*{0.9 if c == 'KSA' else 0.99},2)"
         ws.cell(row=excel_row, column=10, value=partner_disc_formula)  # Column J
         add_debug(f"[TEMPLATE2 FORMULA] Partner disc: {partner_disc_formula}")
         

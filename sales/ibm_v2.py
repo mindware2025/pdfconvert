@@ -80,6 +80,9 @@ def _usd_rate(country: str):
 def _currency_label(country: str):
     return "SAR" if (country and str(country).upper() == "KSA") else "AED"
 
+def _partner_discount_rate(country: str):
+    return 0.9 if (country and str(country).upper() == "KSA") else 0.99
+
 
 def estimate_line_count(text, max_chars_per_line=80):
     lines = text.split('\n')
@@ -293,7 +296,7 @@ def create_styled_excel_v2(
             ws.cell(row=excel_row, column=10, value=total_formula)
             ws.cell(row=excel_row, column=10).font = Font(size=11, color="1F497D")
 
-            discount_formula = f"=ROUNDUP(H{excel_row}*0.99,2)"
+            discount_formula = f"=ROUNDUP(H{excel_row}*{_partner_discount_rate(country)},2)"
             ws.cell(row=excel_row, column=11, value=discount_formula)
             ws.cell(row=excel_row, column=11).font = Font(size=11, color="1F497D")
 
