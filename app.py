@@ -499,6 +499,17 @@ def show_login():
         letter-spacing: 2px;
         text-transform: uppercase;
     }}
+    .mw-heart {{
+        display: inline-block;
+        font-size: 13px;
+        animation: mw-heartbeat 1.6s ease-in-out infinite;
+    }}
+    @keyframes mw-heartbeat {{
+        0%, 48%, 100% {{ transform: scale(1); }}
+        12% {{ transform: scale(1.3); }}
+        24% {{ transform: scale(1); }}
+        36% {{ transform: scale(1.25); }}
+    }}
 
     @media (prefers-reduced-motion: reduce) {{
         * {{ animation: none !important; transition: none !important; }}
@@ -540,7 +551,7 @@ def show_login():
         password = st.text_input("Password", type="password", key="login_pass", placeholder="Enter your password")
         submitted = st.form_submit_button("Sign In", type="primary")
 
-    st.markdown('<div class="mw-footer">Mindware &copy; 2025</div>', unsafe_allow_html=True)
+    st.markdown('<div class="mw-footer">Made with <span class="mw-heart">💙</span> by Mindware &middot; 2025</div>', unsafe_allow_html=True)
 
     if submitted:
         if username == CORRECT_USERNAME and password == CORRECT_PASSWORD:
