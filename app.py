@@ -198,25 +198,29 @@ CORRECT_PASSWORD = os.getenv("PASSWORD")
 if "login_state" not in st.session_state:
     st.session_state.login_state = "login" 
 def show_login():
-    particles = "".join(
-        f'<div class="mw-particle" style="'
-        f'left:{random.uniform(2, 98):.2f}%;'
-        f'--size:{random.uniform(2, 5):.1f}px;'
-        f'--delay:{random.uniform(0, 14):.2f}s;'
-        f'--duration:{random.uniform(9, 20):.1f}s;'
-        f'--drift:{random.uniform(-70, 70):.0f}px;'
+    streams = "".join(
+        f'<div class="mw-stream" style="'
+        f'left:{random.uniform(1, 99):.2f}%;'
+        f'--h:{random.uniform(90, 240):.0f}px;'
+        f'--delay:{random.uniform(0, 9):.2f}s;'
+        f'--duration:{random.uniform(6, 14):.1f}s;'
+        f'--o:{random.uniform(0.2, 0.55):.2f};'
         f'"></div>'
-        for _ in range(48)
+        for _ in range(18)
+    )
+    letters = "".join(
+        f'<span class="mw-letter" style="--i:{i}">{ch}</span>'
+        for i, ch in enumerate("MINDWARE")
     )
 
     st.markdown(f"""
     <style>
     :root {{
-        --mw-accent1: #3b82f6;
-        --mw-accent2: #8b5cf6;
-        --mw-accent3: #06b6d4;
-        --mw-text: #eef2ff;
-        --mw-text-dim: rgba(238,242,255,0.62);
+        --mw-navy: #0c1930;
+        --mw-steel: #6ea8ff;
+        --mw-glow: #7cc7ff;
+        --mw-white: #f2f7ff;
+        --mw-dim: rgba(157,193,255,0.65);
     }}
 
     /* Make Streamlit chrome transparent / out of the way (login only) */
@@ -229,211 +233,226 @@ def show_login():
         display: none !important;
     }}
     .block-container {{
-        padding-top: 5vh !important;
+        padding-top: 6vh !important;
     }}
 
-    @keyframes mw-spin {{ to {{ transform: rotate(360deg); }} }}
-    @keyframes mw-pulse {{
-        0%, 100% {{ opacity: 1; transform: scale(1); }}
-        50% {{ opacity: .35; transform: scale(.7); }}
+    @keyframes mw-fall {{ to {{ transform: translateY(calc(100vh + 300px)); }} }}
+    @keyframes mw-scan {{
+        0%   {{ top: -2%; }}
+        60%  {{ top: 102%; }}
+        100% {{ top: 102%; }}
     }}
-    @keyframes mw-card-in {{
-        from {{ opacity: 0; transform: translateY(28px) scale(.96); }}
+    @keyframes mw-bar {{
+        0%, 100% {{ transform: scaleY(1); }}
+        50%      {{ transform: scaleY(0.45); }}
+    }}
+    @keyframes mw-letter-in {{
         to {{ opacity: 1; transform: none; }}
     }}
-    @keyframes mw-shimmer {{ to {{ background-position: 300% center; }} }}
-    @keyframes mw-type {{ from {{ width: 0; }} to {{ width: 27ch; }} }}
+    @keyframes mw-card-in {{
+        from {{ opacity: 0; transform: translateY(24px); }}
+        to   {{ opacity: 1; transform: none; }}
+    }}
+    @keyframes mw-card-scan {{
+        from {{ top: -70px; }}
+        to   {{ top: 110%; }}
+    }}
+    @keyframes mw-pulse {{
+        0%, 100% {{ opacity: 1; transform: scale(1); }}
+        50%      {{ opacity: .3; transform: scale(.65); }}
+    }}
+    @keyframes mw-type {{ from {{ width: 0; }} to {{ width: 28ch; }} }}
     @keyframes mw-caret {{ 50% {{ border-color: transparent; }} }}
-    @keyframes mw-grid-drift {{
-        from {{ background-position: 0 0, 0 0; }}
-        to   {{ background-position: 420px 420px, 420px 420px; }}
-    }}
-    @keyframes mw-drift-1 {{
-        from {{ transform: translate(0,0) scale(1); }}
-        to   {{ transform: translate(6vw,8vh) scale(1.15); }}
-    }}
-    @keyframes mw-drift-2 {{
-        from {{ transform: translate(0,0) scale(1); }}
-        to   {{ transform: translate(-7vw,-6vh) scale(1.1); }}
-    }}
-    @keyframes mw-drift-3 {{
-        from {{ transform: translate(-4vw,3vh) scale(1); }}
-        to   {{ transform: translate(5vw,-5vh) scale(1.2); }}
-    }}
-    @keyframes mw-particle-float {{
-        0%   {{ transform: translate(0,0); opacity: 0; }}
-        10%  {{ opacity: 1; }}
-        85%  {{ opacity: 1; }}
-        100% {{ transform: translate(var(--drift), -108vh); opacity: 0; }}
-    }}
 
-    /* ---- Fullscreen animated scene ---- */
+    /* ---- Fullscreen scene: deep Mindware navy ---- */
     .mw-scene {{
         position: fixed;
         inset: 0;
         z-index: -5;
         overflow: hidden;
-        background: radial-gradient(ellipse at 30% 20%, #0d1430 0%, #05070d 55%, #020308 100%);
+        background: radial-gradient(1200px 700px at 50% -10%, #14294a 0%, #0c1930 48%, #060e1c 100%);
     }}
-    .mw-grid {{
+    .mw-dots {{
         position: absolute;
-        inset: -10%;
-        background-image:
-            linear-gradient(rgba(120,140,255,0.07) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(120,140,255,0.07) 1px, transparent 1px);
-        background-size: 42px 42px;
-        -webkit-mask-image: radial-gradient(circle at 50% 40%, black 0%, transparent 70%);
-        mask-image: radial-gradient(circle at 50% 40%, black 0%, transparent 70%);
-        animation: mw-grid-drift 44s linear infinite;
+        inset: 0;
+        background-image: radial-gradient(rgba(126,167,255,0.10) 1px, transparent 1.4px);
+        background-size: 28px 28px;
+        -webkit-mask-image: radial-gradient(ellipse at 50% 35%, black 0%, transparent 75%);
+        mask-image: radial-gradient(ellipse at 50% 35%, black 0%, transparent 75%);
     }}
-    .mw-aurora {{
+    .mw-stream {{
         position: absolute;
-        width: 60vw; height: 60vw;
-        max-width: 820px; max-height: 820px;
-        border-radius: 50%;
-        filter: blur(90px);
-        opacity: .55;
-        mix-blend-mode: screen;
-        will-change: transform;
+        top: -260px;
+        width: 1px;
+        height: var(--h);
+        opacity: var(--o);
+        background: linear-gradient(180deg, transparent, rgba(110,168,255,0.8) 50%, transparent);
+        animation: mw-fall var(--duration) linear var(--delay) infinite;
     }}
-    .mw-aurora-1 {{
-        background: radial-gradient(circle, var(--mw-accent1), transparent 70%);
-        top: -15%; left: -10%;
-        animation: mw-drift-1 22s ease-in-out infinite alternate;
-    }}
-    .mw-aurora-2 {{
-        background: radial-gradient(circle, var(--mw-accent2), transparent 70%);
-        bottom: -20%; right: -10%;
-        animation: mw-drift-2 26s ease-in-out infinite alternate;
-    }}
-    .mw-aurora-3 {{
-        width: 45vw; height: 45vw; opacity: .35;
-        background: radial-gradient(circle, var(--mw-accent3), transparent 70%);
-        top: 30%; left: 35%;
-        animation: mw-drift-3 30s ease-in-out infinite alternate;
-    }}
-    .mw-particles {{ position: absolute; inset: 0; }}
-    .mw-particle {{
+    .mw-scanline {{
         position: absolute;
-        bottom: -10px;
-        width: var(--size); height: var(--size);
-        border-radius: 50%;
-        background: radial-gradient(circle, rgba(255,255,255,0.95), rgba(139,92,246,0.15));
-        box-shadow: 0 0 6px 1px rgba(139,92,246,0.55);
-        animation: mw-particle-float var(--duration) linear var(--delay) infinite;
+        left: 0; right: 0;
+        height: 2px;
+        background: linear-gradient(90deg, transparent 10%, rgba(124,199,255,0.4), transparent 90%);
+        filter: blur(1px);
+        animation: mw-scan 10s ease-in-out infinite;
     }}
     .mw-vignette {{
         position: absolute; inset: 0;
-        background: radial-gradient(ellipse at center, transparent 40%, rgba(3,5,12,0.55) 100%);
+        background: radial-gradient(ellipse at center, transparent 45%, rgba(4,9,20,0.6) 100%);
     }}
 
-    /* ---- Brand header ---- */
+    /* ---- Brand header: live signal-bars mark + wordmark ---- */
     .mw-header {{
-        max-width: 420px;
-        margin: 4vh auto 22px auto;
+        max-width: 460px;
+        margin: 3vh auto 24px auto;
         text-align: center;
         animation: mw-card-in .6s ease both;
     }}
-    .mw-logo {{ position: relative; width: 60px; height: 60px; margin: 0 auto 18px auto; }}
-    .mw-logo-ring {{
-        position: absolute; inset: -4px;
-        border-radius: 50%;
-        background: conic-gradient(from 0deg, transparent, var(--mw-accent1), transparent 40%, var(--mw-accent2) 70%, transparent 100%);
-        animation: mw-spin 5s linear infinite;
+    .mw-mark {{
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        gap: 6px;
+        height: 54px;
+        margin: 0 auto 18px auto;
     }}
-    .mw-logo-mark {{
-        position: absolute; inset: 0;
-        border-radius: 50%;
-        background: rgba(8,11,22,0.92);
-        display: flex; align-items: center; justify-content: center;
-        font-size: 24px; font-weight: 800; color: #fff;
+    .mw-mark .mw-bar {{
+        width: 6px;
+        border-radius: 3px;
+        background: linear-gradient(180deg, #ffffff, #9cc3ff);
+        box-shadow: 0 0 14px rgba(124,199,255,0.55);
+        transform-origin: bottom;
+        animation: mw-bar 1.7s ease-in-out infinite;
     }}
-    .mw-title {{
-        font-size: 42px;
-        font-weight: 800;
-        letter-spacing: -1px;
-        margin: 0 0 4px 0;
-        background: linear-gradient(90deg, var(--mw-accent1), var(--mw-accent3), var(--mw-accent2), var(--mw-accent1));
-        background-size: 300% auto;
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-        animation: mw-shimmer 6s linear infinite;
+    .mw-mark .mw-bar:nth-child(1) {{ height: 100%; animation-delay: 0s;   }}
+    .mw-mark .mw-bar:nth-child(2) {{ height: 42%;  animation-delay: .17s; }}
+    .mw-mark .mw-bar:nth-child(3) {{ height: 72%;  animation-delay: .34s; }}
+    .mw-mark .mw-bar:nth-child(4) {{ height: 42%;  animation-delay: .51s; }}
+    .mw-mark .mw-bar:nth-child(5) {{ height: 100%; animation-delay: .68s; }}
+    .mw-wordmark {{
+        display: flex;
+        justify-content: center;
+        margin: 0 0 8px 0;
+        padding-left: 12px; /* offset trailing letter-spacing so it stays centered */
+    }}
+    .mw-letter {{
+        font-size: 34px;
+        font-weight: 600;
+        letter-spacing: 12px;
+        color: var(--mw-white);
+        text-shadow: 0 0 26px rgba(124,199,255,0.35);
+        opacity: 0;
+        transform: translateY(12px);
+        animation: mw-letter-in .5s cubic-bezier(.2,.9,.3,1) forwards;
+        animation-delay: calc(var(--i) * 70ms + .25s);
     }}
     .mw-subtitle {{
-        color: var(--mw-text-dim);
-        margin: 0 0 14px 0;
+        color: var(--mw-dim);
+        margin: 0 0 16px 0;
         font-weight: 500;
-        font-size: 13.5px;
+        font-size: 12px;
+        letter-spacing: 5px;
+        text-transform: uppercase;
     }}
     .mw-status {{
         display: flex; align-items: center; justify-content: center; gap: 8px;
     }}
     .mw-status-dot {{
-        width: 8px; height: 8px; border-radius: 50%;
-        background: var(--mw-accent3);
-        box-shadow: 0 0 8px 2px var(--mw-accent3);
+        width: 7px; height: 7px; border-radius: 50%;
+        background: var(--mw-glow);
+        box-shadow: 0 0 8px 2px rgba(124,199,255,0.7);
         animation: mw-pulse 1.8s ease-in-out infinite;
     }}
     .mw-typewriter {{
-        font-family: 'JetBrains Mono', 'Courier New', monospace;
+        font-family: 'Consolas', 'Courier New', monospace;
         font-size: 12.5px;
-        color: var(--mw-text-dim);
+        color: var(--mw-dim);
         white-space: nowrap;
         overflow: hidden;
-        border-right: 2px solid var(--mw-accent3);
+        border-right: 2px solid var(--mw-glow);
         width: 0;
-        animation: mw-type 2.2s steps(27, end) .4s forwards, mw-caret .75s step-end infinite;
+        animation: mw-type 2.1s steps(28, end) .5s forwards, mw-caret .75s step-end infinite;
     }}
 
-    /* ---- Glass card (Streamlit's own form container) ---- */
+    /* ---- Login card: secure-terminal window ---- */
     div[data-testid="stForm"] {{
         max-width: 420px;
         margin: 0 auto;
         position: relative;
-        isolation: isolate;
-        background: rgba(10,14,28,0.72);
-        backdrop-filter: blur(22px) saturate(160%);
-        -webkit-backdrop-filter: blur(22px) saturate(160%);
-        border-radius: 20px;
-        padding: 30px 28px 18px 28px;
-        border: 1px solid rgba(255,255,255,0.06);
-        box-shadow: 0 30px 70px rgba(0,0,0,0.5);
-        animation: mw-card-in .75s cubic-bezier(.16,1,.3,1) both;
+        overflow: hidden;
+        background: rgba(10,21,40,0.78);
+        backdrop-filter: blur(20px) saturate(150%);
+        -webkit-backdrop-filter: blur(20px) saturate(150%);
+        border-radius: 14px;
+        padding: 22px 26px 16px 26px;
+        border: 1px solid rgba(110,168,255,0.22);
+        box-shadow: 0 26px 60px rgba(2,6,16,0.65), inset 0 1px 0 rgba(255,255,255,0.05);
+        animation: mw-card-in .7s cubic-bezier(.16,1,.3,1) .15s both;
+        transition: border-color .3s ease, box-shadow .3s ease;
     }}
-    div[data-testid="stForm"]::before {{
+    div[data-testid="stForm"]:focus-within {{
+        border-color: rgba(124,199,255,0.5);
+        box-shadow: 0 26px 60px rgba(2,6,16,0.65), 0 0 24px rgba(79,143,247,0.25), inset 0 1px 0 rgba(255,255,255,0.05);
+    }}
+    div[data-testid="stForm"]::after {{
         content: "";
         position: absolute;
-        inset: -2px;
-        border-radius: 22px;
-        z-index: -1;
-        background: conic-gradient(from 0deg, transparent, var(--mw-accent1), transparent 35%, var(--mw-accent2) 60%, transparent 80%, var(--mw-accent3) 95%, transparent);
-        animation: mw-spin 6s linear infinite;
+        left: 0; right: 0;
+        top: -70px;
+        height: 60px;
+        background: linear-gradient(180deg, transparent, rgba(124,199,255,0.07), transparent);
+        animation: mw-card-scan 7s linear 1.5s infinite;
+        pointer-events: none;
+    }}
+
+    /* Terminal title bar inside the card */
+    .mw-term {{
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding-bottom: 12px;
+        margin-bottom: 4px;
+        border-bottom: 1px solid rgba(110,168,255,0.14);
+    }}
+    .mw-term-dots {{ display: flex; gap: 5px; }}
+    .mw-term-dots i {{
+        width: 8px; height: 8px; border-radius: 50%;
+        background: rgba(110,168,255,0.25);
+    }}
+    .mw-term-dots i:nth-child(2) {{ background: rgba(110,168,255,0.45); }}
+    .mw-term-dots i:nth-child(3) {{ background: rgba(124,199,255,0.8); }}
+    .mw-term-title {{
+        font-family: 'Consolas', 'Courier New', monospace;
+        font-size: 11px;
+        letter-spacing: 1px;
+        color: var(--mw-dim);
     }}
 
     /* Labels */
     label p, label {{
-        color: rgba(238,242,255,0.85) !important;
+        color: rgba(210,228,255,0.85) !important;
         font-weight: 600 !important;
         font-size: 13px !important;
     }}
 
     /* Inputs */
     div[data-testid="stTextInput"] input {{
-        background: rgba(255,255,255,0.06) !important;
-        border-radius: 12px !important;
-        border: 1px solid rgba(255,255,255,0.14) !important;
+        background: rgba(255,255,255,0.05) !important;
+        border-radius: 10px !important;
+        border: 1px solid rgba(110,168,255,0.2) !important;
         color: #ffffff !important;
+        caret-color: var(--mw-glow) !important;
         padding: 13px 16px !important;
         transition: box-shadow .25s ease, border-color .25s ease, background .25s ease;
     }}
     div[data-testid="stTextInput"] input::placeholder {{
-        color: rgba(255,255,255,0.4) !important;
+        color: rgba(210,228,255,0.35) !important;
     }}
     div[data-testid="stTextInput"] input:focus {{
-        border-color: var(--mw-accent1) !important;
-        background: rgba(255,255,255,0.09) !important;
-        box-shadow: 0 0 0 4px rgba(59,130,246,0.18), 0 0 18px rgba(59,130,246,0.35) !important;
+        border-color: #4f8ff7 !important;
+        background: rgba(255,255,255,0.08) !important;
+        box-shadow: 0 0 0 4px rgba(79,143,247,0.16), 0 0 16px rgba(79,143,247,0.3) !important;
     }}
 
     /* Fix browser autofill */
@@ -442,71 +461,89 @@ def show_login():
     input:-webkit-autofill:focus {{
         -webkit-text-fill-color: #ffffff !important;
         transition: background-color 9999s ease-in-out 0s;
-        box-shadow: 0 0 0px 1000px rgba(255,255,255,0.08) inset !important;
-        border: 1px solid rgba(255,255,255,0.14) !important;
+        box-shadow: 0 0 0px 1000px rgba(255,255,255,0.06) inset !important;
+        border: 1px solid rgba(110,168,255,0.2) !important;
     }}
 
     /* Button */
     div[data-testid="stFormSubmitButton"] button {{
         width: 100%;
         border: none !important;
-        border-radius: 12px !important;
+        border-radius: 10px !important;
         padding: 13px 18px !important;
         font-weight: 700 !important;
-        letter-spacing: .3px;
+        text-transform: uppercase;
+        letter-spacing: 2.5px;
+        font-size: 13px !important;
         color: white !important;
-        background: linear-gradient(90deg, var(--mw-accent1), var(--mw-accent2), var(--mw-accent3), var(--mw-accent1)) !important;
+        background: linear-gradient(90deg, #1d4ed8, #2f6ff2, #4f8ff7, #1d4ed8) !important;
         background-size: 300% auto !important;
-        box-shadow: 0 12px 28px rgba(59,130,246,0.28);
+        box-shadow: 0 12px 26px rgba(37,99,235,0.35);
         transition: background-position .6s ease, transform .15s ease, box-shadow .3s ease;
     }}
     div[data-testid="stFormSubmitButton"] button:hover {{
         background-position: 100% center !important;
         transform: translateY(-2px);
-        box-shadow: 0 16px 34px rgba(139,92,246,0.4);
+        box-shadow: 0 16px 32px rgba(79,143,247,0.45);
     }}
     div[data-testid="stFormSubmitButton"] button:active {{
-        transform: translateY(0px) scale(.98);
+        transform: translateY(0) scale(.98);
     }}
 
     .mw-footer {{
         max-width: 420px;
         margin: 16px auto 0 auto;
         text-align: center;
-        color: rgba(238,242,255,0.35);
-        font-size: 12px;
+        color: rgba(157,193,255,0.35);
+        font-size: 11px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+    }}
+
+    @media (prefers-reduced-motion: reduce) {{
+        * {{ animation: none !important; transition: none !important; }}
+        .mw-letter {{ opacity: 1; transform: none; }}
+        .mw-typewriter {{ width: 28ch; }}
     }}
     </style>
 
     <div class="mw-scene">
-        <div class="mw-grid"></div>
-        <div class="mw-aurora mw-aurora-1"></div>
-        <div class="mw-aurora mw-aurora-2"></div>
-        <div class="mw-aurora mw-aurora-3"></div>
-        <div class="mw-particles">{particles}</div>
+        <div class="mw-dots"></div>
+        {streams}
+        <div class="mw-scanline"></div>
         <div class="mw-vignette"></div>
     </div>
 
     <div class="mw-header">
-        <div class="mw-logo">
-            <div class="mw-logo-ring"></div>
-            <div class="mw-logo-mark">M</div>
+        <div class="mw-mark">
+            <div class="mw-bar"></div>
+            <div class="mw-bar"></div>
+            <div class="mw-bar"></div>
+            <div class="mw-bar"></div>
+            <div class="mw-bar"></div>
         </div>
-        <div class="mw-title">Mindbot</div>
-        <div class="mw-subtitle">AI-Powered Productivity Suite</div>
+        <div class="mw-wordmark">{letters}</div>
+        <div class="mw-subtitle">Productivity Suite</div>
         <div class="mw-status">
             <span class="mw-status-dot"></span>
-            <span class="mw-typewriter">Secure encrypted connection</span>
+            <span class="mw-typewriter">&gt; secure channel established</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
     with st.form("login_form", clear_on_submit=False):
+        st.markdown(
+            '<div class="mw-term">'
+            '<span class="mw-term-dots"><i></i><i></i><i></i></span>'
+            '<span class="mw-term-title">mindware://secure-login</span>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
         username = st.text_input("Username", key="login_user", placeholder="Enter your username")
         password = st.text_input("Password", type="password", key="login_pass", placeholder="Enter your password")
         submitted = st.form_submit_button("Sign In", type="primary")
 
-    st.markdown('<div class="mw-footer">Mindware &copy; 2025 &middot; All systems operational</div>', unsafe_allow_html=True)
+    st.markdown('<div class="mw-footer">Mindware &copy; 2025 &middot; Secure Access Portal</div>', unsafe_allow_html=True)
 
     if submitted:
         if username == CORRECT_USERNAME and password == CORRECT_PASSWORD:
