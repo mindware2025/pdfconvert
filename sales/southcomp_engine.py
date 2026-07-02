@@ -206,6 +206,10 @@ def detect_template_type(input_bytes: bytes) -> str:
 
 # ==================== HEADER / COLUMN DETECTION ====================
 
+def _is_qar_report(ws) -> bool:
+    return "quote analysis report" in _cell_to_text(ws.cell(1, 1).value).lower()
+
+
 def _find_compact_header(ws) -> Optional[Tuple[int, Dict[str, int]]]:
     for r in range(1, min(ws.max_row, 40) + 1):
         cols: Dict[str, int] = {}
@@ -445,6 +449,52 @@ def _extract_grouped_metadata(ws) -> Tuple[str, str]:
     return ref, date
 
 
+_QAR_CUSTOMER_LABELS = {
+    "bill to customer": "bill_to",
+    "sold to customer": "sold_to",
+    "end user customer": "end_user",
+}
+
+
+def _find_qar_customer_block(ws, max_rows: int = 20) -> Optional[Tuple[int, Dict[int, str]]]:
+    for r in range(1, min(ws.max_row, max_rows) + 1):
+        col_map: Dict[int, str] = {}
+        for c in range(1, min(ws.max_column, 6) + 1):
+            text = _cell_to_text(ws.cell(r, c).value).strip().lower().rstrip(":")
+            if text in _QAR_CUSTOMER_LABELS:
+                col_map[c] = _QAR_CUSTOMER_LABELS[text]
+        if col_map:
+            return r, col_map
+    return None
+
+
+def _extract_qar_metadata(ws) -> Tuple[str, Dict[str, str]]:
+    quote_ref = _find_label_value(ws, ("quote number",), max_rows=10)
+    quote_name = _find_label_value(ws, ("quote name",), max_rows=10)
+
+    bill_to = sold_to = end_user = end_user_id = ""
+    block = _find_qar_customer_block(ws)
+    if block:
+        label_row, col_map = block
+        for col, key in col_map.items():
+            name = _cell_to_text(ws.cell(label_row + 1, col).value)
+            ident = _cell_to_text(ws.cell(label_row + 2, col).value)
+            if key == "bill_to":
+                bill_to = name
+            elif key == "sold_to":
+                sold_to = name
+            elif key == "end_user":
+                end_user, end_user_id = name, ident
+
+    quote_meta = {
+        "company name": bill_to or quote_name,
+        "customer name": sold_to,
+        "end user": f"{end_user}\n{end_user_id}" if end_user and end_user_id else end_user,
+        "reseller": "",
+    }
+    return quote_ref, quote_meta
+
+
 # ==================== ITEMS EXTRACTION ====================
 
 def _extract_items_compact(ws) -> Tuple[List, List]:
@@ -543,6 +593,45 @@ def _extract_items_grouped(ws) -> Tuple[List, List]:
             continue
         if current_item and desc:
             config_rows.append((current_item, "", "", desc, sku, qty_raw))
+    return items, config_rows
+
+
+def _find_qar_table_header(ws) -> Optional[int]:
+    for r in range(1, ws.max_row + 1):
+        if _cell_to_text(ws.cell(r, 1).value).strip().lower() == "order code":
+            return r
+    return None
+
+
+def _extract_items_qar(ws) -> Tuple[List, List]:
+    header_row = _find_qar_table_header(ws)
+    if header_row is None:
+        return [], []
+    items: List[Tuple] = []
+    config_rows: List[Tuple] = []
+    current_item: Optional[str] = None
+    for r in range(header_row + 1, ws.max_row + 1):
+        order_code = _cell_to_text(ws.cell(r, 1).value).strip()
+        category = _cell_to_text(ws.cell(r, 2).value).strip()
+        qty_raw = _cell_to_text(ws.cell(r, 3).value).strip()
+        sku = _cell_to_text(ws.cell(r, 4).value).strip()
+        desc = _cell_to_text(ws.cell(r, 5).value).strip()
+        price = _parse_money(ws.cell(r, 6).value)
+        if not any([order_code, category, qty_raw, sku, desc, price]):
+            continue
+        try:
+            qty_val = int(qty_raw) if qty_raw else 0
+        except Exception:
+            qty_val = int(_parse_money(qty_raw) or 0)
+        if order_code:
+            if desc:
+                total_price = price or 0.0
+                unit_price = (total_price / qty_val) if qty_val else 0.0
+                items.append((desc, qty_val, unit_price, total_price))
+                current_item = str(len(items))
+            continue
+        if current_item and (category or desc):
+            config_rows.append((current_item, "", category, desc, sku, qty_raw))
     return items, config_rows
 
 
@@ -1897,8 +1986,11 @@ def generate_southcomp_quote(
         src_ws = src_wb.active
         config_ws = _find_config_sheet(src_wb)
 
+        if _is_qar_report(src_ws):
+            quote_ref, quote_meta = _extract_qar_metadata(src_ws)
+            items, config_rows = _extract_items_qar(src_ws)
         # Try grouped template
-        if _find_grouped_header(src_ws) is not None:
+        elif _find_grouped_header(src_ws) is not None:
             quote_ref, date_text = _extract_grouped_metadata(src_ws)
             items, grp_config_rows = _extract_items_grouped(src_ws)
             config_rows = _extract_config_rows(config_ws) if config_ws else grp_config_rows
