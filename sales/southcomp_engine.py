@@ -156,7 +156,7 @@ def _pil_to_xl(pil_img):
 
 def _logo_path() -> Optional[str]:
     base = os.path.dirname(os.path.abspath(__file__))
-    for name in ["spc.png","dell spc.png", "dell copy.png", "dell.png"]:
+    for name in ["ims.png","spc.png","dell spc.png", "dell copy.png", "dell.png"]:
         for directory in [base, os.path.dirname(base)]:
             p = os.path.join(directory, name)
             if os.path.exists(p):
