@@ -197,28 +197,6 @@ CORRECT_PASSWORD = os.getenv("PASSWORD")
 
 if "login_state" not in st.session_state:
     st.session_state.login_state = "login" 
-@st.cache_data(ttl=3600, show_spinner=False)
-def _login_impact_stats():
-    """Aggregate real usage totals from the tracking sheet for the login page."""
-    try:
-        rows = tool_sheet.get_all_records()
-
-        def _num(v):
-            try:
-                return int(float(v or 0))
-            except (TypeError, ValueError):
-                return 0
-
-        pdfs = sum(_num(r.get("PDF Count")) for r in rows)
-        excels = sum(_num(r.get("Excel Count")) for r in rows)
-        hours = int(round(pdfs * 10 / 60))  # ≈10 min of manual work saved per document
-        if pdfs <= 0 and excels <= 0:
-            return None
-        return {"pdfs": pdfs, "excels": excels, "hours": hours}
-    except Exception:
-        return None
-
-
 def show_login():
     streams = "".join(
         f'<div class="mw-stream" style="'
@@ -234,13 +212,6 @@ def show_login():
         f'<span class="mw-letter" style="--i:{i}">{ch}</span>'
         for i, ch in enumerate("MINDBOT")
     )
-    hour = datetime.now().hour
-    if hour < 12:
-        greeting = "Good morning ☀️"
-    elif hour < 17:
-        greeting = "Good afternoon 🌤️"
-    else:
-        greeting = "Good evening 🌙"
 
     st.markdown(f"""
     <style>
@@ -620,77 +591,12 @@ def show_login():
         100% {{ opacity: 0; }}
     }}
 
-    /* ---- Time-aware greeting ---- */
-    .mw-greet {{
-        font-size: 13px;
-        color: var(--mw-dim);
-        letter-spacing: 3px;
-        text-transform: uppercase;
-        margin-bottom: 14px;
-        opacity: 0;
-        animation: mw-letter-in .6s ease .1s forwards;
-    }}
-
-    /* ---- Live impact counters ---- */
-    @property --n {{
-        syntax: '<integer>';
-        inherits: false;
-        initial-value: 0;
-    }}
-    .mw-stats {{
-        display: flex;
-        justify-content: center;
-        gap: 12px;
-        max-width: 440px;
-        margin: 20px auto 0 auto;
-    }}
-    .mw-stat {{
-        flex: 1;
-        text-align: center;
-        padding: 14px 8px 12px 8px;
-        background: rgba(10,21,40,0.62);
-        border: 1px solid rgba(110,168,255,0.18);
-        border-radius: 12px;
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
-        animation: mw-card-in .6s ease both;
-        transition: transform .2s ease, border-color .2s ease;
-    }}
-    .mw-stat:hover {{
-        transform: translateY(-3px);
-        border-color: rgba(124,199,255,0.45);
-    }}
-    .mw-stat:nth-child(1) {{ animation-delay: .35s; }}
-    .mw-stat:nth-child(2) {{ animation-delay: .5s;  }}
-    .mw-stat:nth-child(3) {{ animation-delay: .65s; }}
-    .mw-stat-num {{
-        font-size: 20px;
-        font-weight: 800;
-        color: #ffffff;
-        text-shadow: 0 0 18px rgba(124,199,255,0.4);
-        counter-reset: mwnum var(--n);
-        animation: mw-count 2.2s cubic-bezier(.16,1,.3,1) .6s both;
-    }}
-    .mw-stat-num::after {{
-        content: counter(mwnum) "+";
-    }}
-    @keyframes mw-count {{ to {{ --n: var(--t); }} }}
-    .mw-stat-label {{
-        margin-top: 3px;
-        font-size: 9.5px;
-        letter-spacing: 1.6px;
-        text-transform: uppercase;
-        color: var(--mw-dim);
-    }}
-
     @media (prefers-reduced-motion: reduce) {{
         * {{ animation: none !important; transition: none !important; }}
         .mw-letter {{ opacity: 1; transform: none; }}
         .mw-typewriter {{ width: 28ch; }}
         .mw-rotator span {{ opacity: 0; }}
         .mw-rotator span:first-child {{ opacity: 1; }}
-        .mw-greet {{ opacity: 1; }}
-        .mw-stat-num::after {{ content: attr(data-n); }}
     }}
     </style>
 
@@ -702,7 +608,6 @@ def show_login():
     </div>
 
     <div class="mw-header">
-        <div class="mw-greet">{greeting}</div>
         <div class="mw-mark">
             <div class="mw-bar"></div>
             <div class="mw-bar"></div>
@@ -727,17 +632,6 @@ def show_login():
         username = st.text_input("Username", key="login_user", placeholder="Enter your username")
         password = st.text_input("Password", type="password", key="login_pass", placeholder="Enter your password")
         submitted = st.form_submit_button("Sign In", type="primary")
-
-    stats = _login_impact_stats()
-    if stats:
-        st.markdown(
-            '<div class="mw-stats">'
-            f'<div class="mw-stat"><div class="mw-stat-num" style="--t:{stats["pdfs"]};" data-n="{stats["pdfs"]:,}+"></div><div class="mw-stat-label">Documents Processed</div></div>'
-            f'<div class="mw-stat"><div class="mw-stat-num" style="--t:{stats["excels"]};" data-n="{stats["excels"]:,}+"></div><div class="mw-stat-label">Excel Files Created</div></div>'
-            f'<div class="mw-stat"><div class="mw-stat-num" style="--t:{stats["hours"]};" data-n="{stats["hours"]:,}+"></div><div class="mw-stat-label">Hours Saved</div></div>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
 
     st.markdown(
         '<div class="mw-bot">'
