@@ -210,7 +210,7 @@ def show_login():
     )
     letters = "".join(
         f'<span class="mw-letter" style="--i:{i}">{ch}</span>'
-        for i, ch in enumerate("MINDWARE")
+        for i, ch in enumerate("MINDBOT")
     )
 
     st.markdown(f"""
@@ -524,10 +524,7 @@ def show_login():
         </div>
         <div class="mw-wordmark">{letters}</div>
         <div class="mw-subtitle">Productivity Suite</div>
-        <div class="mw-status">
-            <span class="mw-status-dot"></span>
-            <span class="mw-typewriter">&gt; secure channel established</span>
-        </div>
+        
     </div>
     """, unsafe_allow_html=True)
 
@@ -535,7 +532,7 @@ def show_login():
         st.markdown(
             '<div class="mw-term">'
             '<span class="mw-term-dots"><i></i><i></i><i></i></span>'
-            '<span class="mw-term-title">mindware://secure-login</span>'
+            '<span class="mw-term-title">mindbot</span>'
             '</div>',
             unsafe_allow_html=True,
         )
@@ -543,7 +540,7 @@ def show_login():
         password = st.text_input("Password", type="password", key="login_pass", placeholder="Enter your password")
         submitted = st.form_submit_button("Sign In", type="primary")
 
-    st.markdown('<div class="mw-footer">Mindware &copy; 2025 &middot; Secure Access Portal</div>', unsafe_allow_html=True)
+    st.markdown('<div class="mw-footer">Mindware &copy; 2025</div>', unsafe_allow_html=True)
 
     if submitted:
         if username == CORRECT_USERNAME and password == CORRECT_PASSWORD:
