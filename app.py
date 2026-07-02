@@ -1548,6 +1548,7 @@ elif tool == "MIBB Quotations":
                     data=output.getvalue(),
                     file_name="MIBB_Quotation.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    on_click=lambda: update_usage(f"MIBB Quotations-{quote_type}", team, pdf_count=1),
                 )
         else:
             st.info("Please upload a MIBB quotation PDF to get started.")
@@ -1595,6 +1596,9 @@ elif tool == "MIBB Quotations":
                         data=output.getvalue(),
                         file_name="MIBB_Hardware_Quotation.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        on_click=lambda: update_usage(
+                            f"MIBB Quotations-{quote_type}", team, pdf_count=1, excel_count=1
+                        ),
                     )
         else:
             st.info("Please upload both the MIBB PDF and hardware Excel to get started.")
@@ -2209,6 +2213,12 @@ elif tool == "💻 Dell Quotation (Orion)":
                         file_name=output_name,
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         key="download_dell_orion_quote",
+                        on_click=lambda: update_usage(
+                            f"dell orion-{currency_code}",
+                            team,
+                            pdf_count=1 if str(uploaded.name).lower().endswith(".pdf") else 0,
+                            excel_count=1 if str(uploaded.name).lower().endswith(EXCEL_EXTENSIONS) else 0,
+                        ),
                     )
                     st.success("Done ✅")
                 except Exception as e:
@@ -2217,7 +2227,7 @@ elif tool == "💻 Dell Quotation (Orion)":
                     
 
 elif tool == "💻 Dell Quotation Southcomp Polaris":
-    render_southcomp_tool()
+    render_southcomp_tool(team, update_usage)
 
 st.markdown("""
 <footer style='text-align:center; margin-top:3rem; color:#1a73e8; font-size:20px; font-weight:bold; font-family: Google Sans, sans-serif;'>

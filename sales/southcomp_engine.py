@@ -1935,6 +1935,24 @@ def _build_quote_workbook(
 
 # ==================== PUBLIC API ====================
 
+def describe_input_kind(input_bytes: bytes) -> str:
+    """Return a short label for which extraction path an input will take (for usage tracking)."""
+    if input_bytes.lstrip().startswith(b"%PDF"):
+        return "pdf"
+    if _is_docx(input_bytes):
+        return "docx"
+    try:
+        wb = openpyxl.load_workbook(BytesIO(input_bytes), data_only=True)
+        ws = wb.active
+    except Exception:
+        return "excel"
+    if _is_qar_report(ws):
+        return "qar"
+    if _find_grouped_header(ws) is not None:
+        return "boq_grouped"
+    return "boq_generic"
+
+
 def generate_southcomp_quote(
     input_bytes: bytes,
     margin_percent: float,

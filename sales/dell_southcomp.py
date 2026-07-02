@@ -4,12 +4,12 @@ import streamlit as st
 
 from sales.southcomp_engine import (
     build_output_filename,
-    detect_template_type,
+    describe_input_kind,
     generate_southcomp_quote,
 )
 
 
-def render_southcomp_tool() -> None:
+def render_southcomp_tool(team, update_usage) -> None:
     st.title("💼 Dell Quotation Southcomp Polaris")
 
     uploaded = st.file_uploader(
@@ -44,6 +44,7 @@ def render_southcomp_tool() -> None:
         ("southcomp_output_name_usd", None),
         ("southcomp_uploaded_hash", None),
         ("southcomp_uploaded_bytes", None),
+        ("southcomp_input_kind", None),
         ("southcomp_last_uploaded_name", None),
         ("southcomp_last_margin_percent", None),
         ("southcomp_last_exchange_rate", None),
@@ -69,6 +70,7 @@ def render_southcomp_tool() -> None:
             st.session_state["southcomp_last_error"] = None
             st.session_state["southcomp_uploaded_hash"] = uploaded_hash
             st.session_state["southcomp_uploaded_bytes"] = uploaded_bytes
+            st.session_state["southcomp_input_kind"] = describe_input_kind(uploaded_bytes)
             st.session_state["southcomp_last_uploaded_name"] = uploaded.name
     else:
         uploaded_bytes = st.session_state.get("southcomp_uploaded_bytes")
@@ -137,6 +139,9 @@ def render_southcomp_tool() -> None:
 
     if eur_bytes or usd_bytes:
         st.markdown("### Download your files")
+        input_kind = st.session_state.get("southcomp_input_kind") or "excel"
+        pdf_count = 1 if input_kind == "pdf" else 0
+        excel_count = 1 if input_kind in ("qar", "boq_grouped", "boq_generic") else 0
         if eur_bytes:
             st.download_button(
                 label="⬇️ Download EUR quotation",
@@ -144,6 +149,9 @@ def render_southcomp_tool() -> None:
                 file_name=st.session_state.get("southcomp_output_name_eur", "quotation_eur.xlsx"),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="southcomp_download_eur",
+                on_click=lambda: update_usage(
+                    f"southcomp polaris-{input_kind}-EUR", team, pdf_count=pdf_count, excel_count=excel_count
+                ),
                 use_container_width=True,
             )
         if usd_bytes:
@@ -153,6 +161,9 @@ def render_southcomp_tool() -> None:
                 file_name=st.session_state.get("southcomp_output_name_usd", "quotation_usd.xlsx"),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="southcomp_download_usd",
+                on_click=lambda: update_usage(
+                    f"southcomp polaris-{input_kind}-USD", team, pdf_count=pdf_count, excel_count=excel_count
+                ),
                 use_container_width=True,
             )
 
