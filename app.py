@@ -490,15 +490,6 @@ def show_login():
         transform: translateY(0) scale(.98);
     }}
 
-    .mw-footer {{
-        max-width: 420px;
-        margin: 16px auto 0 auto;
-        text-align: center;
-        color: rgba(157,193,255,0.35);
-        font-size: 11px;
-        letter-spacing: 2px;
-        text-transform: uppercase;
-    }}
     .mw-heart {{
         display: inline-block;
         font-size: 13px;
@@ -511,10 +502,101 @@ def show_login():
         36% {{ transform: scale(1.25); }}
     }}
 
+    /* ---- Cute mini-bot mascot ---- */
+    .mw-bot {{
+        width: 44px;
+        margin: 18px auto 8px auto;
+        animation: mw-bob 3s ease-in-out infinite;
+    }}
+    .mw-bot-antenna {{
+        width: 2px; height: 9px;
+        margin: 0 auto;
+        background: rgba(110,168,255,0.6);
+        position: relative;
+    }}
+    .mw-bot-antenna::before {{
+        content: "";
+        position: absolute;
+        top: -6px; left: 50%;
+        transform: translateX(-50%);
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        background: var(--mw-glow);
+        box-shadow: 0 0 8px 2px rgba(124,199,255,0.7);
+        animation: mw-pulse 1.8s ease-in-out infinite;
+    }}
+    .mw-bot-head {{
+        width: 40px; height: 30px;
+        margin: 0 auto;
+        background: rgba(16,30,55,0.9);
+        border: 1px solid rgba(110,168,255,0.4);
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        position: relative;
+        box-shadow: 0 4px 14px rgba(2,6,16,0.5), inset 0 1px 0 rgba(255,255,255,0.06);
+    }}
+    .mw-bot-eye {{
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        background: var(--mw-glow);
+        box-shadow: 0 0 6px rgba(124,199,255,0.8);
+        margin-top: -6px;
+        animation: mw-blink 4.2s ease-in-out infinite;
+    }}
+    .mw-bot-mouth {{
+        position: absolute;
+        bottom: 5px; left: 50%;
+        transform: translateX(-50%);
+        width: 12px; height: 6px;
+        border: 2px solid rgba(124,199,255,0.75);
+        border-top: none;
+        border-radius: 0 0 12px 12px;
+    }}
+    @keyframes mw-bob {{
+        0%, 100% {{ transform: translateY(0); }}
+        50%      {{ transform: translateY(-4px); }}
+    }}
+    @keyframes mw-blink {{
+        0%, 90%, 96%, 100% {{ transform: scaleY(1); }}
+        93% {{ transform: scaleY(0.1); }}
+    }}
+
+    /* Rotating cute footer messages */
+    .mw-rotator {{
+        position: relative;
+        height: 20px;
+        max-width: 420px;
+        margin: 0 auto;
+        text-align: center;
+        font-size: 12px;
+        color: rgba(157,193,255,0.6);
+        letter-spacing: .5px;
+    }}
+    .mw-rotator span {{
+        position: absolute;
+        left: 0; right: 0;
+        opacity: 0;
+        animation: mw-msg 9s ease-in-out infinite;
+    }}
+    .mw-rotator span:nth-child(2) {{ animation-delay: 3s; }}
+    .mw-rotator span:nth-child(3) {{ animation-delay: 6s; }}
+    @keyframes mw-msg {{
+        0%  {{ opacity: 0; transform: translateY(8px); }}
+        4%  {{ opacity: 1; transform: none; }}
+        30% {{ opacity: 1; }}
+        36% {{ opacity: 0; transform: translateY(-8px); }}
+        100% {{ opacity: 0; }}
+    }}
+
     @media (prefers-reduced-motion: reduce) {{
         * {{ animation: none !important; transition: none !important; }}
         .mw-letter {{ opacity: 1; transform: none; }}
         .mw-typewriter {{ width: 28ch; }}
+        .mw-rotator span {{ opacity: 0; }}
+        .mw-rotator span:first-child {{ opacity: 1; }}
     }}
     </style>
 
@@ -551,7 +633,21 @@ def show_login():
         password = st.text_input("Password", type="password", key="login_pass", placeholder="Enter your password")
         submitted = st.form_submit_button("Sign In", type="primary")
 
-    st.markdown('<div class="mw-footer">Made with <span class="mw-heart">💙</span> by Mindware &middot; 2025</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="mw-bot">'
+        '<div class="mw-bot-antenna"></div>'
+        '<div class="mw-bot-head">'
+        '<span class="mw-bot-eye"></span><span class="mw-bot-eye"></span>'
+        '<div class="mw-bot-mouth"></div>'
+        '</div>'
+        '</div>'
+        '<div class="mw-rotator">'
+        '<span>Made with <b class="mw-heart">💙</b> by Mindware</span>'
+        '<span>Fueled by coffee ☕ and a few thousand PDFs 📄</span>'
+        '<span>Beep boop — happy to see you! 🤖</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
     if submitted:
         if username == CORRECT_USERNAME and password == CORRECT_PASSWORD:
