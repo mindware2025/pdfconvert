@@ -1,4 +1,7 @@
 import hashlib
+import io
+import zipfile
+from datetime import datetime
 
 import streamlit as st
 
@@ -12,9 +15,10 @@ from sales.southcomp_engine import (
 def render_southcomp_tool(team, update_usage) -> None:
     st.title("💼 Dell Quotation Southcomp Polaris")
 
-    uploaded = st.file_uploader(
+    uploaded_files = st.file_uploader(
         "Upload Dell BOQ Excel, PDF or Word (.docx)",
         type=["xlsx", "xlsm", "xls", "pdf", "docx"],
+        accept_multiple_files=True,
         key="southcomp_uploader",
     )
 
@@ -38,14 +42,9 @@ def render_southcomp_tool(team, update_usage) -> None:
 
     # Session state initialisation
     for key, default in [
-        ("southcomp_output_bytes_eur", None),
-        ("southcomp_output_bytes_usd", None),
-        ("southcomp_output_name_eur", None),
-        ("southcomp_output_name_usd", None),
+        ("southcomp_outputs", []),
         ("southcomp_uploaded_hash", None),
-        ("southcomp_uploaded_bytes", None),
-        ("southcomp_input_kind", None),
-        ("southcomp_last_uploaded_name", None),
+        ("southcomp_uploaded_inputs", []),
         ("southcomp_last_margin_percent", None),
         ("southcomp_last_exchange_rate", None),
         ("southcomp_generation_success", False),
@@ -54,38 +53,32 @@ def render_southcomp_tool(team, update_usage) -> None:
         if key not in st.session_state:
             st.session_state[key] = default
 
+    def reset_outputs():
+        st.session_state["southcomp_outputs"] = []
+        st.session_state["southcomp_generation_success"] = False
+        st.session_state["southcomp_last_error"] = None
+
     # Detect file change and reset outputs
-    if uploaded is not None:
-        uploaded_bytes = uploaded.getvalue()
-        uploaded_hash = hashlib.sha256(uploaded_bytes).hexdigest()
-        if (
-            st.session_state["southcomp_last_uploaded_name"] != uploaded.name
-            or st.session_state["southcomp_uploaded_hash"] != uploaded_hash
-        ):
-            st.session_state["southcomp_output_bytes_eur"] = None
-            st.session_state["southcomp_output_bytes_usd"] = None
-            st.session_state["southcomp_output_name_eur"] = None
-            st.session_state["southcomp_output_name_usd"] = None
-            st.session_state["southcomp_generation_success"] = False
-            st.session_state["southcomp_last_error"] = None
+    if uploaded_files:
+        inputs = [(f.name, f.getvalue()) for f in uploaded_files]
+        combined = hashlib.sha256()
+        for name, data in inputs:
+            combined.update(name.encode("utf-8"))
+            combined.update(data)
+        uploaded_hash = combined.hexdigest()
+        if st.session_state["southcomp_uploaded_hash"] != uploaded_hash:
+            reset_outputs()
             st.session_state["southcomp_uploaded_hash"] = uploaded_hash
-            st.session_state["southcomp_uploaded_bytes"] = uploaded_bytes
-            st.session_state["southcomp_input_kind"] = describe_input_kind(uploaded_bytes)
-            st.session_state["southcomp_last_uploaded_name"] = uploaded.name
+            st.session_state["southcomp_uploaded_inputs"] = inputs
     else:
-        uploaded_bytes = st.session_state.get("southcomp_uploaded_bytes")
+        inputs = st.session_state.get("southcomp_uploaded_inputs", [])
 
     # Reset on parameter change
     if (
         st.session_state.get("southcomp_last_margin_percent") not in (None, margin_percent)
         or st.session_state.get("southcomp_last_exchange_rate") not in (None, exchange_rate)
     ):
-        st.session_state["southcomp_output_bytes_eur"] = None
-        st.session_state["southcomp_output_bytes_usd"] = None
-        st.session_state["southcomp_output_name_eur"] = None
-        st.session_state["southcomp_output_name_usd"] = None
-        st.session_state["southcomp_generation_success"] = False
-        st.session_state["southcomp_last_error"] = None
+        reset_outputs()
 
     col1, _ = st.columns([1, 1])
     with col1:
@@ -100,29 +93,31 @@ def render_southcomp_tool(team, update_usage) -> None:
         st.session_state["southcomp_generation_success"] = False
 
     if generate_clicked:
-        if uploaded is None and st.session_state.get("southcomp_uploaded_bytes") is None:
-            st.warning("Please upload a file first.")
+        if not inputs:
+            st.warning("Please upload at least one file first.")
         else:
             try:
                 st.session_state["southcomp_last_error"] = None
-                input_bytes = st.session_state.get("southcomp_uploaded_bytes") or uploaded.getvalue()
-                if input_bytes is None:
-                    raise ValueError("Uploaded file bytes are missing.")
+                outputs = []
+                with st.spinner("⚙️ Generating quotations..."):
+                    for source_name, input_bytes in inputs:
+                        entry = {
+                            "source_name": source_name,
+                            "input_kind": describe_input_kind(input_bytes),
+                        }
+                        for target_currency in ("EUR", "USD"):
+                            entry[target_currency] = generate_southcomp_quote(
+                                input_bytes=input_bytes,
+                                margin_percent=margin_percent,
+                                currency_code=target_currency,
+                                exchange_rate=exchange_rate if target_currency == "EUR" else 1.0,
+                            )
+                            entry[f"{target_currency}_name"] = build_output_filename(
+                                target_currency, source_name
+                            )
+                        outputs.append(entry)
 
-                with st.spinner("⚙️ Generating quotation..."):
-                    generated_outputs: dict[str, bytes] = {}
-                    for target_currency in ("EUR", "USD"):
-                        generated_outputs[target_currency] = generate_southcomp_quote(
-                            input_bytes=input_bytes,
-                            margin_percent=margin_percent,
-                            currency_code=target_currency,
-                            exchange_rate=exchange_rate if target_currency == "EUR" else 1.0,
-                        )
-
-                    st.session_state["southcomp_output_bytes_eur"] = generated_outputs["EUR"]
-                    st.session_state["southcomp_output_bytes_usd"] = generated_outputs["USD"]
-                    st.session_state["southcomp_output_name_eur"] = build_output_filename("EUR")
-                    st.session_state["southcomp_output_name_usd"] = build_output_filename("USD")
+                    st.session_state["southcomp_outputs"] = outputs
                     st.session_state["southcomp_last_margin_percent"] = margin_percent
                     st.session_state["southcomp_last_exchange_rate"] = exchange_rate
                     st.session_state["southcomp_generation_success"] = True
@@ -134,38 +129,71 @@ def render_southcomp_tool(team, update_usage) -> None:
                 st.error(str(e))
                 st.exception(e)
 
-    eur_bytes = st.session_state.get("southcomp_output_bytes_eur")
-    usd_bytes = st.session_state.get("southcomp_output_bytes_usd")
+    outputs = st.session_state.get("southcomp_outputs", [])
 
-    if eur_bytes or usd_bytes:
+    if outputs:
         st.markdown("### Download your files")
-        input_kind = st.session_state.get("southcomp_input_kind") or "excel"
-        pdf_count = 1 if input_kind == "pdf" else 0
-        excel_count = 1 if input_kind in ("qar", "boq_grouped", "boq_generic") else 0
-        if eur_bytes:
-            st.download_button(
-                label="⬇️ Download EUR quotation",
-                data=eur_bytes,
-                file_name=st.session_state.get("southcomp_output_name_eur", "quotation_eur.xlsx"),
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="southcomp_download_eur",
-                on_click=lambda: update_usage(
-                    f"southcomp polaris-{input_kind}-EUR", team, pdf_count=pdf_count, excel_count=excel_count
-                ),
-                use_container_width=True,
+
+        def usage_counts(entries):
+            pdf_count = sum(1 for o in entries if o["input_kind"] == "pdf")
+            excel_count = sum(
+                1 for o in entries if o["input_kind"] in ("qar", "boq_grouped", "boq_generic")
             )
-        if usd_bytes:
+            return pdf_count, excel_count
+
+        if len(outputs) > 1:
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                for entry in outputs:
+                    for currency in ("EUR", "USD"):
+                        zip_file.writestr(entry[f"{currency}_name"], entry[currency])
+            zip_buffer.seek(0)
+            all_pdf_count, all_excel_count = usage_counts(outputs)
             st.download_button(
-                label="⬇️ Download USD quotation",
-                data=usd_bytes,
-                file_name=st.session_state.get("southcomp_output_name_usd", "quotation_usd.xlsx"),
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="southcomp_download_usd",
+                label="⬇️ Download all quotations (ZIP)",
+                data=zip_buffer.getvalue(),
+                file_name=f"Southcomp_Polaris_quotations_{datetime.now().strftime('%Y%m%d_%H%M')}.zip",
+                mime="application/zip",
+                key="southcomp_download_zip",
                 on_click=lambda: update_usage(
-                    f"southcomp polaris-{input_kind}-USD", team, pdf_count=pdf_count, excel_count=excel_count
+                    "southcomp polaris-multi",
+                    team,
+                    pdf_count=all_pdf_count,
+                    excel_count=all_excel_count,
                 ),
                 use_container_width=True,
             )
 
-    if uploaded is None and not eur_bytes and not usd_bytes:
-        st.info("Upload Dell BOQ Excel, PDF or Word (.docx), then click Generate Quotation.")
+        for idx, entry in enumerate(outputs):
+            if len(outputs) > 1:
+                st.markdown(f"**📄 {entry['source_name']}**")
+            input_kind = entry["input_kind"]
+            pdf_count, excel_count = usage_counts([entry])
+            eur_col, usd_col = st.columns(2)
+            with eur_col:
+                st.download_button(
+                    label="⬇️ Download EUR quotation",
+                    data=entry["EUR"],
+                    file_name=entry["EUR_name"],
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"southcomp_download_eur_{idx}",
+                    on_click=lambda k=input_kind, p=pdf_count, x=excel_count: update_usage(
+                        f"southcomp polaris-{k}-EUR", team, pdf_count=p, excel_count=x
+                    ),
+                    use_container_width=True,
+                )
+            with usd_col:
+                st.download_button(
+                    label="⬇️ Download USD quotation",
+                    data=entry["USD"],
+                    file_name=entry["USD_name"],
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"southcomp_download_usd_{idx}",
+                    on_click=lambda k=input_kind, p=pdf_count, x=excel_count: update_usage(
+                        f"southcomp polaris-{k}-USD", team, pdf_count=p, excel_count=x
+                    ),
+                    use_container_width=True,
+                )
+
+    if not uploaded_files and not outputs:
+        st.info("Upload one or more Dell BOQ Excel, PDF or Word (.docx) files, then click Generate Quotation.")

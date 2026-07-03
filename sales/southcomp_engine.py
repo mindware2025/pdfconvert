@@ -2061,5 +2061,14 @@ def generate_southcomp_quote(
     )
 
 
-def build_output_filename(currency_code: str = "EUR") -> str:
-    return f"Southcomp_Polaris_{currency_code.upper()}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+def build_output_filename(currency_code: str = "EUR", source_name: str = "") -> str:
+    stem = ""
+    if source_name:
+        raw_stem = os.path.splitext(os.path.basename(source_name))[0]
+        stem = re.sub(r"[^\w\-]+", "_", raw_stem).strip("_")
+    parts = ["Southcomp_Polaris"]
+    if stem:
+        parts.append(stem)
+    parts.append(currency_code.upper())
+    parts.append(datetime.now().strftime("%Y%m%d_%H%M"))
+    return "_".join(parts) + ".xlsx"
