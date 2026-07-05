@@ -1,6 +1,8 @@
 from io import BytesIO
 import openpyxl
 
+from dell import is_dell_csv_quote
+
 def detect_dell_template(input_bytes: bytes) -> str:
     """
     Detect Dell template type.
@@ -10,6 +12,10 @@ def detect_dell_template(input_bytes: bytes) -> str:
     """
     # PDFs always go to existing logic
     if input_bytes.lstrip().startswith(b"%PDF"):
+        return "standard_quote"
+
+    # Dell CSV quote exports use the standard quote pipeline
+    if is_dell_csv_quote(input_bytes):
         return "standard_quote"
 
     try:

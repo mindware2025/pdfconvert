@@ -2437,9 +2437,9 @@ elif tool == "💻 Dell Quotation":
 
     uploaded = st.file_uploader(
 
-        "Upload Dell BOQ Excel or PDF",
+        "Upload Dell BOQ Excel, PDF or CSV",
 
-        type=["xlsx", "xlsm", "xls", "pdf"],
+        type=["xlsx", "xlsm", "xls", "pdf", "csv"],
 
         key="dell_uploader"
 
@@ -2664,6 +2664,8 @@ elif tool == "💻 Dell Quotation":
                             exchange_rate=None,
                             style_currency=None,
                             include_footer_notes=True,
+                            source_filename=st.session_state.get("dell_last_uploaded_name")
+                            or (uploaded.name if uploaded is not None else None),
                         )
                         output_name = build_dell_output_filename(input_bytes, currency_code=currency_code)
 
@@ -2716,7 +2718,7 @@ elif tool == "💻 Dell Quotation":
 
     if uploaded is None and not st.session_state.get("dell_output_bytes"):
 
-        st.info("Upload Dell BOQ Excel or PDF, then click Generate Quotation.")
+        st.info("Upload Dell BOQ Excel, PDF or CSV, then click Generate Quotation.")
 
 elif tool == "💻 Dell Quotation Southcomp Polaris":
     render_southcomp_tool()

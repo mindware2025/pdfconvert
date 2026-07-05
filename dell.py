@@ -2,8 +2,9 @@
 
 # dell.py
 from datetime import datetime, timedelta
-from io import BytesIO
+from io import BytesIO, StringIO
 from typing import Optional, Dict, List, Tuple
+import csv
 import logging
 import os
 import re
@@ -1141,6 +1142,136 @@ def _extract_pdf_lines(pdf_bytes: bytes) -> List[str]:
     return [l.strip() for l in text.splitlines()]
 
 
+def _decode_csv_bytes(csv_bytes: bytes) -> str:
+    """Decode Dell CSV export bytes (UTF-8 with optional BOM, cp1252 fallback)."""
+    try:
+        return csv_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return csv_bytes.decode("cp1252", errors="replace")
+
+
+_CSV_SUMMARY_LABELS = {"savings", "subtotal", "estimated shipping", "total"}
+
+
+def _extract_csv_quote_data(csv_bytes: bytes, source_filename: Optional[str] = None):
+    """
+    Parse the Dell CSV quote export (columns: Items, Order code, Category,
+    Description, Code, SKU, ID, Unit Price, Quantity, Item total).
+
+    Returns (items, quote_meta, config_rows, quote_ref_text, date_text,
+    consolidation_fee, item_headings_by_item).
+
+    Item rows carry the product name in the "Items" column; subsequent rows
+    with a blank "Items" cell are configuration lines for that product. A
+    trailing summary block (Savings / Subtotal / Estimated Shipping / Taxes /
+    Total) ends item parsing. The unit price used is the effective price
+    (Item total / Quantity) because savings are already applied to Item total.
+    """
+    logger = _get_logger()
+    text = _decode_csv_bytes(csv_bytes)
+
+    header_map: Dict[str, int] = {}
+    items: List[Tuple[str, float, float, Optional[float]]] = []
+    config_rows: List[tuple] = []
+    item_headings_by_item: Dict[str, str] = {}
+    summary: Dict[str, float] = {}
+    current_item_no = 0
+
+    def _cell(row, name):
+        idx = header_map.get(name)
+        if idx is None or idx >= len(row):
+            return ""
+        return (row[idx] or "").strip()
+
+    for row in csv.reader(StringIO(text)):
+        if not any((cell or "").strip() for cell in row):
+            continue
+
+        if not header_map:
+            header_map = {c.strip().lower(): i for i, c in enumerate(row) if c and c.strip()}
+            continue
+
+        first = (row[0] or "").strip() if row else ""
+        norm = first.lower()
+
+        if norm in _CSV_SUMMARY_LABELS or norm.startswith("taxes"):
+            summary[norm.split("(")[0].strip()] = _parse_money(_cell(row, "item total")) or 0.0
+            continue
+
+        if summary:
+            # Items never resume after the summary block; ignore trailing rows.
+            logger.debug("CSV: ignoring row after summary block: %r", first)
+            continue
+
+        if first:
+            qty_raw = _cell(row, "quantity")
+            try:
+                qty = int(float(qty_raw)) if qty_raw else 1
+            except Exception:
+                qty = 1
+            if qty <= 0:
+                qty = 1
+            list_unit = _parse_money(_cell(row, "unit price"))
+            item_total = _parse_money(_cell(row, "item total"))
+            if item_total is not None:
+                effective_unit = round(item_total / qty, 2)
+            else:
+                effective_unit = list_unit or 0.0
+                item_total = round(effective_unit * qty, 2)
+            items.append((_sanitize_excel_text(first), qty, effective_unit, item_total))
+            current_item_no += 1
+            order_code = _cell(row, "order code")
+            heading = f"{first} ({order_code})" if order_code else first
+            item_headings_by_item[str(current_item_no)] = _sanitize_excel_text(heading)
+            if list_unit is not None and abs(effective_unit - list_unit) > 0.01:
+                logger.debug(
+                    "CSV item %d: using effective unit %.2f (list price %.2f before savings)",
+                    current_item_no, effective_unit, list_unit,
+                )
+            continue
+
+        category = _cell(row, "category")
+        description = _cell(row, "description")
+        sku_cell = _cell(row, "sku")
+        if category or description or sku_cell:
+            if current_item_no == 0:
+                logger.debug("CSV: skipping config row before any item: %r", description)
+                continue
+            sku_parts = re.findall(r"\[([^\]]+)\]", sku_cell)
+            sku_clean = ", ".join(sku_parts) if sku_parts else sku_cell
+            config_rows.append((
+                str(current_item_no),
+                "",
+                _sanitize_excel_text(category),
+                _sanitize_excel_text(description),
+                _sanitize_excel_text(sku_clean),
+                "",
+            ))
+
+    subtotal = summary.get("subtotal")
+    if subtotal:
+        items_total = sum((it[3] or 0.0) for it in items)
+        if abs(items_total - subtotal) > 0.01:
+            logger.warning("CSV: items total %.2f does not match Subtotal %.2f", items_total, subtotal)
+
+    consolidation_fee = summary.get("estimated shipping") or 0.0
+
+    quote_ref_text = ""
+    if source_filename:
+        m = re.search(r"(\d{6,})", os.path.basename(source_filename))
+        if m:
+            quote_ref_text = m.group(1)
+
+    date_text = datetime.now().strftime("%d/%m/%Y")
+    quote_meta: Dict[str, str] = {}
+
+    logger.info(
+        "Parsed CSV quote: %d items, %d config rows, quote_ref=%s, fee=%.2f",
+        len(items), len(config_rows), quote_ref_text, consolidation_fee,
+    )
+    return items, quote_meta, config_rows, quote_ref_text, date_text, consolidation_fee, item_headings_by_item
+
+
 def _extract_pdf_quote_data(pdf_bytes: bytes):
     """
     FINAL VERSION — CLEAN, HYBRID (C3), PDF‑ONLY FIX
@@ -1901,11 +2032,35 @@ CURRENCY_NUMBER_FORMATS = {
 }
 
 
+def is_dell_csv_quote(input_bytes: bytes) -> bool:
+    """Detect the Dell CSV quote export by its header row (content sniff, not extension)."""
+    if not input_bytes:
+        return False
+    head = input_bytes[:4096].lstrip()
+    if head.startswith(b"%PDF") or head.startswith(b"PK\x03\x04") or head.startswith(b"\xd0\xcf\x11\xe0"):
+        return False
+    try:
+        text = head.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            text = head.decode("cp1252")
+        except Exception:
+            return False
+    first_line = next((ln for ln in text.splitlines() if ln.strip()), "")
+    cols = [c.strip().lower() for c in first_line.split(",")]
+    if not cols or cols[0] != "items":
+        return False
+    return {"sku", "unit price", "quantity", "item total"} <= set(cols)
+
+
 def detect_dell_standard_variant(input_excel_bytes: bytes) -> str:
     """Return the standard Dell extraction variant used for this input."""
     try:
         if input_excel_bytes.lstrip().startswith(b"%PDF"):
             return "pdf"
+
+        if is_dell_csv_quote(input_excel_bytes):
+            return "csv"
 
         src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
         src_ws = src_wb.active
@@ -1936,6 +2091,7 @@ def generate_dell_quote(
     exchange_rate: Optional[float] = None,
     style_currency: Optional[str] = None,
     include_footer_notes: bool = True,
+    source_filename: Optional[str] = None,
 ) -> bytes:
     """
     Generate a 2-sheet workbook from either:
@@ -1974,6 +2130,7 @@ def generate_dell_quote(
 
     # ---- Load source ----
     is_pdf = input_excel_bytes.lstrip().startswith(b"%PDF")
+    is_csv = (not is_pdf) and is_dell_csv_quote(input_excel_bytes)
 
     if is_pdf:
         items, quote_meta, config_rows, quote_ref_text, date_text, consolidation_fee = _extract_pdf_quote_data(input_excel_bytes)
@@ -1981,6 +2138,13 @@ def generate_dell_quote(
         _log_items("PDF items", items)
         item_descs_order = [it[0] for it in items]
         item_headings_by_item = {str(i + 1): items[i][0] for i in range(len(items))}
+    elif is_csv:
+        (items, quote_meta, config_rows, quote_ref_text, date_text,
+         consolidation_fee, csv_headings) = _extract_csv_quote_data(input_excel_bytes, source_filename)
+        _log_items("CSV items", items)
+        item_descs_order = [it[0] for it in items]
+        item_headings_by_item = csv_headings or {str(i + 1): items[i][0] for i in range(len(items))}
+        is_compact_quote = False
     else:
         src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
         src_ws = src_wb.active
@@ -2140,7 +2304,7 @@ def generate_dell_quote(
                 return normalized
         return ""
 
-    allow_part_number = not is_pdf
+    allow_part_number = not is_pdf and not is_csv
     part_numbers_by_item: Dict[str, str] = {}
     if allow_part_number:
         for row_data in config_rows:
@@ -2400,29 +2564,33 @@ def generate_dell_quote(
         ]
 
     # ---- Customer Information Section (Same layout for all currencies) ----
-    ws.merge_cells(start_row=customer_title_row, start_column=1, end_row=customer_title_row, end_column=8)
-    ws[f"A{customer_title_row}"] = "Customer Information"
-    _style_section_title(f"A{customer_title_row}")
+    # CSV quote exports carry no customer data, so the section is omitted entirely.
+    if is_csv:
+        last_metadata_row = customer_title_row - 1
+    else:
+        ws.merge_cells(start_row=customer_title_row, start_column=1, end_row=customer_title_row, end_column=8)
+        ws[f"A{customer_title_row}"] = "Customer Information"
+        _style_section_title(f"A{customer_title_row}")
 
-    for idx, (label, value) in enumerate(meta_rows, start=customer_title_row + 1):
-        ws[f"A{idx}"] = label
-        ws[f"A{idx}"].font = Font(bold=True)
-        ws[f"A{idx}"].alignment = Alignment(horizontal="left", vertical="top")
-        ws.merge_cells(start_row=idx, start_column=2, end_row=idx, end_column=8)
-        ws[f"B{idx}"] = value
-        ws[f"B{idx}"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+        for idx, (label, value) in enumerate(meta_rows, start=customer_title_row + 1):
+            ws[f"A{idx}"] = label
+            ws[f"A{idx}"].font = Font(bold=True)
+            ws[f"A{idx}"].alignment = Alignment(horizontal="left", vertical="top")
+            ws.merge_cells(start_row=idx, start_column=2, end_row=idx, end_column=8)
+            ws[f"B{idx}"] = value
+            ws[f"B{idx}"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
 
-        # Calculate row height accounting for explicit newlines in shipping info
-        text_len = len(_cell_to_text(value))
-        explicit_newlines = _cell_to_text(value).count("\n")
-        # Account for both word wrapping and explicit newlines
-        estimated_lines = max(1, explicit_newlines + 1 + max(0, (text_len // 32)))
-        estimated_lines = min(estimated_lines, 12)  # cap at 12 lines for very long shipping addresses
-        ws.row_dimensions[idx].height = max(ws.row_dimensions[idx].height or 20, estimated_lines * 18)
-
+            # Calculate row height accounting for explicit newlines in shipping info
+            text_len = len(_cell_to_text(value))
+            explicit_newlines = _cell_to_text(value).count("\n")
+            # Account for both word wrapping and explicit newlines
+            estimated_lines = max(1, explicit_newlines + 1 + max(0, (text_len // 32)))
+            estimated_lines = min(estimated_lines, 12)  # cap at 12 lines for very long shipping addresses
+            ws.row_dimensions[idx].height = max(ws.row_dimensions[idx].height or 20, estimated_lines * 18)
 
     # ---- Recalculate helper row positions based on where metadata ends ----
-    last_metadata_row = customer_title_row + len(meta_rows)
+    if not is_csv:
+        last_metadata_row = customer_title_row + len(meta_rows)
     helper_value_row = last_metadata_row + 1
     helper_aux_row = helper_value_row + 1
 
