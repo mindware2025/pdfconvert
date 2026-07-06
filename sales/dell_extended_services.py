@@ -191,7 +191,7 @@ def _extract_extended_services_rows(ws) -> List[List]:
         "Asset", "Agreement ID", "Model", "Install At/Ship To",
         "Install At/Ship To City", "Install At/Ship To State",
         "Install At/Ship To Country", "LOB or Family", "Ship Date",
-        "Service Contract Expiration", "Service Contract Description",
+        "New Contract End Date", "Service Contract Description",
         "Services SKU", "New Contract Start Date", "New Contract End Date",
         "Quantity", "Price After Discount", "EOSS Date", "Product Type"
     ]
@@ -429,7 +429,7 @@ def generate_dell_extended_services_quote(
         "Service Contract Description",
         "Asset",
         "New Contract Start Date",
-        "Service Contract Expiration",
+        "New Contract End Date",
         "Qty",
     ]
     config_header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")

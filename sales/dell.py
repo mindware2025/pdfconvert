@@ -128,11 +128,6 @@ def _strip_trailing_asterisk(value: str) -> str:
 
 def build_dell_output_filename(input_excel_bytes: bytes, currency_code: str = "USD") -> str:
     """Build the download filename for the generated Dell workbook."""
-    currency_code = (currency_code or "USD").upper()
-    if currency_code in ("EUR", "USD", "QAR", "AED", "SAR"):
-        return f"Dell_Quotation_{currency_code}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
-    return f"Dell_Quotation_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
-
     quote_ref_text = ""
     quote_meta: Dict[str, str] = {}
 
