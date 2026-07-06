@@ -8,14 +8,14 @@ to each unit price (price = cost / (1 - margin/100)), matching the agreed
 
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from typing import Dict, List, Optional, Tuple
 
 import pdfplumber
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as XLImage
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.styles import Alignment, Border, Font, Side
 from openpyxl.utils import get_column_letter
 
 MINDWARE_LOGO_CANDIDATES = ["mindware_quote_logo.png"]
@@ -23,8 +23,6 @@ LENOVO_LOGO_CANDIDATES = ["lenovo_quote_logo.png", "lenovologo.png"]
 
 NAVY = "0E2841"        # titles / total-price column text
 LABEL_TEAL = "0A3041"  # Partner / Customer / Date labels and values
-DATA_FILL = "F5F7DB"   # light yellow-green item rows
-HEADER_FILL = "E8E8E8" # table header fill
 TOTAL_FONT = "171717"  # grand total figure
 
 UNIT_PRICE_FMT = '_(* #,##0.00_);_(* \\(#,##0.00\\);_(* "-"??_);_(@_)'
@@ -228,6 +226,8 @@ def generate_lenovo_quote(
     wb = Workbook()
     ws = wb.active
     ws.title = "Quote"
+    # White page look: no gridlines, only the table carries borders.
+    ws.sheet_view.showGridLines = False
 
     for col, width in zip("ABCDEF", (7.9, 19.9, 92.1, 15.7, 14.4, 21.7)):
         ws.column_dimensions[col].width = width
@@ -270,7 +270,10 @@ def generate_lenovo_quote(
     ws["E10"] = "Date"
     ws["E10"].font = value_font
     ws["E10"].alignment = left_wrap
-    ws["F10"] = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    # Quote date in Gulf Standard Time: the deployed server runs on UTC, which
+    # is a day behind the local date in the evening hours.
+    gst_now = datetime.now(timezone.utc) + timedelta(hours=4)
+    ws["F10"] = gst_now.replace(tzinfo=None, hour=0, minute=0, second=0, microsecond=0)
     ws["F10"].font = Font(name="Aptos Narrow", size=11, color=LABEL_TEAL)
     ws["F10"].number_format = DATE_FMT
     ws["F10"].alignment = Alignment(horizontal="center")
@@ -279,13 +282,11 @@ def generate_lenovo_quote(
     header_row = 12
     headers = ["Item", "Product", "Product Description", "Unit Price", "QTY", "Total Price"]
     header_font = Font(name="Aptos Narrow", size=14, bold=True, color="000000")
-    header_fill = PatternFill(start_color=HEADER_FILL, end_color=HEADER_FILL, fill_type="solid")
     for col_idx, title in enumerate(headers, start=1):
         col = get_column_letter(col_idx)
         ws.merge_cells(f"{col}{header_row}:{col}{header_row + 1}")
         for r in (header_row, header_row + 1):
             cell = ws[f"{col}{r}"]
-            cell.fill = header_fill
             cell.font = header_font
             cell.alignment = center_wrap
             cell.border = border_thin
@@ -314,7 +315,6 @@ def generate_lenovo_quote(
         ws[f"F{row}"].number_format = UNIT_PRICE_FMT
         for col in "ABCDEF":
             cell = ws[f"{col}{row}"]
-            cell.fill = PatternFill(start_color=DATA_FILL, end_color=DATA_FILL, fill_type="solid")
             cell.border = border_thin
             cell.alignment = center_wrap if col in ("B", "C") else center
             cell.font = total_col_font if col == "F" else data_font
