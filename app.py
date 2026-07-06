@@ -23,6 +23,7 @@ from dell import (
 )
 from dell_orion import build_dell_orion_output_filename, generate_orion_quote
 from dell_southcomp import render_southcomp_tool
+from lenovo import build_lenovo_output_filename, generate_lenovo_quote
 
 from dell_extended_services import build_dell_extended_services_output_filename, generate_dell_extended_services_quote
 from extractors.barcodeper50 import barcode_tooll
@@ -912,6 +913,7 @@ elif team == "Sales":
         "💻 Dell Quotation (Orion)",
         "💻 Dell Quotation",
         "💻 Dell Quotation Southcomp Polaris",
+        "💻 Lenovo Quotation",
     ]
 else:
     TOOL_OPTIONS = ["-- Select a tool --"]
@@ -2768,6 +2770,76 @@ elif tool == "💻 Dell Quotation":
 
 elif tool == "💻 Dell Quotation Southcomp Polaris":
     render_southcomp_tool()
+
+elif tool == "💻 Lenovo Quotation":
+    st.title("💼 Lenovo Quotation Tool")
+    st.write("Upload a Lenovo quotation PDF, set the margin, and download the Mindware quotation Excel file.")
+
+    lenovo_uploaded = st.file_uploader(
+        "Upload Lenovo quote PDF",
+        type=["pdf"],
+        key="lenovo_quote_uploader",
+    )
+
+    lenovo_margin_percent = st.number_input(
+        "Default Margin %",
+        min_value=0.0,
+        max_value=99.0,
+        value=5.0,
+        step=0.5,
+        key="lenovo_margin_percent",
+    )
+
+    lenovo_partner = st.text_input(
+        "Partner name",
+        key="lenovo_partner_name",
+        placeholder="e.g. CITG",
+    )
+
+    if "lenovo_output_bytes" not in st.session_state:
+        st.session_state["lenovo_output_bytes"] = None
+    if "lenovo_output_name" not in st.session_state:
+        st.session_state["lenovo_output_name"] = None
+
+    if lenovo_uploaded is not None:
+        lenovo_input_hash = hashlib.sha256(lenovo_uploaded.getvalue()).hexdigest()
+        if st.session_state.get("lenovo_input_hash") != lenovo_input_hash:
+            st.session_state["lenovo_input_hash"] = lenovo_input_hash
+            st.session_state["lenovo_output_bytes"] = None
+            st.session_state["lenovo_output_name"] = None
+
+    if st.button("🚀 Generate Quotation", key="generate_lenovo_quote_btn", use_container_width=True):
+        if lenovo_uploaded is None:
+            st.warning("Please upload a Lenovo quote PDF first.")
+        else:
+            try:
+                with st.spinner("⚙️ Generating quotation..."):
+                    input_bytes = lenovo_uploaded.getvalue()
+                    out_bytes = generate_lenovo_quote(
+                        input_bytes,
+                        margin_percent=lenovo_margin_percent,
+                        partner=lenovo_partner.strip(),
+                    )
+                    st.session_state["lenovo_output_bytes"] = out_bytes
+                    st.session_state["lenovo_output_name"] = build_lenovo_output_filename(input_bytes)
+                st.success("✅ Quotation generated successfully. Download button is ready below.")
+            except Exception as e:
+                st.session_state["lenovo_output_bytes"] = None
+                st.session_state["lenovo_output_name"] = None
+                st.error(str(e))
+
+    if st.session_state.get("lenovo_output_bytes"):
+        st.download_button(
+            label="⬇️ Download quotation",
+            data=st.session_state["lenovo_output_bytes"],
+            file_name=st.session_state.get("lenovo_output_name") or "Lenovo_Quotation.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="download_lenovo_quote",
+            use_container_width=True,
+        )
+
+    if lenovo_uploaded is None and not st.session_state.get("lenovo_output_bytes"):
+        st.info("Upload a Lenovo quote PDF, then click Generate Quotation.")
 
 st.markdown("""
 <footer style='text-align:center; margin-top:3rem; color:#1a73e8; font-size:20px; font-weight:bold; font-family: Google Sans, sans-serif;'>
