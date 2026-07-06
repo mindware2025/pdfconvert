@@ -89,7 +89,13 @@ def parse_lenovo_quote_pdf(pdf_bytes: bytes) -> dict:
     description, qty, unit_price).
     """
     items: List[Tuple[int, str, str, int, float]] = []
-    meta = {"customer": "", "bid_number": "", "currency": "USD", "price_end_date": None}
+    meta = {
+        "customer": "",
+        "bid_number": "",
+        "currency": "USD",
+        "price_end_date": None,
+        "grand_total": None,
+    }
 
     with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
         first_text = pdf.pages[0].extract_text() or ""
@@ -110,6 +116,7 @@ def parse_lenovo_quote_pdf(pdf_bytes: bytes) -> dict:
                     continue
 
         in_table = False
+        done = False
         desc_x0: Optional[float] = None
         desc_x1: Optional[float] = None
         page_offset = 0.0
@@ -125,11 +132,17 @@ def parse_lenovo_quote_pdf(pdf_bytes: bytes) -> dict:
                     if "PRODUCT AND SERVICE DETAILS" in text:
                         in_table = True
                     continue
-                grand = re.match(r"^Grand Total\s+([A-Z]{3})\b", text)
+                if "CONFIGURATION DETAILS" in text:
+                    done = True
+                    break
+                # The Grand Total line repeats at the bottom of every pricing
+                # page, so it does not end the table — CONFIGURATION DETAILS does.
+                grand = re.match(r"^Grand Total\s+([A-Z]{3})\b\s*([\d,]+\.\d{2})?", text)
                 if grand:
                     meta["currency"] = grand.group(1)
-                    in_table = False
-                    break
+                    if grand.group(2):
+                        meta["grand_total"] = _parse_number(grand.group(2))
+                    continue
                 if text.startswith("Line Item"):
                     # Column header: capture the Description column bounds.
                     for idx, w in enumerate(line_words):
@@ -173,16 +186,17 @@ def parse_lenovo_quote_pdf(pdf_bytes: bytes) -> dict:
                 )
 
             page_offset += page.height
-            if not in_table and items:
+            if done:
                 break
 
     meta["items"] = items
     return meta
 
 
-def build_lenovo_output_filename(pdf_bytes: bytes) -> str:
+def build_lenovo_output_filename(pdf_bytes: bytes, meta: Optional[dict] = None) -> str:
     try:
-        meta = parse_lenovo_quote_pdf(pdf_bytes)
+        if meta is None:
+            meta = parse_lenovo_quote_pdf(pdf_bytes)
         bid = meta.get("bid_number") or ""
     except Exception:
         bid = ""
@@ -213,9 +227,11 @@ def generate_lenovo_quote(
     pdf_bytes: bytes,
     margin_percent: float = 5.0,
     partner: str = "",
+    meta: Optional[dict] = None,
 ) -> bytes:
     """Generate the Mindware Lenovo quotation workbook as xlsx bytes."""
-    meta = parse_lenovo_quote_pdf(pdf_bytes)
+    if meta is None:
+        meta = parse_lenovo_quote_pdf(pdf_bytes)
     items = meta["items"]
     if not items:
         raise ValueError(

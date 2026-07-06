@@ -23,7 +23,7 @@ from dell import (
 )
 from dell_orion import build_dell_orion_output_filename, generate_orion_quote
 from dell_southcomp import render_southcomp_tool
-from lenovo import build_lenovo_output_filename, generate_lenovo_quote
+from lenovo import build_lenovo_output_filename, generate_lenovo_quote, parse_lenovo_quote_pdf
 
 from dell_extended_services import build_dell_extended_services_output_filename, generate_dell_extended_services_quote
 from extractors.barcodeper50 import barcode_tooll
@@ -2815,14 +2815,31 @@ elif tool == "💻 Lenovo Quotation":
             try:
                 with st.spinner("⚙️ Generating quotation..."):
                     input_bytes = lenovo_uploaded.getvalue()
+                    lenovo_meta = parse_lenovo_quote_pdf(input_bytes)
                     out_bytes = generate_lenovo_quote(
                         input_bytes,
                         margin_percent=lenovo_margin_percent,
                         partner=lenovo_partner.strip(),
+                        meta=lenovo_meta,
                     )
                     st.session_state["lenovo_output_bytes"] = out_bytes
-                    st.session_state["lenovo_output_name"] = build_lenovo_output_filename(input_bytes)
-                st.success("✅ Quotation generated successfully. Download button is ready below.")
+                    st.session_state["lenovo_output_name"] = build_lenovo_output_filename(input_bytes, meta=lenovo_meta)
+                items_total = sum(qty * unit for _, _, _, qty, unit in lenovo_meta["items"])
+                pdf_grand_total = lenovo_meta.get("grand_total")
+                st.success(f"✅ Quotation generated successfully — {len(lenovo_meta['items'])} items extracted.")
+                if pdf_grand_total is not None and abs(items_total - pdf_grand_total) > 0.01:
+                    st.warning(
+                        f"⚠️ Extraction check (before margin): the items read from the PDF add up to "
+                        f"{items_total:,.2f} {lenovo_meta['currency']}, but the PDF Grand Total is "
+                        f"{pdf_grand_total:,.2f} {lenovo_meta['currency']}. "
+                        "Some items may be missing — please review the output against the PDF."
+                    )
+                elif pdf_grand_total is not None:
+                    st.caption(
+                        f"Extraction check (before margin): all items captured — cost total equals the "
+                        f"PDF Grand Total ({pdf_grand_total:,.2f} {lenovo_meta['currency']}) ✓. "
+                        "The margin is applied on top of this in the Excel file."
+                    )
             except Exception as e:
                 st.session_state["lenovo_output_bytes"] = None
                 st.session_state["lenovo_output_name"] = None
