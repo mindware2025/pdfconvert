@@ -81,12 +81,126 @@ def _cluster_words_into_lines(words: List[dict], tolerance: float = 2.0) -> List
     return lines
 
 
+def _extract_config_grid(page, min_top: float) -> Tuple[List[Tuple[float, float]], List[float]]:
+    """Return the config table grid on a page: row (top, bottom) bands and
+    column left-edge x positions, both taken from the drawn cell rects."""
+    stripes: List[Tuple[float, float]] = []
+    edge_clusters: List[List[float]] = []  # [x0, count]
+    for rect in page.rects:
+        height = rect["bottom"] - rect["top"]
+        if rect["top"] < min_top or not 3 < height < 60 or rect["x1"] - rect["x0"] < 20:
+            continue
+        for band in stripes:
+            if abs(band[0] - rect["top"]) <= 1.5:
+                break
+        else:
+            stripes.append((rect["top"], rect["bottom"]))
+        for cluster in edge_clusters:
+            if abs(cluster[0] - rect["x0"]) <= 2:
+                cluster[1] += 1
+                break
+        else:
+            edge_clusters.append([rect["x0"], 1])
+    stripes.sort()
+    # The config rows dominate the page, so their 4 cell edges are the most
+    # frequent x positions — this keeps stray tables (e.g. the Distributor
+    # block) from shifting the column boundaries.
+    edge_clusters.sort(key=lambda c: -c[1])
+    col_edges = sorted(c[0] for c in edge_clusters[:4])
+
+    # Rows without their own cell rects (unshaded zebra rows) live in the gaps
+    # between consecutive drawn rows.
+    bands = []
+    for i, (top, bottom) in enumerate(stripes):
+        bands.append((top, bottom))
+        if i + 1 < len(stripes):
+            gap_top, gap_bottom = bottom, stripes[i + 1][0]
+            if 4 <= gap_bottom - gap_top <= 60:
+                bands.append((gap_top, gap_bottom))
+    return bands, col_edges
+
+
+def _parse_config_section(pdf, start_page_idx: int, start_top: float) -> List[dict]:
+    """Parse CONFIGURATION DETAILS into per-item component lists."""
+    config_items: List[dict] = []
+    current: Optional[dict] = None
+
+    for page_idx in range(start_page_idx, len(pdf.pages)):
+        page = pdf.pages[page_idx]
+        words = page.extract_words()
+        min_top = start_top if page_idx == start_page_idx else 0.0
+
+        # A page whose text lacks the repeated table header is past the
+        # configuration section.
+        header_texts = {w["text"] for w in words}
+        if not {"Components", "Description", "Qty"} <= header_texts:
+            if config_items:
+                break
+            continue
+
+        bands, col_edges = _extract_config_grid(page, min_top)
+        if len(col_edges) < 4:
+            continue
+        comp_x0, desc_x0, qty_x0 = col_edges[1], col_edges[2], col_edges[3]
+
+        # The partner blocks ("Authorized Partners" / "Distributor", each with
+        # "Partner Number | Partner Address" headers) follow the configuration
+        # section — ignore everything from the first such header downwards.
+        cut_top: Optional[float] = None
+        partner_tops = sorted(w["top"] for w in words if w["text"] == "Partner")
+        for a, b in zip(partner_tops, partner_tops[1:]):
+            if abs(a - b) <= 3:
+                cut_top = a
+                break
+
+        for band_top, band_bottom in bands:
+            if cut_top is not None and band_bottom > cut_top - 2:
+                break
+            cols: Dict[str, List[dict]] = {"item": [], "comp": [], "desc": [], "qty": []}
+            for w in words:
+                center = (w["top"] + w["bottom"]) / 2
+                if not band_top <= center <= band_bottom:
+                    continue
+                if w["x0"] < comp_x0 - 2:
+                    cols["item"].append(w)
+                elif w["x0"] < desc_x0 - 2:
+                    cols["comp"].append(w)
+                elif w["x0"] < qty_x0 - 2:
+                    cols["desc"].append(w)
+                else:
+                    cols["qty"].append(w)
+            joined = {
+                key: " ".join(w["text"] for w in sorted(ws_, key=lambda w: (round(w["top"]), w["x0"])))
+                for key, ws_ in cols.items()
+            }
+            row_text = " ".join(joined.values())
+            if "Distributor" in row_text and "Partner" in row_text:
+                # The Distributor / Partner block follows the configuration
+                # section — everything after it is not configuration data.
+                return config_items
+            if joined["comp"] == "Components" and joined["desc"] == "Description":
+                continue
+            if joined["item"].replace("Line", "").strip().isdigit() and joined["comp"]:
+                current = {
+                    "line_no": int(joined["item"].replace("Line", "").strip()),
+                    "part_number": joined["comp"],
+                    "title": joined["desc"],
+                    "qty": int(_parse_number(joined["qty"])) if joined["qty"] else None,
+                    "components": [],
+                }
+                config_items.append(current)
+            elif current is not None and (joined["comp"] or joined["desc"]):
+                current["components"].append((joined["comp"], joined["desc"], joined["qty"]))
+
+    return config_items
+
+
 def parse_lenovo_quote_pdf(pdf_bytes: bytes) -> dict:
     """Extract metadata and pricing items from a Lenovo quotation PDF.
 
     Returns a dict with: customer, bid_number, currency, price_end_date
-    (datetime or None) and items — a list of (line_no, part_number,
-    description, qty, unit_price).
+    (datetime or None), items — a list of (line_no, part_number, description,
+    qty, unit_price) — and config, the CONFIGURATION DETAILS per product.
     """
     items: List[Tuple[int, str, str, int, float]] = []
     meta = {
@@ -95,7 +209,9 @@ def parse_lenovo_quote_pdf(pdf_bytes: bytes) -> dict:
         "currency": "USD",
         "price_end_date": None,
         "grand_total": None,
+        "config": [],
     }
+    config_start: Optional[Tuple[int, float]] = None
 
     with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
         first_text = pdf.pages[0].extract_text() or ""
@@ -121,7 +237,7 @@ def parse_lenovo_quote_pdf(pdf_bytes: bytes) -> dict:
         desc_x1: Optional[float] = None
         page_offset = 0.0
 
-        for page in pdf.pages:
+        for page_idx, page in enumerate(pdf.pages):
             lines = _cluster_words_into_lines(page.extract_words())
             main_rows = []   # (global_top, match)
             wrap_lines = []  # (global_top, text)
@@ -133,6 +249,7 @@ def parse_lenovo_quote_pdf(pdf_bytes: bytes) -> dict:
                         in_table = True
                     continue
                 if "CONFIGURATION DETAILS" in text:
+                    config_start = (page_idx, top)
                     done = True
                     break
                 # The Grand Total line repeats at the bottom of every pricing
@@ -188,6 +305,9 @@ def parse_lenovo_quote_pdf(pdf_bytes: bytes) -> dict:
             page_offset += page.height
             if done:
                 break
+
+        if config_start is not None:
+            meta["config"] = _parse_config_section(pdf, config_start[0], config_start[1])
 
     meta["items"] = items
     return meta
@@ -376,6 +496,63 @@ def generate_lenovo_quote(
         cell.alignment = Alignment(horizontal="left", vertical="center")
         ws.row_dimensions[r].height = 15.6
 
+    if meta.get("config"):
+        _add_configuration_sheet(wb, meta["config"], border_thin)
+
     out = BytesIO()
     wb.save(out)
     return out.getvalue()
+
+
+def _add_configuration_sheet(wb, config_items: List[dict], border_thin: Border) -> None:
+    """Add a 'Configuration' sheet: one block per configured product."""
+    ws = wb.create_sheet("Configuration")
+    ws.sheet_view.showGridLines = False
+    for col, width in zip("ABC", (35, 80, 10)):
+        ws.column_dimensions[col].width = width
+
+    left_wrap = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    center = Alignment(horizontal="center", vertical="center")
+    item_font = Font(name="Aptos Narrow", size=12, bold=True, color=NAVY)
+    col_header_font = Font(name="Calibri", size=11, bold=True)
+    body_font = Font(name="Calibri", size=11)
+
+    ws["A1"] = "Configuration Details"
+    ws["A1"].font = Font(name="Aptos Display", size=16, color=NAVY)
+
+    row = 3
+    for cfg in config_items:
+        qty_text = f"   |   Qty: {cfg['qty']}" if cfg.get("qty") else ""
+        ws.merge_cells(f"A{row}:C{row}")
+        title_cell = ws[f"A{row}"]
+        title_cell.value = f"Item {cfg['line_no']}   |   {cfg['part_number']}   |   {cfg['title']}{qty_text}"
+        title_cell.font = item_font
+        title_cell.alignment = Alignment(horizontal="left", vertical="center")
+        for col in "ABC":
+            ws[f"{col}{row}"].border = border_thin
+        ws.row_dimensions[row].height = 20
+        row += 1
+
+        for col, header in zip("ABC", ("Component", "Description", "Qty")):
+            cell = ws[f"{col}{row}"]
+            cell.value = header
+            cell.font = col_header_font
+            cell.alignment = center
+            cell.border = border_thin
+        row += 1
+
+        for comp, desc, qty in cfg["components"]:
+            ws[f"A{row}"] = comp
+            ws[f"A{row}"].font = body_font
+            ws[f"A{row}"].alignment = left_wrap
+            ws[f"B{row}"] = desc
+            ws[f"B{row}"].font = body_font
+            ws[f"B{row}"].alignment = left_wrap
+            ws[f"C{row}"] = qty
+            ws[f"C{row}"].font = body_font
+            ws[f"C{row}"].alignment = center
+            for col in "ABC":
+                ws[f"{col}{row}"].border = border_thin
+            row += 1
+
+        row += 1  # blank row between products
