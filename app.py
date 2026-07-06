@@ -42,6 +42,11 @@ from extractors.lenovo_cn import (
     process_lenovo_credit_pdfs,
     process_lenovo_ksa_pdfs,
 )
+from extractors.ibm_cn_ksa import (
+    build_ibm_ksa_output_filename,
+    prepare_ibm_ksa_excel_bytes,
+    process_ibm_ksa_pdfs,
+)
 from quotetemplate import detect_dell_template
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
@@ -880,8 +885,9 @@ if team == "Finance":
         "🟨 AWS Invoice Tool",
         "🟧 Oracle Invoice Tool",
         "🟥 Lenovo Credit Note Tool",
+        "🟪 IBM Credit Note Automation (KSA)",
         "🚚 Freight Forwarder JV Tool"
-        
+
     ]
 elif team == "Operations":
     TOOL_OPTIONS = [
@@ -2424,7 +2430,47 @@ elif tool == "🟥 Lenovo Credit Note Tool":
 
     else:
         st.info("Upload Lenovo credit note PDFs to begin.")
-        
+
+
+
+elif tool == "🟪 IBM Credit Note Automation (KSA)":
+
+    st.title("IBM Credit Note Automation (KSA)")
+    st.write("Upload IBM credit note PDF(s) and download the CNTS-UPLOAD Excel.")
+
+    uploaded_files = st.file_uploader(
+        "Choose IBM credit note PDF(s)",
+        type=["pdf"],
+        accept_multiple_files=True,
+        key="ibm_cn_ksa_upload",
+    )
+
+    if uploaded_files:
+        file_blobs = [(f.name, f.read()) for f in uploaded_files]
+
+        ibm_header_df, ibm_item_df = process_ibm_ksa_pdfs(file_blobs)
+
+        if not ibm_header_df.empty and not ibm_item_df.empty:
+            excel_bytes = prepare_ibm_ksa_excel_bytes(ibm_header_df, ibm_item_df)
+
+            st.download_button(
+                label="Download CNTS-UPLOAD Excel",
+                data=excel_bytes,
+                file_name=build_ibm_ksa_output_filename(),
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="ibm_cn_ksa_download_btn",
+            )
+
+            with st.expander("Preview CNTS_HEADER"):
+                st.dataframe(ibm_header_df, use_container_width=True)
+            with st.expander("Preview CNTS_ITEM"):
+                st.dataframe(ibm_item_df, use_container_width=True)
+        else:
+            st.warning("No rows produced. Check the IBM credit note PDF format.")
+
+    else:
+        st.info("Upload IBM credit note PDFs to begin.")
+
 
 
 elif tool == "💻 Dell Quotation":
