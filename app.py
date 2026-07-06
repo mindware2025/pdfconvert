@@ -19,7 +19,7 @@ from openpyxl.styles import PatternFill
 from openpyxl.utils import get_column_letter
 import gspread
 from google.oauth2.service_account import Credentials
-from ibm_cn_ksa import build_ibm_ksa_output_filename, prepare_ibm_ksa_excel_bytes, process_ibm_ksa_pdfs
+from extractors.ibm_cn_ksa import build_ibm_ksa_output_filename, prepare_ibm_ksa_excel_bytes, process_ibm_ksa_pdfs
 from sales.dell_southcomp import render_southcomp_tool
 from extractors.barcodeper50 import barcode_tooll
 from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_multiple_aws_pdfs
