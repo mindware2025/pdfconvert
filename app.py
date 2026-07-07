@@ -2408,8 +2408,12 @@ elif tool == "💻 Dell Quotation":
                         out_bytes = generate_dell_extended_services_quote(
                             input_excel_bytes=input_bytes,
                             margin_percent=margin_percent,
+                            currency_code=currency_code,
                         )
-                        output_name = build_dell_extended_services_output_filename(input_bytes)
+                        output_name = build_dell_extended_services_output_filename(
+                            input_bytes,
+                            currency_code=currency_code,
+                        )
                     else:
                         template_label = detect_dell_standard_variant(input_bytes)
                         out_bytes = generate_dell_quote(

@@ -2342,7 +2342,7 @@ def generate_dell_quote(
 
     summary_rows = [
         (summary_title_row + 1, "Quote Ref", quote_ref_text),
-        (summary_title_row + 2, "Date", date_text),
+        (summary_title_row + 2, "Date", datetime.now().strftime("%d/%m/%Y")),
     ]
     if has_currency_expiry:
         summary_rows.append((summary_title_row + 3, "Expires By", expiry_text))

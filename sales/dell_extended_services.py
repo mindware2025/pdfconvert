@@ -285,7 +285,7 @@ def generate_dell_extended_services_quote(
     )
     summary_rows = [
         (9, "Quote Ref", meta["quote_no"]),
-        (10, "Date", meta["date"]),
+        (10, "Date", datetime.now().strftime("%d/%m/%Y")),
     ]
     for row_idx, label, value in summary_rows:
         ws[f"A{row_idx}"] = label
