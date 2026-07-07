@@ -1272,7 +1272,7 @@ if team == "Finance":
         "🟥 Lenovo CNTS Tool - KSA",
         "🟪 Lenovo Credit Note Tool - UAE",
         "🚚 Freight Forwarder JV Tool",
-        "🟪 IBM Credit Note Automation"
+        "🟪 IBM Credit Note Automation (KSA)"
         
     ]
 elif team == "Operations":
