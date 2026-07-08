@@ -41,7 +41,7 @@ from sales.dell_extended_services import generate_dell_extended_services_quote
 from sales.dell import build_dell_output_filename, detect_dell_standard_variant, generate_dell_quote
 from sales.dell_extended_services import build_dell_extended_services_output_filename
 from sales.dell_orion import build_dell_orion_output_filename, generate_orion_quote
-from sales.mibb import check_mibb_hardware_quote_match, correct_mibb_descriptions, create_mibb_excel, create_mibb_hardware_excel, extract_mibb_hardware_table_from_excel, extract_mibb_header_from_pdf, extract_mibb_table_from_pdf, extract_mibb_terms_from_pdf
+from sales.mibb import check_mibb_hardware_quote_match, correct_mibb_descriptions, create_mibb_excel, create_mibb_hardware_excel, create_mibb_tls_excel, extract_mibb_hardware_table_from_excel, extract_mibb_header_from_pdf, extract_mibb_table_from_pdf, extract_mibb_terms_from_pdf, extract_mibb_tls_from_excel
 from sales.quotetemplate import detect_dell_template
 from utils.helpers import format_amount, format_invoice_date, format_month_year
 from dotenv import load_dotenv
@@ -1760,8 +1760,11 @@ elif tool == "💻 Dell Invoice Extractor":
 
 elif tool == "MIBB Quotations":
     st.header("MIBB Quotations")
-    quote_type = st.radio("Quotation type", ["Software", "Hardware"], horizontal=True)
-    st.info("Upload a MIBB quotation PDF. The tool will extract header information and table data automatically.")
+    quote_type = st.radio("Quotation type", ["Software", "Hardware", "TLS"], horizontal=True)
+    if quote_type == "TLS":
+        st.info("Upload the TLS quote Excel. Header information and line items are extracted automatically.")
+    else:
+        st.info("Upload a MIBB quotation PDF. The tool will extract header information and table data automatically.")
 
     logo_path = "image.png"
     margin_pct = st.number_input(
@@ -1773,12 +1776,13 @@ elif tool == "MIBB Quotations":
         help="Used in the generated Excel formulas.",
     )
 
-    st.subheader("Upload MIBB Quotation PDF")
-    uploaded_pdf = st.file_uploader(
-        "Upload MIBB Quotation PDF (.pdf)",
-        type=["pdf"],
-        help="Upload a MIBB quotation PDF. The tool will extract header information and table data automatically.",
-    )
+    if quote_type != "TLS":
+        st.subheader("Upload MIBB Quotation PDF")
+        uploaded_pdf = st.file_uploader(
+            "Upload MIBB Quotation PDF (.pdf)",
+            type=["pdf"],
+            help="Upload a MIBB quotation PDF. The tool will extract header information and table data automatically.",
+        )
 
     if quote_type == "Software":
         st.subheader("Upload Pricelist / Master File (Descriptions)")
@@ -1836,7 +1840,7 @@ elif tool == "MIBB Quotations":
                 )
         else:
             st.info("Please upload a MIBB quotation PDF to get started.")
-    else:
+    elif quote_type == "Hardware":
         st.subheader("Upload Hardware Quotation Excel")
         uploaded_hardware_excel = st.file_uploader(
             "Upload Hardware Quote Excel (.xlsx, .xlsm, .xls)",
@@ -1886,6 +1890,45 @@ elif tool == "MIBB Quotations":
                     )
         else:
             st.info("Please upload both the MIBB PDF and hardware Excel to get started.")
+    else:
+        st.subheader("Upload TLS Quotation Excel")
+        uploaded_tls_excel = st.file_uploader(
+            "Upload TLS Quote Excel (.xlsx, .xls)",
+            type=["xlsx", "xls"],
+            help="Upload the TLS quote Excel. All columns are carried into the output.",
+        )
+
+        if uploaded_tls_excel:
+            excel_bytes = io.BytesIO(uploaded_tls_excel.getbuffer())
+            try:
+                header_info, tls_columns, table_data = extract_mibb_tls_from_excel(excel_bytes)
+            except ValueError as e:
+                st.error(str(e))
+            else:
+                if not table_data:
+                    st.error("No line items were found in the uploaded Excel.")
+                else:
+                    if not any("price" in str(c).lower() for c in tls_columns):
+                        st.warning("No Price column detected — margin columns were omitted.")
+                    output = io.BytesIO()
+                    create_mibb_tls_excel(
+                        data=table_data,
+                        columns=tls_columns,
+                        header_info=header_info,
+                        logo_path=logo_path,
+                        output=output,
+                        margin_pct=margin_pct,
+                    )
+                    st.success("TLS quotation Excel generated successfully!")
+                    st.download_button(
+                        label="Download MIBB TLS Quotation Excel",
+                        data=output.getvalue(),
+                        file_name="MIBB_TLS_Quotation.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        on_click=lambda: update_usage(f"MIBB Quotations-{quote_type}", team, excel_count=1),
+                    )
+        else:
+            st.info("Please upload the TLS quote Excel to get started.")
 
 elif tool == "🟨 AWS Invoice Tool":
         st.title("AWS Invoice Tool")
@@ -2544,6 +2587,11 @@ elif tool == "🟪 IBM Credit Note Automation (KSA)":
                 file_name=build_ibm_ksa_output_filename(),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="ibm_cn_ksa_download_btn",
+                on_click=lambda: update_usage(
+                    "IBM Credit Note Automation (KSA)",
+                    team,
+                    pdf_count=count_uploaded_files(uploaded_files, (".pdf",)),
+                ),
             )
 
             with st.expander("Preview CNTS_HEADER"):

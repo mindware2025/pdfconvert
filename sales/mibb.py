@@ -1734,3 +1734,353 @@ def create_mibb_excel(
     wb.calculation.fullCalcOnLoad = True
     wb.save(output)
     output.seek(0)
+
+
+def _clean_tls_cell(value, kind="text"):
+    """Normalize a raw TLS Excel cell based on the column kind (qty/price/text)."""
+    if value is None:
+        return 0.0 if kind == "price" else ""
+    if isinstance(value, datetime):
+        return value.strftime("%d/%m/%Y")
+    if kind == "qty":
+        parsed = parse_decimal_number(value)
+        if parsed is None:
+            return str(value).strip()
+        return int(parsed) if float(parsed).is_integer() else parsed
+    if kind == "price":
+        return parse_decimal_number(value) or 0.0
+    return str(value).strip()
+
+
+def _find_tls_price_column(columns):
+    """Return the index of the last column whose header contains PRICE, or None."""
+    price_idx = None
+    for idx, name in enumerate(columns):
+        if "PRICE" in _normalize_header_name(name):
+            price_idx = idx
+    return price_idx
+
+
+def extract_mibb_tls_from_excel(file_like):
+    """
+    Extract header info and the dynamic line-items table from a TLS quote Excel.
+    Columns are not fixed: whatever header cells exist under "Quote Line Items"
+    are captured in order, and every data cell under them is returned.
+    Returns (header_info, columns, data_rows).
+    """
+    rows = _read_first_sheet_rows(file_like)
+    if not rows:
+        return {}, [], []
+
+    marker_idx = None
+    for idx, row in enumerate(rows):
+        if any(_normalize_header_name(cell) == "QUOTE LINE ITEMS" for cell in row):
+            marker_idx = idx
+            break
+
+    header_idx = None
+    if marker_idx is not None:
+        for idx in range(marker_idx + 1, len(rows)):
+            non_empty = [c for c in rows[idx] if c is not None and str(c).strip()]
+            if len(non_empty) >= 2:
+                header_idx = idx
+                break
+    if header_idx is None:
+        for idx, row in enumerate(rows):
+            normalized = [_normalize_header_name(c) for c in row if c is not None and str(c).strip()]
+            if any("QTY" in n for n in normalized) and any("PRICE" in n for n in normalized):
+                header_idx = idx
+                break
+    if header_idx is None:
+        raise ValueError(
+            "Could not locate the TLS line-items header row. "
+            "Make sure the quote sheet is the first sheet in the workbook."
+        )
+
+    columns = []
+    col_indexes = []
+    for col_idx, cell in enumerate(rows[header_idx]):
+        if cell is not None and str(cell).strip():
+            columns.append(str(cell).strip())
+            col_indexes.append(col_idx)
+
+    # _find_label_value treats None cells as the string "None"; blank them out first.
+    label_rows = [["" if c is None else c for c in row] for row in rows[:header_idx]]
+    header_info = {
+        "Date": _find_label_value(label_rows, {"Date:"}),
+        "Prepared For": _find_label_value(label_rows, {"Prepared For:", "Prepared For"}),
+        "Quote Id": _find_label_value(label_rows, {"Quote Id:", "Quote Id", "Quote number:", "Quote number"}),
+        "End User": _find_label_value(label_rows, {"End User:", "End User"}),
+        "Currency": _find_label_value(label_rows, {"Currency:", "Currency"}),
+    }
+
+    price_idx = _find_tls_price_column(columns)
+    kinds = []
+    for idx, name in enumerate(columns):
+        normalized = _normalize_header_name(name)
+        if idx == price_idx:
+            kinds.append("price")
+        elif "QTY" in normalized or "QUANTITY" in normalized:
+            kinds.append("qty")
+        else:
+            kinds.append("text")
+
+    data_rows = []
+    empty_streak = 0
+    for row in rows[header_idx + 1:]:
+        row_non_empty = [c for c in row if c is not None and str(c).strip()]
+        if not row_non_empty:
+            empty_streak += 1
+            if empty_streak >= 3:
+                break
+            continue
+        empty_streak = 0
+
+        if _normalize_header_name(row_non_empty[0]).startswith("TOTAL"):
+            break
+
+        values = [row[c] if c < len(row) else None for c in col_indexes]
+        if not any(v is not None and str(v).strip() for v in values):
+            continue
+        data_rows.append([_clean_tls_cell(v, kinds[i]) for i, v in enumerate(values)])
+
+    return header_info, columns, data_rows
+
+
+def create_mibb_tls_excel(
+    data: list,
+    columns: list,
+    header_info: dict,
+    logo_path: str,
+    output: BytesIO,
+    margin_pct: float = 1.0,
+):
+    """
+    Create MIBB TLS quotation Excel file with a dynamic column layout.
+    Final table: Sl | <all columns from the uploaded Excel, with the Price
+    column renamed to Mindware Cost USD> | BP Price USD | Margin
+    """
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Quotation"
+    ws.sheet_view.showGridLines = False
+
+    ws.merge_cells("B1:C2")
+    if logo_path and os.path.exists(logo_path):
+        img = Image(logo_path)
+        img.width = 1.87 * 96
+        img.height = 0.56 * 96
+        ws.add_image(img, "B1")
+        ws.row_dimensions[1].height = 25
+        ws.row_dimensions[2].height = 25
+
+    ws.merge_cells("D3:G3")
+    ws["D3"] = "Quotation"
+    ws["D3"].font = Font(size=20, color="1F497D")
+    ws["D3"].alignment = Alignment(horizontal="center", vertical="center")
+
+    price_idx = _find_tls_price_column(columns)
+    out_headers = ["Sl"]
+    for idx, name in enumerate(columns):
+        out_headers.append("Mindware Cost USD" if idx == price_idx else name)
+
+    cost_col = bp_col = margin_col = None
+    if price_idx is not None:
+        out_headers += ["BP Price USD", "Margin"]
+        cost_col = 3 + price_idx
+        bp_col = 3 + len(columns)
+        margin_col = bp_col + 1
+
+    last_col = 2 + len(out_headers) - 1
+    last_col_letter = get_column_letter(last_col)
+    merge_end_letter = last_col_letter if last_col >= 12 else "L"
+
+    ws.column_dimensions[get_column_letter(2)].width = 6
+    for col_idx, header in enumerate(out_headers[1:], start=3):
+        normalized = _normalize_header_name(header)
+        if "DESCRIPTION" in normalized:
+            width = 38
+        elif "PRICE" in normalized or "COST" in normalized:
+            width = 16
+        elif "DATE" in normalized:
+            width = 12
+        elif "QTY" in normalized or "QUANTITY" in normalized:
+            width = 8
+        elif "MARGIN" in normalized:
+            width = 10
+        else:
+            width = 13
+        ws.column_dimensions[get_column_letter(col_idx)].width = width
+
+    left_labels = ["Date:", "From:", "Email:", "Contact:", "", "Company:", "Attn:", "Email:"]
+    left_values = [
+        datetime.today().strftime('%d/%m/%Y'),
+        "Eliana Youssef",
+        "E.youssef@mindware.net",
+        "+961 123 456 758",
+        "",
+        "",
+        "empty",
+        "empty",
+    ]
+    for row, label, value in zip([5, 6, 7, 8, 9, 10, 11, 12], left_labels, left_values):
+        if label:
+            ws[f"C{row}"] = label
+            ws[f"C{row}"].font = Font(bold=True, color="1F497D")
+        if value:
+            ws[f"D{row}"] = value
+            ws[f"D{row}"].font = Font(color="1F497D")
+
+    right_labels = [
+        "Customer Name:",
+        "Quote Number:",
+        "Currency:",
+        "Payment Terms:",
+        "Quote Date:",
+    ]
+    right_values = [
+        header_info.get("End User", ""),
+        header_info.get("Quote Id", ""),
+        header_info.get("Currency", ""),
+        "As aligned with Mindware",
+        header_info.get("Date", ""),
+    ]
+    for row, label, value in zip([5, 6, 7, 8, 9], right_labels, right_values):
+        ws.merge_cells(f"H{row}:{merge_end_letter}{row}")
+        ws[f"H{row}"] = f"{label} {value}"
+        ws[f"H{row}"].font = Font(bold=True, color="1F497D")
+        ws[f"H{row}"].alignment = Alignment(horizontal="left", vertical="center")
+
+    header_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
+    for col, header in enumerate(out_headers, start=2):
+        ws.merge_cells(start_row=16, start_column=col, end_row=17, end_column=col)
+        cell = ws.cell(row=16, column=col, value=header)
+        cell.font = Font(bold=True, size=13, color="1F497D")
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.fill = header_fill
+
+    row_fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
+    start_row = 18
+    margin_decimal = max(0.0, min(float(margin_pct or 0), 99.0)) / 100
+    cost_letter = get_column_letter(cost_col) if cost_col else None
+    margin_letter = get_column_letter(margin_col) if margin_col else None
+
+    for idx, row in enumerate(data, start=1):
+        excel_row = start_row + idx - 1
+        ws.cell(row=excel_row, column=2, value=idx)
+        for col_offset, value in enumerate(row):
+            ws.cell(row=excel_row, column=3 + col_offset, value=value)
+        if price_idx is not None:
+            ws.cell(
+                row=excel_row,
+                column=bp_col,
+                value=f'=IFERROR({cost_letter}{excel_row}/(1-{margin_letter}{excel_row}),0)',
+            )
+            ws.cell(row=excel_row, column=margin_col, value=margin_decimal)
+
+        for col in range(2, last_col + 1):
+            cell = ws.cell(row=excel_row, column=col)
+            cell.font = Font(size=11, color="1F497D")
+            cell.fill = row_fill
+            if "DESCRIPTION" in _normalize_header_name(out_headers[col - 2]):
+                cell.alignment = Alignment(wrap_text=True, horizontal="left", vertical="center")
+            else:
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        if price_idx is not None:
+            ws.cell(row=excel_row, column=cost_col).number_format = '"USD"#,##0.00'
+            ws.cell(row=excel_row, column=bp_col).number_format = '"USD"#,##0.00'
+            ws.cell(row=excel_row, column=margin_col).number_format = "0.0%"
+
+    if data:
+        data_end_row = start_row + len(data) - 1
+        summary_row = data_end_row + 2
+        if price_idx is not None:
+            bp_letter = get_column_letter(bp_col)
+            ws.merge_cells(f"C{summary_row}:{get_column_letter(bp_col - 1)}{summary_row}")
+            ws[f"C{summary_row}"] = "Total Price USD"
+            ws[f"C{summary_row}"].font = Font(bold=True, color="1F497D")
+            ws[f"C{summary_row}"].alignment = Alignment(horizontal="right")
+            ws[f"{bp_letter}{summary_row}"] = f"=SUM({bp_letter}{start_row}:{bp_letter}{data_end_row})"
+            ws[f"{bp_letter}{summary_row}"].number_format = '"USD"#,##0.00'
+            ws[f"{bp_letter}{summary_row}"].font = Font(bold=True, color="1F497D")
+            ws[f"{bp_letter}{summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+    else:
+        summary_row = start_row + 1
+
+    terms = get_mibb_terms_section(header_info, [], margin_pct=margin_pct)
+    total_cost = 0.0
+    if price_idx is not None:
+        for row in data:
+            try:
+                total_cost += float(row[price_idx] or 0)
+            except (TypeError, ValueError):
+                continue
+    total_bp_text = total_cost / (1 - margin_decimal) if margin_decimal < 1 else total_cost
+    if len(terms) > 1:
+        terms[1] = (
+            "C30",
+            f"""• Payment Terms as aligned with Mindware
+• Quote Validity: as per the quote
+• Mindware requires full payment of this invoice (Total Price USD {total_bp_text:,.2f}) if WHT is applicable on offshore payment
+• Pricing valid for this transaction only.
+""",
+        )
+    terms_start_row = summary_row + 3
+
+    adjusted_terms = []
+    row_offset = terms_start_row - 29
+    for cell_addr, text, *style in terms:
+        try:
+            if len(cell_addr) >= 2 and cell_addr[1:].isdigit():
+                col_letter = cell_addr[0]
+                original_row = int(cell_addr[1:])
+                new_row = original_row + row_offset
+                adjusted_terms.append((f"{col_letter}{new_row}", text, *style))
+            else:
+                adjusted_terms.append((cell_addr, text, *style))
+        except Exception:
+            adjusted_terms.append((cell_addr, text, *style))
+
+    for cell_addr, text, *style in adjusted_terms:
+        try:
+            if len(cell_addr) >= 2 and cell_addr[1:].isdigit():
+                row_num = int(cell_addr[1:])
+                col_letter = cell_addr[0]
+                merge_rows = style[0].get("merge_rows") if style else None
+                end_row = row_num + (merge_rows - 1 if merge_rows else 0)
+                ws.merge_cells(f"{col_letter}{row_num}:{merge_end_letter}{end_row}")
+
+                is_bold_title = style and style[0].get("bold") is True
+                if is_bold_title:
+                    ws.row_dimensions[row_num].height = 32
+                else:
+                    line_count = estimate_line_count(str(text), max_chars_per_line=55)
+                    ws.row_dimensions[row_num].height = max(40, line_count * 22)
+
+                ws[cell_addr] = text
+                ws[cell_addr].alignment = Alignment(wrap_text=True, vertical="top")
+                if style and "bold" in style[0]:
+                    ws[cell_addr].font = Font(**style[0])
+        except Exception:
+            pass
+
+    last_row = ws.max_row
+    ws.print_area = f"A1:{last_col_letter}{last_row}"
+    ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.page_margins.left = 0.15
+    ws.page_margins.right = 0.15
+    ws.page_margins.top = 0.25
+    ws.page_margins.bottom = 0.25
+    ws.page_margins.header = 0.15
+    ws.page_margins.footer = 0.15
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.draft = False
+    ws.page_setup.blackAndWhite = False
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+
+    wb.calculation.fullCalcOnLoad = True
+    wb.save(output)
+    output.seek(0)
