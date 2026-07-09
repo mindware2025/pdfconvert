@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from typing import Dict, List, Optional, Tuple
 
-import pdfplumber
+import fitz  # PyMuPDF
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import Alignment, Border, Font, Side
@@ -60,6 +60,54 @@ _WRAP_DISTANCE_PT = 25.0
 
 def _parse_number(text: str) -> float:
     return float(str(text).replace(",", "").strip() or 0)
+
+
+class _Page:
+    """pdfplumber-shaped view over a PyMuPDF page.
+
+    The extraction logic below consumes pdfplumber-style word dicts
+    ("text"/"x0"/"x1"/"top"/"bottom") and rect dicts; PyMuPDF is only the
+    faster reading engine underneath, so it is adapted to the same shape.
+    """
+
+    def __init__(self, page):
+        self._page = page
+        self.height = page.rect.height
+        self._words: Optional[List[dict]] = None
+
+    def extract_words(self) -> List[dict]:
+        if self._words is None:
+            self._words = [
+                {"text": w[4], "x0": w[0], "top": w[1], "x1": w[2], "bottom": w[3]}
+                for w in self._page.get_text("words")
+            ]
+        return self._words
+
+    def extract_text(self) -> str:
+        lines = _cluster_words_into_lines(self.extract_words(), tolerance=3.0)
+        return "\n".join(text for _, text, _ in lines)
+
+    @property
+    def rects(self) -> List[dict]:
+        rects = []
+        for drawing in self._page.get_drawings():
+            for item in drawing["items"]:
+                if item[0] == "re":
+                    r = item[1]
+                    rects.append({"x0": r.x0, "top": r.y0, "x1": r.x1, "bottom": r.y1})
+        return rects
+
+
+class _Document:
+    def __init__(self, pdf_bytes: bytes):
+        self._doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        self.pages = [_Page(p) for p in self._doc]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self._doc.close()
 
 
 def _cluster_words_into_lines(words: List[dict], tolerance: float = 2.0) -> List[Tuple[float, str, List[dict]]]:
@@ -213,7 +261,7 @@ def parse_lenovo_quote_pdf(pdf_bytes: bytes) -> dict:
     }
     config_start: Optional[Tuple[int, float]] = None
 
-    with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
+    with _Document(pdf_bytes) as pdf:
         first_text = pdf.pages[0].extract_text() or ""
         m = re.search(r"Customer Name:\s*(.+)", first_text)
         if m:

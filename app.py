@@ -2807,6 +2807,7 @@ elif tool == "💻 Lenovo Quotation":
             st.session_state["lenovo_input_hash"] = lenovo_input_hash
             st.session_state["lenovo_output_bytes"] = None
             st.session_state["lenovo_output_name"] = None
+            st.session_state["lenovo_meta"] = None
 
     if st.button("🚀 Generate Quotation", key="generate_lenovo_quote_btn", use_container_width=True):
         if lenovo_uploaded is None:
@@ -2815,7 +2816,10 @@ elif tool == "💻 Lenovo Quotation":
             try:
                 with st.spinner("⚙️ Generating quotation..."):
                     input_bytes = lenovo_uploaded.getvalue()
-                    lenovo_meta = parse_lenovo_quote_pdf(input_bytes)
+                    lenovo_meta = st.session_state.get("lenovo_meta")
+                    if lenovo_meta is None:
+                        lenovo_meta = parse_lenovo_quote_pdf(input_bytes)
+                        st.session_state["lenovo_meta"] = lenovo_meta
                     out_bytes = generate_lenovo_quote(
                         input_bytes,
                         margin_percent=lenovo_margin_percent,
