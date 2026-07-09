@@ -43,6 +43,9 @@ TERMS_AND_CONDITIONS = [
 
 # A pricing row, e.g.:
 #   1 13BACTO1WW ThinkCentre neo 50t 2032 988.00 25-Apr-2026 2,007,616.00
+# Service/software sub-rows carry an extra "connected to line item" column
+# between the price end date and the total:
+#   16 5WS7C19944 2 1,749.00 05-Oct-2026 7 3,498.00
 _MAIN_ROW_RE = re.compile(
     r"^(?P<line>\d{1,4})\s+"
     r"(?P<part>[A-Z0-9]{5,})\s*"
@@ -50,6 +53,7 @@ _MAIN_ROW_RE = re.compile(
     r"(?P<qty>\d[\d,]*)\s+"
     r"(?P<unit>\d[\d,]*\.\d{2})\s+"
     r"(?P<end_date>\d{1,2}-[A-Za-z]{3}-\d{4})\s+"
+    r"(?:(?P<connected>\d{1,4})\s+)?"
     r"(?P<total>\d[\d,]*\.\d{2})$"
 )
 
