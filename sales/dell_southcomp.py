@@ -25,7 +25,7 @@ def render_southcomp_tool(team, update_usage) -> None:
     margin_percent = st.number_input(
         "Default Margin %",
         min_value=0.0,
-        max_value=100.0,
+        max_value=99.5,
         value=5.0,
         step=0.5,
         key="southcomp_margin",

@@ -1743,8 +1743,9 @@ def _build_quote_workbook(
         ws[f"{helper_margin_col}{row_ptr}"].border = border_thin
         ws[f"{helper_margin_col}{row_ptr}"].alignment = Alignment(horizontal="center", vertical="center")
 
-        # "Prix unitaire" — selling price = (original + fees) * (1 + this row's margin)
-        ws[f"{unit_col}{row_ptr}"] = f"=({helper_unit_col}{row_ptr}+{helper_fee_col}{row_ptr})*(1+{helper_margin_col}{row_ptr})"
+        # "Prix unitaire" — selling price = (original + fees) / (1 - this row's margin),
+        # so the margin is a share of the selling price (same convention as the Dell tool)
+        ws[f"{unit_col}{row_ptr}"] = f"=({helper_unit_col}{row_ptr}+{helper_fee_col}{row_ptr})/(1-{helper_margin_col}{row_ptr})"
         ws[f"{unit_col}{row_ptr}"].number_format = currency_fmt
         ws[f"{unit_col}{row_ptr}"].border = border_thin
         ws[f"{unit_col}{row_ptr}"].alignment = Alignment(horizontal="center", vertical="center")
@@ -2040,9 +2041,9 @@ def generate_southcomp_quote(
 
     quote_meta = {k: _strip_trailing_asterisk(v) for k, v in quote_meta.items()}
 
-    # Apply margin factor to consolidation fee
+    # Apply margin to consolidation fee (margin as share of selling price)
     margin_factor = margin_percent / 100.0
-    adjusted_consolidation_fee = consolidation_fee * (1 + margin_factor)
+    adjusted_consolidation_fee = consolidation_fee / (1 - margin_factor) if margin_factor < 1 else consolidation_fee
 
     return _build_quote_workbook(
         items=items,
