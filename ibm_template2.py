@@ -186,7 +186,8 @@ def extract_ibm_template2_from_pdf(file_like, country: str = "UAE") -> tuple[lis
         "City": "",
         "Country": "",
         "Bid Expiration Date": "",
-        "Maximum End User Price (MEP)": ""
+        "Maximum End User Price (MEP)": "",
+        "Value Seller Total Commit Value": ""
     }
     
     # Parse header fields
@@ -242,6 +243,16 @@ def extract_ibm_template2_from_pdf(file_like, country: str = "UAE") -> tuple[lis
             if mep_value:
                 header_info["Maximum End User Price (MEP)"] = f"{mep_value:,.2f}"
                 add_debug(f"[MEP] MEP set to: {mep_value:,.2f}")
+        elif "Value Seller Total Commit Value" in line and "Partner" not in line:
+            # Value may be on the same line after the colon or on the next line
+            vsc_part = line.split(":", 1)[1].strip() if ":" in line else ""
+            if not vsc_part and i + 1 < len(lines):
+                vsc_part = lines[i + 1].strip()
+            vsc_clean = re.sub(r'\s*(USD|AED|EUR).*$', '', vsc_part).strip()
+            vsc_value = parse_number(vsc_clean)
+            if vsc_value:
+                header_info["Value Seller Total Commit Value"] = f"{vsc_value:,.2f}"
+                add_debug(f"[VSC] Value Seller Total Commit Value: {vsc_value:,.2f}")
         elif "IBM Opportunity Number:" in line:
             # Extract the opportunity number from the same or next line
             # Look for pattern after the colon - alphanumeric with mixed case

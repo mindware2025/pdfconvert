@@ -10,6 +10,8 @@ def get_terms_section(header_info, total_price_sum):
     mep_value = header_info.get("Maximum End User Price (MEP)", "")
     if not mep_value:
          mep_value = header_info.get("Total Value Seller Revenue Opportunity", "")
+    if not mep_value:
+         mep_value = header_info.get("Value Seller Total Commit Value", "")
     # Conversion rate and currency by country: KSA -> 3.75 SAR; UAE/Qatar -> 3.6725 AED
     c = (header_info.get('country') or '').strip().upper()
     rate = 3.75 if c == 'KSA' else 3.6725
