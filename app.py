@@ -41,6 +41,7 @@ from sales.dell_extended_services import generate_dell_extended_services_quote
 from sales.dell import build_dell_output_filename, detect_dell_standard_variant, generate_dell_quote
 from sales.dell_extended_services import build_dell_extended_services_output_filename
 from sales.dell_orion import build_dell_orion_output_filename, generate_orion_quote
+from sales.lenovo import build_lenovo_output_filename, generate_lenovo_quote, parse_lenovo_quote_pdf
 from sales.mibb import check_mibb_hardware_quote_match, correct_mibb_descriptions, create_mibb_excel, create_mibb_hardware_excel, create_mibb_tls_excel, extract_mibb_hardware_table_from_excel, extract_mibb_header_from_pdf, extract_mibb_table_from_pdf, extract_mibb_terms_from_pdf, extract_mibb_tls_from_excel
 from sales.quotetemplate import detect_dell_template
 from utils.helpers import format_amount, format_invoice_date, format_month_year
@@ -1293,7 +1294,8 @@ elif team == "Sales":
         "MIBB Quotations",
         "💻 Dell Quotation",
         "💻 Dell Quotation (Orion)",
-        "💻 Dell Quotation Southcomp Polaris"
+        "💻 Dell Quotation Southcomp Polaris",
+        "💻 Lenovo Quotation"
     ]
 else:
     TOOL_OPTIONS = ["-- Select a tool --"]
@@ -2604,7 +2606,96 @@ elif tool == "🟪 IBM Credit Note Automation (KSA)":
     else:
         st.info("Upload IBM credit note PDFs to begin.")
 
+elif tool == "💻 Lenovo Quotation":
+    st.title("💼 Lenovo Quotation Tool")
+    st.write("Upload a Lenovo quotation PDF, set the margin, and download the Mindware quotation Excel file.")
 
+    lenovo_uploaded = st.file_uploader(
+        "Upload Lenovo quote PDF",
+        type=["pdf"],
+        key="lenovo_quote_uploader",
+    )
+
+    lenovo_margin_percent = st.number_input(
+        "Default Margin %",
+        min_value=0.0,
+        max_value=99.0,
+        value=5.0,
+        step=0.5,
+        key="lenovo_margin_percent",
+    )
+
+    lenovo_partner = st.text_input(
+        "Partner name",
+        key="lenovo_partner_name",
+        placeholder="e.g. CITG",
+    )
+
+    if "lenovo_output_bytes" not in st.session_state:
+        st.session_state["lenovo_output_bytes"] = None
+    if "lenovo_output_name" not in st.session_state:
+        st.session_state["lenovo_output_name"] = None
+
+    if lenovo_uploaded is not None:
+        lenovo_input_hash = hashlib.sha256(lenovo_uploaded.getvalue()).hexdigest()
+        if st.session_state.get("lenovo_input_hash") != lenovo_input_hash:
+            st.session_state["lenovo_input_hash"] = lenovo_input_hash
+            st.session_state["lenovo_output_bytes"] = None
+            st.session_state["lenovo_output_name"] = None
+            st.session_state["lenovo_meta"] = None
+
+    if st.button("🚀 Generate Quotation", key="generate_lenovo_quote_btn", use_container_width=True):
+        if lenovo_uploaded is None:
+            st.warning("Please upload a Lenovo quote PDF first.")
+        else:
+            try:
+                with st.spinner("⚙️ Generating quotation..."):
+                    input_bytes = lenovo_uploaded.getvalue()
+                    lenovo_meta = st.session_state.get("lenovo_meta")
+                    if lenovo_meta is None:
+                        lenovo_meta = parse_lenovo_quote_pdf(input_bytes)
+                        st.session_state["lenovo_meta"] = lenovo_meta
+                    out_bytes = generate_lenovo_quote(
+                        input_bytes,
+                        margin_percent=lenovo_margin_percent,
+                        partner=lenovo_partner.strip(),
+                        meta=lenovo_meta,
+                    )
+                    st.session_state["lenovo_output_bytes"] = out_bytes
+                    st.session_state["lenovo_output_name"] = build_lenovo_output_filename(input_bytes, meta=lenovo_meta)
+                items_total = sum(qty * unit for _, _, _, qty, unit in lenovo_meta["items"])
+                pdf_grand_total = lenovo_meta.get("grand_total")
+                st.success(f"✅ Quotation generated successfully — {len(lenovo_meta['items'])} items extracted.")
+                if pdf_grand_total is not None and abs(items_total - pdf_grand_total) > 0.01:
+                    st.warning(
+                        f"⚠️ Extraction check (before margin): the items read from the PDF add up to "
+                        f"{items_total:,.2f} {lenovo_meta['currency']}, but the PDF Grand Total is "
+                        f"{pdf_grand_total:,.2f} {lenovo_meta['currency']}. "
+                        "Some items may be missing — please review the output against the PDF."
+                    )
+                elif pdf_grand_total is not None:
+                    st.caption(
+                        f"Extraction check (before margin): all items captured — cost total equals the "
+                        f"PDF Grand Total ({pdf_grand_total:,.2f} {lenovo_meta['currency']}) ✓. "
+                        "The margin is applied on top of this in the Excel file."
+                    )
+            except Exception as e:
+                st.session_state["lenovo_output_bytes"] = None
+                st.session_state["lenovo_output_name"] = None
+                st.error(str(e))
+
+    if st.session_state.get("lenovo_output_bytes"):
+        st.download_button(
+            label="⬇️ Download quotation",
+            data=st.session_state["lenovo_output_bytes"],
+            file_name=st.session_state.get("lenovo_output_name") or "Lenovo_Quotation.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="download_lenovo_quote",
+            use_container_width=True,
+        )
+
+    if lenovo_uploaded is None and not st.session_state.get("lenovo_output_bytes"):
+        st.info("Upload a Lenovo quote PDF, then click Generate Quotation.")
 
 
 st.markdown("""
