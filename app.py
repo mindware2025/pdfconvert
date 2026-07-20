@@ -75,6 +75,7 @@ from claims_automation import (
     derive_defaults_from_source1,
 )
 import plotly.express as px
+from dashboard import render_dashboard
 
 SHEET_JSON = "tool-mindware-0d87ca5562ad.json"  # Path to your downloaded JSON
 SHEET_NAME = "mindware tool"
@@ -672,6 +673,12 @@ def show_fail():
     if st.button("Back to Login", key="back_login"):
         st.session_state.login_state = "login"
 
+# --- TV / wall dashboard: read-only view for office screens (?view=dashboard).
+# Placed before the login gate on purpose: it shows numbers only, no tools.
+if st.query_params.get("view") == "dashboard":
+    render_dashboard(run_log_sheet, tv_mode=True)
+    st.stop()
+
 if st.session_state.login_state == "login":
     show_login()
     st.stop()
@@ -732,6 +739,14 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
+
+# --- In-app management dashboard view (behind login) ---
+if st.session_state.get("app_view") == "dashboard":
+    if st.button("⬅️ Back to tools", key="dash_back"):
+        st.session_state.app_view = "tools"
+        st.rerun()
+    render_dashboard(run_log_sheet, tv_mode=False)
+    st.stop()
 
 # Initialize session state for welcome flow
 if "show_team_selection" not in st.session_state:
@@ -1125,6 +1140,12 @@ if st.session_state.show_team_selection:
         </p>
     </div>
     """, unsafe_allow_html=True)
+
+    nav_l, nav_r = st.columns([5, 1])
+    with nav_r:
+        if st.button("📊 Dashboard", key="open_dashboard", use_container_width=True):
+            st.session_state.app_view = "dashboard"
+            st.rerun()
 
     # Clean team selection radio buttons - NO extra divs
     team = st.radio(
