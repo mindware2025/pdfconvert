@@ -238,9 +238,11 @@ def generate_dell_extended_services_quote(
     exchange_rate: Optional[float] = None,
     style_currency: Optional[str] = None,
     include_footer_notes: bool = True,
+    mw_sales_person: Optional[str] = None,
 ) -> bytes:
     currency_code = (currency_code or "USD").upper()
     style_currency = (style_currency or currency_code).upper()
+    mw_sales_person = (mw_sales_person or "").strip()
     if currency_code == "EUR" and exchange_rate not in (None, ""):
         try:
             conversion_rate = float(exchange_rate)
@@ -310,6 +312,8 @@ def generate_dell_extended_services_quote(
     meta_rows = [
         ("End User:", meta["end_user"]),
     ]
+    if currency_code == "AED" and mw_sales_person:
+        meta_rows.append(("MW Sales Person:", mw_sales_person))
     for idx, (label, value) in enumerate(meta_rows, start=customer_title_row + 1):
         ws[f"A{idx}"] = label
         ws[f"A{idx}"].font = Font(bold=True)
@@ -321,7 +325,7 @@ def generate_dell_extended_services_quote(
         estimated_lines = max(1, min(4, (text_len // 32) + 1))
         ws.row_dimensions[idx].height = max(ws.row_dimensions[idx].height or 20, estimated_lines * 18)
     # ===== TABLE HEADER =====
-    header_row = customer_title_row + 2
+    header_row = customer_title_row + 1 + len(meta_rows)
     ws[f"A{header_row}"] = "Sr. No."
     ws[f"B{header_row}"] = "Part Number"
     ws[f"C{header_row}"] = "Description"

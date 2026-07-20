@@ -1929,6 +1929,7 @@ def generate_dell_quote(
     exchange_rate: Optional[float] = None,
     style_currency: Optional[str] = None,
     include_footer_notes: bool = True,
+    mw_sales_person: Optional[str] = None,
 ) -> bytes:
     """
     Generate a 2-sheet workbook from either:
@@ -1950,6 +1951,7 @@ def generate_dell_quote(
 
     currency_code = (currency_code or "USD").upper()
     style_currency = (style_currency or currency_code).upper()
+    mw_sales_person = (mw_sales_person or "").strip()
     if currency_code == "EUR" and exchange_rate not in (None, ""):
         try:
             conversion_rate = float(exchange_rate)
@@ -2383,6 +2385,8 @@ def generate_dell_quote(
             ("End User:", quote_meta.get("end user", "")),
             ("Reseller:", quote_meta.get("reseller", "")),
         ]
+        if currency_code == "AED" and mw_sales_person:
+            meta_rows.append(("MW Sales Person:", mw_sales_person))
     else:
         meta_rows = [
             ("Company Name:", quote_meta.get("company name", "")),

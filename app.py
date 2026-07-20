@@ -2354,6 +2354,25 @@ elif tool == "💻 Dell Quotation":
         horizontal=True
     )
 
+    DELL_MW_SALES_PERSONS = [
+        "S.Abdulsalam@mindware.net",
+        "C.BouKhaled@mindware.net",
+        "R.Kaddoura@mindware.net",
+        "N.Xavier@mindware.net",
+        "S.Jammoul@mindware.net",
+        "m.ali@mindware.net",
+        "R.AlKhateeb@mindware.net",
+    ]
+    mw_sales_person = ""
+    if currency_code == "AED":
+        sales_person_choice = st.selectbox(
+            "MW Sales Person",
+            ["— Select —"] + DELL_MW_SALES_PERSONS,
+            key="dell_mw_sales_person",
+        )
+        if sales_person_choice != "— Select —":
+            mw_sales_person = sales_person_choice
+
     if "dell_output_bytes" not in st.session_state:
         st.session_state["dell_output_bytes"] = None
     if "dell_output_name" not in st.session_state:
@@ -2376,6 +2395,8 @@ elif tool == "💻 Dell Quotation":
         st.session_state["dell_last_margin_percent"] = None
     if "dell_last_template_label" not in st.session_state:
         st.session_state["dell_last_template_label"] = None
+    if "dell_last_sales_person" not in st.session_state:
+        st.session_state["dell_last_sales_person"] = None
 
     if uploaded is not None:
         uploaded_bytes = uploaded.getvalue()
@@ -2399,6 +2420,7 @@ elif tool == "💻 Dell Quotation":
     if (
         st.session_state.get("dell_last_currency_code") not in (None, currency_code)
         or st.session_state.get("dell_last_margin_percent") not in (None, margin_percent)
+        or st.session_state.get("dell_last_sales_person") not in (None, mw_sales_person)
     ):
         st.session_state["dell_output_bytes"] = None
         st.session_state["dell_output_name"] = None
@@ -2454,6 +2476,7 @@ elif tool == "💻 Dell Quotation":
                             input_excel_bytes=input_bytes,
                             margin_percent=margin_percent,
                             currency_code=currency_code,
+                            mw_sales_person=mw_sales_person,
                         )
                         output_name = build_dell_extended_services_output_filename(
                             input_bytes,
@@ -2465,6 +2488,7 @@ elif tool == "💻 Dell Quotation":
                             input_excel_bytes=input_bytes,
                             margin_percent=margin_percent,
                             currency_code=currency_code,
+                            mw_sales_person=mw_sales_person,
                         )
                         output_name = build_dell_output_filename(
                             input_bytes,
@@ -2484,6 +2508,7 @@ elif tool == "💻 Dell Quotation":
                     st.session_state["dell_last_currency_code"] = currency_code
                     st.session_state["dell_last_margin_percent"] = margin_percent
                     st.session_state["dell_last_template_label"] = template_label
+                    st.session_state["dell_last_sales_person"] = mw_sales_person
 
                 st.success("✅ Quotation generated successfully.")
             except Exception as e:
