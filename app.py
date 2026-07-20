@@ -2717,6 +2717,11 @@ elif tool == "💻 Lenovo Quotation":
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="download_lenovo_quote",
             use_container_width=True,
+            on_click=lambda: update_usage(
+                "Lenovo quotation",
+                team,
+                pdf_count=count_uploaded_files(lenovo_uploaded, (".pdf",)),
+            ),
         )
 
     if lenovo_uploaded is None and not st.session_state.get("lenovo_output_bytes"):
