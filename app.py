@@ -75,7 +75,7 @@ from claims_automation import (
     derive_defaults_from_source1,
 )
 import plotly.express as px
-from dashboard import render_dashboard
+from dashboard import CATALOG_HEADERS, TOOL_CATALOG_SHEET_NAME, render_dashboard
 
 SHEET_JSON = "tool-mindware-0d87ca5562ad.json"  # Path to your downloaded JSON
 SHEET_NAME = "mindware tool"
@@ -108,6 +108,24 @@ def get_or_create_worksheet(title, rows=1000, cols=10):
 
 
 run_log_sheet = get_or_create_worksheet(RUN_LOG_SHEET_NAME)
+
+# "Tool Catalog": hand-maintained in Sheets (replaces the manual Excel handoff
+# to management) — one row per tool with its time-saved assumptions. The app
+# never writes rows here, only makes sure the tab and header row exist.
+catalog_sheet = get_or_create_worksheet(TOOL_CATALOG_SHEET_NAME, rows=200, cols=len(CATALOG_HEADERS))
+
+
+def ensure_tool_catalog_columns():
+    headers = catalog_sheet.row_values(1)
+    if not headers:
+        catalog_sheet.append_row(CATALOG_HEADERS)
+        return
+    for idx, header in enumerate(CATALOG_HEADERS, start=1):
+        if len(headers) < idx or headers[idx - 1] != header:
+            catalog_sheet.update_cell(1, idx, header)
+
+
+ensure_tool_catalog_columns()
 
 
 def ensure_usage_sheet_columns():
@@ -676,7 +694,7 @@ def show_fail():
 # --- TV / wall dashboard: read-only view for office screens (?view=dashboard).
 # Placed before the login gate on purpose: it shows numbers only, no tools.
 if st.query_params.get("view") == "dashboard":
-    render_dashboard(run_log_sheet, tv_mode=True)
+    render_dashboard(run_log_sheet, catalog_sheet, tv_mode=True)
     st.stop()
 
 if st.session_state.login_state == "login":
@@ -745,7 +763,7 @@ if st.session_state.get("app_view") == "dashboard":
     if st.button("⬅️ Back to tools", key="dash_back"):
         st.session_state.app_view = "tools"
         st.rerun()
-    render_dashboard(run_log_sheet, tv_mode=False)
+    render_dashboard(run_log_sheet, catalog_sheet, tv_mode=False)
     st.stop()
 
 # Initialize session state for welcome flow
