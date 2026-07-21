@@ -767,86 +767,128 @@ if st.session_state.get("app_view") == "dashboard":
     st.stop()
 
 # 🎯 Team Selection Section
+TEAMS = [
+    {
+        "key": "Finance",
+        "icon": "💰",
+        "accent": "#1a73e8",
+        "tint": "#eaf2fe",
+        "desc": "Invoices, credit notes, claims & freight.",
+    },
+    {
+        "key": "Operations",
+        "icon": "⚙️",
+        "accent": "#0f9d58",
+        "tint": "#e9f7ef",
+        "desc": "Dell invoices, barcodes & packing lists.",
+    },
+    {
+        "key": "Credit",
+        "icon": "📊",
+        "accent": "#f29900",
+        "tint": "#fef3e1",
+        "desc": "AR ageing, EDD files & Coface uploads.",
+    },
+    {
+        "key": "Sales",
+        "icon": "📈",
+        "accent": "#8430ce",
+        "tint": "#f5ecfb",
+        "desc": "Quotations for IBM, MIBB, Dell & Lenovo.",
+    },
+]
+
+st.session_state.setdefault("selected_team", TEAMS[0]["key"])
+
 st.markdown("""
-<div style="
-    text-align: center;
-    padding: 1.5rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 15px;
-    margin: 1.5rem 0;
-    box-shadow: 0 8px 25px rgba(102,126,234,0.25);
-    color: white;
-">
-    <h2 style="
-        font-size: 1.8rem;
-        margin: 0;
-        text-shadow: 1px 1px 5px rgba(0,0,0,0.3);
-        font-weight: 600;
-    ">
-        🎯 Choose Your Team
-    </h2>
-    <p style="
-        font-size: 1rem;
-        margin: 0.5rem 0 0 0;
-        opacity: 0.9;
-    ">
-        Select your department to access specialized tools
-    </p>
-</div>
+    <style>
+    .team-card {
+        position: relative;
+        border-radius: 18px;
+        padding: 1.3rem 1.2rem 1.1rem;
+        background: #ffffff;
+        border: 1px solid #e3e8ef;
+        box-shadow: 0 1px 3px rgba(16,24,40,0.06);
+        transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        margin-bottom: 0.6rem;
+    }
+    .team-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 24px rgba(16,24,40,0.10);
+        border-color: var(--accent);
+    }
+    .team-card.selected {
+        border-color: var(--accent);
+        box-shadow: 0 6px 20px rgba(16,24,40,0.10);
+    }
+    .team-card .accent-bar {
+        position: absolute; top: -1px; left: -1px; right: -1px; height: 4px;
+        border-radius: 18px 18px 0 0;
+        background: var(--accent);
+        opacity: 0; transition: opacity 0.18s ease;
+    }
+    .team-card.selected .accent-bar, .team-card:hover .accent-bar { opacity: 1; }
+    .team-card .badge-selected {
+        position: absolute; top: 0.9rem; right: 1rem;
+        font-size: 0.68rem; font-weight: 700; color: var(--accent);
+        background: var(--tint);
+        padding: 0.15rem 0.55rem; border-radius: 999px;
+        letter-spacing: 0.02em;
+    }
+    .team-card .icon-badge {
+        width: 44px; height: 44px; border-radius: 12px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.4rem; margin-bottom: 0.65rem;
+        background: var(--tint);
+    }
+    .team-card h3 {
+        margin: 0 0 0.2rem; font-size: 1.05rem; font-weight: 700;
+        color: #1f2430; font-family: 'Google Sans', sans-serif;
+    }
+    .team-card p { margin: 0; font-size: 0.82rem; color: #6b7280; line-height: 1.4; }
+    div[data-testid="column"] .stButton > button {
+        box-shadow: none !important;
+    }
+    </style>
 """, unsafe_allow_html=True)
 
-nav_l, nav_r = st.columns([5, 1])
-with nav_r:
+header_l, header_r = st.columns([5, 1])
+with header_l:
+    st.markdown("""
+        <div style='margin: 0.4rem 0 1.2rem;'>
+            <h2 style='color:#1a73e8; font-family:"Google Sans", sans-serif; font-weight:700; letter-spacing:-1px; margin-bottom:0.15rem;'>Choose your team</h2>
+            <p style='font-size:0.95rem; color:#6b7280; margin:0;'>Pick your department to see the tools built for you</p>
+        </div>
+    """, unsafe_allow_html=True)
+with header_r:
+    st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
     if st.button("📊 Dashboard", key="open_dashboard", use_container_width=True):
         st.session_state.app_view = "dashboard"
         st.rerun()
 
-# Clean team selection radio buttons - NO extra divs
-team = st.radio(
-    "👥 **Select your team:**",
-    ["Finance", "Operations", "Credit", "Sales"],
-    horizontal=True,
-    help="Choose your department to see relevant tools!"
-)
+cards = st.columns(4, gap="medium")
+for col, t in zip(cards, TEAMS):
+    is_selected = st.session_state.selected_team == t["key"]
+    with col:
+        st.markdown(f"""
+            <div class="team-card{' selected' if is_selected else ''}" style="--accent:{t['accent']}; --tint:{t['tint']}">
+                <div class="accent-bar"></div>
+                {f'<div class="badge-selected">✓ Active</div>' if is_selected else ''}
+                <div class="icon-badge">{t['icon']}</div>
+                <h3>{t['key']}</h3>
+                <p>{t['desc']}</p>
+            </div>
+        """, unsafe_allow_html=True)
+        if st.button(
+            "✓ Selected" if is_selected else "Select",
+            key=f"team_btn_{t['key']}",
+            use_container_width=True,
+            disabled=is_selected,
+        ):
+            st.session_state.selected_team = t["key"]
+            st.rerun()
 
-# Show confirmation with team-specific styling
-if team:
-    team_colors = {
-        "Finance": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-        "Operations": "linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)",
-        "Credit": "linear-gradient(135deg, #667eea 0%, #fed6e3 100%)",
-        "Sales": "linear-gradient(135deg, #d299c2 0%, #fef9d7 100%)"
-    }
-
-    team_emojis = {
-        "Finance": "💰",
-        "Operations": "⚙️",
-        "Credit": "📊",
-        "Sales": "📈"
-    }
-
-    st.markdown(f"""
-    <div style="
-        text-align: center;
-        padding: 1.2rem;
-        background: {team_colors.get(team, team_colors['Finance'])};
-        border-radius: 12px;
-        margin: 1rem 0;
-        color: white;
-        box-shadow: 0 6px 20px rgba(0,0,0,0.1);
-    ">
-        <h3 style="
-            margin: 0;
-            text-shadow: 1px 1px 3px rgba(0,0,0,0.3);
-            font-size: 1.3rem;
-        ">
-            🎉 Perfect! Welcome to team {team}! {team_emojis.get(team, '🎯')}
-        </h3>
-        <p style="margin: 0.5rem 0 0 0; opacity: 0.9; font-size: 0.9rem;">
-            Your specialized tools are ready below ✨
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+team = st.session_state.selected_team
 
 def load_master_map(master_file):
     df = pd.read_excel(master_file) if master_file.name.endswith(".xlsx") else pd.read_csv(master_file)
