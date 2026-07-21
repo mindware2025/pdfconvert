@@ -870,15 +870,21 @@ cards = st.columns(4, gap="medium")
 for col, t in zip(cards, TEAMS):
     is_selected = st.session_state.selected_team == t["key"]
     with col:
-        st.markdown(f"""
-            <div class="team-card{' selected' if is_selected else ''}" style="--accent:{t['accent']}; --tint:{t['tint']}">
-                <div class="accent-bar"></div>
-                {f'<div class="badge-selected">✓ Active</div>' if is_selected else ''}
-                <div class="icon-badge">{t['icon']}</div>
-                <h3>{t['key']}</h3>
-                <p>{t['desc']}</p>
-            </div>
-        """, unsafe_allow_html=True)
+        # Built as one unbroken line on purpose: a blank line in the middle of
+        # raw HTML passed to st.markdown silently ends the HTML block (CommonMark
+        # rule), dumping everything after it as literal text — which happened
+        # here when the "✓ Active" badge conditional collapsed to an empty line.
+        badge_html = '<div class="badge-selected">✓ Active</div>' if is_selected else ""
+        card_html = (
+            f'<div class="team-card{" selected" if is_selected else ""}" style="--accent:{t["accent"]}; --tint:{t["tint"]}">'
+            f'<div class="accent-bar"></div>'
+            f'{badge_html}'
+            f'<div class="icon-badge">{t["icon"]}</div>'
+            f'<h3>{t["key"]}</h3>'
+            f'<p>{t["desc"]}</p>'
+            f'</div>'
+        )
+        st.markdown(card_html, unsafe_allow_html=True)
         if st.button(
             "✓ Selected" if is_selected else "Select",
             key=f"team_btn_{t['key']}",
