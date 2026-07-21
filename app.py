@@ -85,13 +85,6 @@ scope = ["https://www.googleapis.com/auth/spreadsheets", "https://spreadsheets.g
 
 # Read credentials from Streamlit secrets
 service_account_info = st.secrets["gcp_service_account"]
-creds = Credentials.from_service_account_info(service_account_info, scopes=scope)
-
-# ✅ Authorize and open sheet
-gc = gspread.authorize(creds)
-
-workbook = gc.open(SHEET_NAME)
-tool_sheet = workbook.worksheet("Sheet1")     # Main usage sheet
 env = st.secrets.get("env", "live")  # Default to live if not set
 
 USAGE_HEADERS = ["Tool", "Month", "Usage Count", "Team", "PDF Count", "Excel Count"]
@@ -100,32 +93,45 @@ RUN_LOG_SHEET_NAME = "Run Log"
 RUN_LOG_HEADERS = ["Timestamp", "Tool", "Month", "Team", "PDF Count", "Excel Count"]
 
 
-def get_or_create_worksheet(title, rows=1000, cols=10):
-    try:
-        return workbook.worksheet(title)
-    except gspread.WorksheetNotFound:
-        return workbook.add_worksheet(title=title, rows=rows, cols=cols)
+@st.cache_resource(show_spinner=False)
+def connect_sheets():
+    """Open the Google Sheet once per server process, not on every rerun.
 
+    Streamlit re-runs this whole script on every widget click; opening the
+    workbook and worksheets costs 3-5 Google API round trips, which made every
+    click in the app feel slow. cache_resource keeps the live handles between
+    reruns (and between users — same service account, same sheet).
+    """
+    creds = Credentials.from_service_account_info(service_account_info, scopes=scope)
+    gc = gspread.authorize(creds)
+    workbook = gc.open(SHEET_NAME)
 
-run_log_sheet = get_or_create_worksheet(RUN_LOG_SHEET_NAME)
+    def get_or_create(title, rows=1000, cols=10):
+        try:
+            return workbook.worksheet(title)
+        except gspread.WorksheetNotFound:
+            return workbook.add_worksheet(title=title, rows=rows, cols=cols)
 
-# "Tool Catalog": hand-maintained in Sheets (replaces the manual Excel handoff
-# to management) — one row per tool with its time-saved assumptions. The app
-# never writes rows here, only makes sure the tab and header row exist.
-catalog_sheet = get_or_create_worksheet(TOOL_CATALOG_SHEET_NAME, rows=200, cols=len(CATALOG_HEADERS))
+    tool_sheet = workbook.worksheet("Sheet1")  # Main usage sheet
+    run_log_sheet = get_or_create(RUN_LOG_SHEET_NAME)
 
-
-def ensure_tool_catalog_columns():
+    # "Tool Catalog": hand-maintained in Sheets (replaces the manual Excel
+    # handoff to management) — one row per tool with its time-saved
+    # assumptions. The app never writes rows here, only makes sure the tab and
+    # header row exist (done here so it runs once per process, not per click).
+    catalog_sheet = get_or_create(TOOL_CATALOG_SHEET_NAME, rows=200, cols=len(CATALOG_HEADERS))
     headers = catalog_sheet.row_values(1)
     if not headers:
         catalog_sheet.append_row(CATALOG_HEADERS)
-        return
-    for idx, header in enumerate(CATALOG_HEADERS, start=1):
-        if len(headers) < idx or headers[idx - 1] != header:
-            catalog_sheet.update_cell(1, idx, header)
+    else:
+        for idx, header in enumerate(CATALOG_HEADERS, start=1):
+            if len(headers) < idx or headers[idx - 1] != header:
+                catalog_sheet.update_cell(1, idx, header)
+
+    return workbook, tool_sheet, run_log_sheet, catalog_sheet
 
 
-ensure_tool_catalog_columns()
+workbook, tool_sheet, run_log_sheet, catalog_sheet = connect_sheets()
 
 
 def ensure_usage_sheet_columns():
@@ -766,89 +772,72 @@ if st.session_state.get("app_view") == "dashboard":
     render_dashboard(run_log_sheet, catalog_sheet, tv_mode=False)
     st.stop()
 
-# 🎯 Team Selection Section
+# 🎯 Team Selection Section — one-click gradient tiles.
+# The tiles ARE a st.radio underneath (restyled with CSS): clicking a tile
+# selects it directly in a single rerun — no separate "Select" button, no
+# extra st.rerun(). CSS is scoped to the keyed container (.st-key-team_picker)
+# so the app's other st.radio widgets keep their normal look.
 TEAMS = [
-    {
-        "key": "Finance",
-        "icon": "💰",
-        "accent": "#1a73e8",
-        "tint": "#eaf2fe",
-        "desc": "Invoices, credit notes, claims & freight.",
-    },
-    {
-        "key": "Operations",
-        "icon": "⚙️",
-        "accent": "#0f9d58",
-        "tint": "#e9f7ef",
-        "desc": "Dell invoices, barcodes & packing lists.",
-    },
-    {
-        "key": "Credit",
-        "icon": "📊",
-        "accent": "#f29900",
-        "tint": "#fef3e1",
-        "desc": "AR ageing, EDD files & Coface uploads.",
-    },
-    {
-        "key": "Sales",
-        "icon": "📈",
-        "accent": "#8430ce",
-        "tint": "#f5ecfb",
-        "desc": "Quotations for IBM, MIBB, Dell & Lenovo.",
-    },
+    {"key": "Finance", "icon": "💰", "g1": "#2563eb", "g2": "#4f46e5",
+     "desc": "Invoices, credit notes, claims & freight."},
+    {"key": "Operations", "icon": "⚙️", "g1": "#059669", "g2": "#0d9488",
+     "desc": "Dell invoices, barcodes & packing lists."},
+    {"key": "Credit", "icon": "📊", "g1": "#f59e0b", "g2": "#ea580c",
+     "desc": "AR ageing, EDD files & Coface uploads."},
+    {"key": "Sales", "icon": "📈", "g1": "#9333ea", "g2": "#db2777",
+     "desc": "Quotations for IBM, MIBB, Dell & Lenovo."},
 ]
 
-st.session_state.setdefault("selected_team", TEAMS[0]["key"])
-
-st.markdown("""
+_team_tile_css = "\n".join(
+    f'.st-key-team_picker div[role="radiogroup"] > label:nth-of-type({i + 1})'
+    f' {{ background: linear-gradient(135deg, {t["g1"]}, {t["g2"]}); }}'
+    for i, t in enumerate(TEAMS)
+)
+st.markdown(f"""
     <style>
-    .team-card {
-        position: relative;
-        border-radius: 18px;
-        padding: 1.3rem 1.2rem 1.1rem;
-        background: #ffffff;
-        border: 1px solid #e3e8ef;
-        box-shadow: 0 1px 3px rgba(16,24,40,0.06);
-        transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-        margin-bottom: 0.6rem;
-    }
-    .team-card:hover {
+    .st-key-team_picker div[role="radiogroup"] {{
+        gap: 1rem;
+        flex-wrap: wrap;
+        width: 100% !important;
+        display: flex !important;
+    }}
+    .st-key-team_picker div[role="radiogroup"] > label {{
+        flex: 1 1 0 !important;
+        width: auto !important;
+        min-width: 170px;
+        margin: 0;
+        padding: 1.5rem 1rem;
+        border-radius: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+        transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+        opacity: 0.78;
+    }}
+    .st-key-team_picker div[role="radiogroup"] > label:hover {{
         transform: translateY(-3px);
-        box-shadow: 0 10px 24px rgba(16,24,40,0.10);
-        border-color: var(--accent);
-    }
-    .team-card.selected {
-        border-color: var(--accent);
-        box-shadow: 0 6px 20px rgba(16,24,40,0.10);
-    }
-    .team-card .accent-bar {
-        position: absolute; top: -1px; left: -1px; right: -1px; height: 4px;
-        border-radius: 18px 18px 0 0;
-        background: var(--accent);
-        opacity: 0; transition: opacity 0.18s ease;
-    }
-    .team-card.selected .accent-bar, .team-card:hover .accent-bar { opacity: 1; }
-    .team-card .badge-selected {
-        position: absolute; top: 0.9rem; right: 1rem;
-        font-size: 0.68rem; font-weight: 700; color: var(--accent);
-        background: var(--tint);
-        padding: 0.15rem 0.55rem; border-radius: 999px;
-        letter-spacing: 0.02em;
-    }
-    .team-card .icon-badge {
-        width: 44px; height: 44px; border-radius: 12px;
-        display: flex; align-items: center; justify-content: center;
-        font-size: 1.4rem; margin-bottom: 0.65rem;
-        background: var(--tint);
-    }
-    .team-card h3 {
-        margin: 0 0 0.2rem; font-size: 1.05rem; font-weight: 700;
-        color: #1f2430; font-family: 'Google Sans', sans-serif;
-    }
-    .team-card p { margin: 0; font-size: 0.82rem; color: #6b7280; line-height: 1.4; }
-    div[data-testid="column"] .stButton > button {
-        box-shadow: none !important;
-    }
+        box-shadow: 0 14px 30px rgba(0,0,0,0.18);
+        opacity: 1;
+    }}
+    .st-key-team_picker div[role="radiogroup"] > label:has(input:checked) {{
+        opacity: 1;
+        transform: scale(1.03);
+        box-shadow: 0 0 0 3px rgba(255,255,255,0.9), 0 10px 26px rgba(0,0,0,0.22);
+    }}
+    /* hide the round radio dot — the tile itself shows the selection */
+    .st-key-team_picker div[role="radiogroup"] > label > div:first-child {{
+        display: none;
+    }}
+    .st-key-team_picker div[role="radiogroup"] > label p {{
+        color: #ffffff !important;
+        font-family: 'Google Sans', 'Segoe UI', sans-serif !important;
+        font-size: 1.12rem !important;
+        font-weight: 800 !important;
+        margin: 0 !important;
+    }}
+    {_team_tile_css}
     </style>
 """, unsafe_allow_html=True)
 
@@ -857,7 +846,7 @@ with header_l:
     st.markdown("""
         <div style='margin: 0.4rem 0 1.2rem;'>
             <h2 style='color:#1a73e8; font-family:"Google Sans", sans-serif; font-weight:700; letter-spacing:-1px; margin-bottom:0.15rem;'>Choose your team</h2>
-            <p style='font-size:0.95rem; color:#6b7280; margin:0;'>Pick your department to see the tools built for you</p>
+            <p style='font-size:0.95rem; color:#6b7280; margin:0;'>Click your department to see the tools built for you</p>
         </div>
     """, unsafe_allow_html=True)
 with header_r:
@@ -866,35 +855,19 @@ with header_r:
         st.session_state.app_view = "dashboard"
         st.rerun()
 
-cards = st.columns(4, gap="medium")
-for col, t in zip(cards, TEAMS):
-    is_selected = st.session_state.selected_team == t["key"]
-    with col:
-        # Built as one unbroken line on purpose: a blank line in the middle of
-        # raw HTML passed to st.markdown silently ends the HTML block (CommonMark
-        # rule), dumping everything after it as literal text — which happened
-        # here when the "✓ Active" badge conditional collapsed to an empty line.
-        badge_html = '<div class="badge-selected">✓ Active</div>' if is_selected else ""
-        card_html = (
-            f'<div class="team-card{" selected" if is_selected else ""}" style="--accent:{t["accent"]}; --tint:{t["tint"]}">'
-            f'<div class="accent-bar"></div>'
-            f'{badge_html}'
-            f'<div class="icon-badge">{t["icon"]}</div>'
-            f'<h3>{t["key"]}</h3>'
-            f'<p>{t["desc"]}</p>'
-            f'</div>'
-        )
-        st.markdown(card_html, unsafe_allow_html=True)
-        if st.button(
-            "✓ Selected" if is_selected else "Select",
-            key=f"team_btn_{t['key']}",
-            use_container_width=True,
-            disabled=is_selected,
-        ):
-            st.session_state.selected_team = t["key"]
-            st.rerun()
+with st.container(key="team_picker"):
+    _team_choice = st.radio(
+        "Select your team",
+        [f"{t['icon']} {t['key']}" for t in TEAMS],
+        horizontal=True,
+        key="team_radio",
+        label_visibility="collapsed",
+        width="stretch",
+    )
 
-team = st.session_state.selected_team
+team = _team_choice.split(" ", 1)[1]
+_team_desc = next(t["desc"] for t in TEAMS if t["key"] == team)
+st.caption(f"**{team}** — {_team_desc}")
 
 def load_master_map(master_file):
     df = pd.read_excel(master_file) if master_file.name.endswith(".xlsx") else pd.read_csv(master_file)
@@ -2449,6 +2422,6 @@ elif tool == "💻 Lenovo Quotation":
 
 st.markdown("""
 <footer style='text-align:center; margin-top:3rem; color:#1a73e8; font-size:20px; font-weight:bold; font-family: Google Sans, sans-serif;'>
-    Made with ❤️ by Mindware | © 2025
+    Made with ❤️ by Mindware | © 2026
 </footer>
 """, unsafe_allow_html=True)
