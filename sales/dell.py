@@ -2090,7 +2090,7 @@ def generate_dell_quote(
                     consolidation_fee,
                 )
             consolidation_fee += shipping_fee
-            if style_currency in ("AED", "EUR", "SAR"):
+            if style_currency in ("AED", "EUR", "SAR", "USD", "QAR"):
                 # Keep the existing AED-style path for EUR too, without altering the current AED behavior.
                 if not config_rows:
                     service_fields_by_item = _extract_excel_service_fields(src_ws)
@@ -2644,7 +2644,7 @@ def generate_dell_quote(
     ws2 = wb.create_sheet("Configuration")
     ws2.sheet_view.showGridLines = False
 
-    use_service_layout = bool(service_fields_by_item) and (style_currency in ("AED", "EUR", "SAR")) and (not is_pdf) and (not config_rows)
+    use_service_layout = bool(service_fields_by_item) and (style_currency in ("AED", "EUR", "SAR", "USD", "QAR")) and (not is_pdf) and (not config_rows)
     show_sku_col = bool(part_numbers_by_item) or any(
         len(row) >= 5 and str(row[4]).strip()
         for row in config_rows
