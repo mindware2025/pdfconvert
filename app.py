@@ -1950,7 +1950,7 @@ elif tool == "IBM Quotation":
             if rebate_bytes:
                 bid_number = (result.get('header_info') or {}).get('Bid Number') or "Rebate"
                 st.download_button(
-                    label="📥 Download Rebate Calculation (UAE, backend only)",
+                    label="📥 Download Rebate Calculation",
                     data=rebate_bytes,
                     file_name=f"Rebate_{bid_number}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
