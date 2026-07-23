@@ -166,6 +166,17 @@ def create_styled_excel_v2(
             "empty",
             "empty"
         ]
+    elif country == "UAE":
+        left_values = [
+            datetime.today().strftime('%d/%m/%Y'),
+            "Priyansha Kapoor",
+            "P.kapoor@mindware.net",
+            "+971 52 434 9568",
+            "",
+            header_info.get('Reseller Name', 'empty'),
+            "empty",
+            "empty"
+        ]
     else:
         left_values = [
             datetime.today().strftime('%d/%m/%Y'),
