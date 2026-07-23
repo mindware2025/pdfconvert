@@ -1903,10 +1903,16 @@ elif tool == "IBM Quotation":
 
     if uploaded_pdf:
         from sales.ibm_v2_combo import process_ibm_combo
+        from rebate.generate import generate_rebate_excel
         import io
-        pdf_bytes = io.BytesIO(uploaded_pdf.getbuffer())
+        pdf_raw_bytes = bytes(uploaded_pdf.getbuffer())
+        pdf_bytes = io.BytesIO(pdf_raw_bytes)
         excel_bytes = io.BytesIO(uploaded_excel.getbuffer()) if uploaded_excel else None
         result = process_ibm_combo(pdf_bytes, excel_bytes, country=country)
+        # Rebate is a separate, backend-only output (UAE only) computed by an
+        # independent parser -- it never touches process_ibm_combo's inputs
+        # or output, so it can't affect the quotation above.
+        rebate_bytes = generate_rebate_excel(pdf_raw_bytes, country)
 
         if result['error']:
             st.error(f"❌ {result['error']}")
@@ -1932,12 +1938,23 @@ elif tool == "IBM Quotation":
                     data=result['excel_bytes'],
                     file_name="Styled_Quotation.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="ibm_quotation_download",
                     on_click=lambda co=country, tn=temp_num: update_usage(
                         f"IBM Automation ({co}) temp {tn}",
                         team,
                         pdf_count=count_uploaded_files(uploaded_pdf, (".pdf",)),
                         excel_count=count_uploaded_files(uploaded_excel, EXCEL_EXTENSIONS),
                     ),
+                )
+
+            if rebate_bytes:
+                bid_number = (result.get('header_info') or {}).get('Bid Number') or "Rebate"
+                st.download_button(
+                    label="📥 Download Rebate Calculation (UAE, backend only)",
+                    data=rebate_bytes,
+                    file_name=f"Rebate_{bid_number}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="ibm_rebate_download",
                 )
 
 

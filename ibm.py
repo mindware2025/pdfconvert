@@ -1408,8 +1408,7 @@ def create_styled_excel_template2(
         currency_label = "AED"
         usd_to_local = 3.6725
     add_debug(f"[TEMPLATE2 EXCEL] Creating Template 2 Excel with {len(data)} rows - 8 COLUMNS ONLY")
-    print(f"🔥 TEMPLATE 2 FUNCTION CALLED! Creating {len(data)} rows with 8 columns only!")
-    
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Quotation"
