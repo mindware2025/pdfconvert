@@ -198,7 +198,7 @@ def create_styled_excel_v2(
             ws[f"D{row}"].font = Font(color="1F497D")
 
     right_labels = [
-        "End User:", "Bid Number:", "Agreement Number:", "PA Site Number:", "",
+        "End User:", "Bid Number:", "Agreement Number:", "PA Site Number:", "IBM Opportunity Number:",
         "Select Territory:", "Government Entity (GOE):", "Payment Terms:"
     ]
     right_values = [
@@ -206,7 +206,7 @@ def create_styled_excel_v2(
         header_info.get('Bid Number', ''),
         header_info.get('PA Agreement Number', ''),
         header_info.get('PA Site Number', ''),
-        "",
+        header_info.get('IBM Opportunity Number', ''),
         header_info.get('Select Territory', ''),
         header_info.get('Government Entity (GOE)', ''),
         "As aligned with Mindware"
