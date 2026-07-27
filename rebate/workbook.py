@@ -12,6 +12,7 @@ from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
+import re
 
 from rebate.rate_card import REBATE_NOTE
 
@@ -27,7 +28,16 @@ def build_rebate_workbook(rows, columns):
     ws = wb.active
     ws.title = "Rebate"
 
-    header_labels = ["S.no", "Part number"] + [f"{name} ($)" for name in columns] + ["Total ($)"]
+    def _sanitize(name: str) -> str:
+        # remove newlines and any trailing "(if applicable)" text that
+        # may have been inserted externally (case-insensitive)
+        if not name:
+            return name
+        s = name.replace("\n", " ").strip()
+        s = re.sub(r"\s*\(?if applicable\)?\s*$", "", s, flags=re.I)
+        return s
+
+    header_labels = ["S.no", "Part number"] + [f"{_sanitize(name)} ($)" for name in columns] + ["Total ($)"]
     last_col = len(header_labels)
 
     for col_idx, label in enumerate(header_labels, start=1):
