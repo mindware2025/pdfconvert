@@ -65,10 +65,10 @@ MASTER1_EXPECTED_COLS: List[str] = [
 ]
 
 SOURCE2_REQUIRED_FOR_NARRATION: List[str] = [
-    "Employee",  # Column C
-    "Purpose/Description",  # Column F
-    "Benefit Item",  # Column K
-    "Benefit Amount",  # Column L
+    "Employee",
+    "Purpose/Description",
+    "Claim Expense Type",
+    "Reimbursement Total",
 ]
 
 # Master File 2 supported headers
@@ -316,16 +316,24 @@ def find_source2_header_row(ws, required_cols: List[str], max_search_rows: int =
 
 
 def read_source2_rows(path_or_stream: Union[str, IO[bytes]]) -> List[Dict[str, Any]]:
-    """Read Source File 2 with a fixed header row at row 3 and data starting at row 4.
+    """Read Source File 2, auto-detecting the header row.
 
-    Duplicate headers in row 3 are preserved as `Header`, `Header__2`, ... to keep order.
+    Scans the first rows for a row containing all of `SOURCE2_REQUIRED_FOR_NARRATION`
+    (case-insensitive); that row is treated as the header row, with data starting on
+    the next row. Duplicate headers are preserved as `Header`, `Header__2`, ... to keep order.
     """
     wb = load_workbook(filename=path_or_stream, data_only=True)
     ws = wb.active
 
-    header_row_index = 3
+    found = find_source2_header_row(ws, SOURCE2_REQUIRED_FOR_NARRATION)
+    if found is None:
+        raise ValueError(
+            "Could not find a header row in Source File 2 containing all required columns: "
+            + ", ".join(SOURCE2_REQUIRED_FOR_NARRATION)
+        )
+    header_row_index = found["__header_row_index__"]
 
-    # Build a complete header list from row 3, preserving order and duplicates
+    # Build a complete header list from the detected header row, preserving order and duplicates
     header_cells = [cell.value for cell in ws[header_row_index]]
     normalized_seen: Dict[str, int] = {}
     full_headers: List[str] = []
@@ -347,7 +355,7 @@ def read_source2_rows(path_or_stream: Union[str, IO[bytes]]) -> List[Dict[str, A
         for idx, key in enumerate(full_headers):
             row_obj[str(key)] = r[idx] if idx < len(r) else ""
         rows.append(row_obj)
-    logger.info("Read %d rows from Source File 2 using fixed header row 3", len(rows))
+    logger.info("Read %d rows from Source File 2 using detected header row %d", len(rows), header_row_index)
     return rows
 
 
@@ -434,22 +442,6 @@ def _match_main_account_from_master2(entries: List[Dict[str, Any]], benefit_type
 # Business logic
 # ---------------------------------------------------------------------------
 
-def _extract_duplicate_header_values(row: Dict[str, Any], header_label: str) -> List[Any]:
-    """Return values for all occurrences of a header that might appear multiple times.
-
-    When reading Source File 2, duplicate headers are stored as `Header`, `Header__2`, `Header__3`, ...
-    This helper retrieves them in left-to-right order without relying on the exact suffix number.
-    """
-    target = normalize_header(header_label)
-    values: List[Any] = []
-    for key in row.keys():  # preserves original column order
-        key_norm = normalize_header(key)
-        # Normalize away the duplicate suffix by splitting on the sentinel "__"
-        base = key_norm.split("__", 1)[0]
-        if base == target:
-            values.append(row.get(key, ""))
-    return values
-
 
 # Replace the build_detail_narration_for_credit function:
 
@@ -486,9 +478,8 @@ def build_detail_narration_for_credit(
 
     def snippet(r: Dict[str, Any]) -> str:
         f = str(r.get("Purpose/Description", "")).strip()
-        k = str(r.get("Benefit Item", "")).strip()
-        l = str(r.get("Benefit Amount", "")).strip()
-        parts = [p for p in [f, k, l] if p]
+        l = str(r.get("Reimbursement Total", "")).strip()
+        parts = [p for p in [f, l] if p]
         return "-".join(parts)
 
     body = " ".join(snippet(r) for r in matches)
@@ -611,7 +602,7 @@ def build_debit_rows_from_source2(
 ) -> List[List[Any]]:
     """Build debit rows where the number of rows equals the number of Source File 2 rows.
 
-    Implements custom mapping for Main A/C (column D) based on Benefit Type and Purpose/Description.
+    Implements custom mapping for Main A/C (column D) based on Claim Expense Type and Purpose/Description.
     """
     if not source2_rows:
         return []
@@ -638,9 +629,9 @@ def build_debit_rows_from_source2(
         set_col("Doc Dt", doc_dt_str)
         set_col("Seq No", seq_no_fixed)
 
-        bt_values = _extract_duplicate_header_values(src, "Benefit Type")
-        bt_primary = str(bt_values[0]).strip() if bt_values else ""
-        purpose_desc = str(src.get("Purpose/Description", "") or "").upper()
+        bt_primary = str(src.get("Claim Expense Type", "") or "").strip()
+        purpose_desc_raw = str(src.get("Purpose/Description", "") or "")
+        purpose_desc = purpose_desc_raw.upper()
         is_abu_dhabi = any(v in purpose_desc for v in abu_dhabi_variants)
 
         debit_main_ac = ""
@@ -648,42 +639,29 @@ def build_debit_rows_from_source2(
             if not is_abu_dhabi:
                 debit_main_ac = "54901"
             else:
-                bt_secondary = str(bt_values[1]).strip() if len(bt_values) > 1 else bt_primary
-                item_values = _extract_duplicate_header_values(src, "Benefit Item")
-                benefit_item = str(item_values[0]).strip() if item_values else ""
                 if master2_entries:
-                    debit_main_ac = _match_main_account_from_master2(master2_entries, bt_secondary, benefit_item)
+                    debit_main_ac = _match_main_account_from_master2(master2_entries, bt_primary, purpose_desc_raw)
         elif _is_any_category(bt_primary, ["Business Expenses", "Business Expense"]):
-            bt_secondary = str(bt_values[1]).strip() if len(bt_values) > 1 else bt_primary
-            item_values = _extract_duplicate_header_values(src, "Benefit Item")
-            benefit_item = str(item_values[0]).strip() if item_values else ""
             if master2_entries:
-                debit_main_ac = _match_main_account_from_master2(master2_entries, bt_secondary, benefit_item)
+                debit_main_ac = _match_main_account_from_master2(master2_entries, bt_primary, purpose_desc_raw)
         # If no match found, Main A/C remains blank
 
         if debit_main_ac:
             set_col("Main A/C", debit_main_ac)
 
-        
         employee_name = str(src.get("Employee", "")).strip()
         orion_id = find_orion_id_for_employee(master1_map, employee_name)
         acty1_value = ""
         acty2_value = ""
-        
-        main_ac_val = row[OUTPUT_HEADERS.index("Main A/C")]
 
-     
-        bt_values = _extract_duplicate_header_values(src, "Benefit Type")
-        benefit_type = str(bt_values[0]).strip() if bt_values else ""
-        item_values = _extract_duplicate_header_values(src, "Benefit Item")
-        benefit_item = str(item_values[0]).strip() if item_values else ""
+        main_ac_val = row[OUTPUT_HEADERS.index("Main A/C")]
 
         keywords = ["telephone", "phone", "communication"]
 
         if main_ac_val in ["54901", "54902"]:
             acty1_value = orion_id
         else:
-            haystack = f"{benefit_type} {benefit_item}".lower()
+            haystack = f"{bt_primary} {purpose_desc_raw}".lower()
             if any(kw in haystack for kw in keywords):
                 acty1_value = orion_id
 
@@ -693,20 +671,19 @@ def build_debit_rows_from_source2(
         # ACTY2 Logic
         if main_ac_val == "54901":
             # Search in narration for GCC countries
-            gcc_countries = ["bahrain", "kuwait", "oman", "qatar", "saudi arabia", "uae" ,"KSA" ,"ksa"]
-            
+            gcc_countries = ["bahrain", "kuwait", "oman", "qatar", "saudi arabia", "uae", "ksa"]
+
             # Build full narration text to search in
-            purpose = str(src.get("Purpose/Description", "") or "").lower()
-            benefit_item_text = str(src.get("Benefit Item", "") or "").lower()
-            benefit_amount_text = str(src.get("Benefit Amount", "") or "").lower()
+            purpose = purpose_desc_raw.lower()
+            reimbursement_text = str(src.get("Reimbursement Total", "") or "").lower()
             employee_text = str(src.get("Employee", "") or "").lower()
-            full_narration = f"{purpose} {benefit_item_text} {benefit_amount_text} {employee_text}".lower()
-            
+            full_narration = f"{purpose} {reimbursement_text} {employee_text}".lower()
+
             # Check if any GCC country is mentioned
             is_gcc = any(country in full_narration for country in gcc_countries)
             acty2_value = "GCC" if is_gcc else "NON_GCC"
             set_col("Acty2", acty2_value)
-            
+
         elif main_ac_val == "54902":
             division = division_map.get(orion_id, "").strip().upper() if division_map else ""
             acty2_value = "OMOBIL" if division in ["POMN", "PKWT"] else "NET ETSL"
@@ -722,8 +699,8 @@ def build_debit_rows_from_source2(
         if default_currency is not None and str(default_currency).strip() != "":
             set_col("Currency", str(default_currency).strip())
 
-        benefit_amount_num = to_float_or_none(src.get("Benefit Amount", ""))
-        set_col("FC Amt", benefit_amount_num)
+        reimbursement_amount_num = to_float_or_none(src.get("Reimbursement Total", ""))
+        set_col("FC Amt", reimbursement_amount_num)
         set_col("LC Amt", None)
         set_col("Dr/Cr", "D")
         set_col("Val Date", doc_dt_str)
@@ -732,11 +709,10 @@ def build_debit_rows_from_source2(
             set_col("Doc Ref", str(doc_ref).strip())
             set_col("TH Doc ref", str(doc_ref).strip()) 
 
-        purpose = str(src.get("Purpose/Description", "") or "").strip()
-        benefit_item_text = str(src.get("Benefit Item", "") or "").strip()
-        benefit_amount_text = str(src.get("Benefit Amount", "") or "").strip()
+        purpose = purpose_desc_raw.strip()
+        reimbursement_text = str(src.get("Reimbursement Total", "") or "").strip()
         employee_text = str(src.get("Employee", "") or "").strip()
-        parts = [p for p in [purpose, benefit_item_text, benefit_amount_text, employee_text] if p]
+        parts = [p for p in [purpose, reimbursement_text, employee_text] if p]
         debit_detail = " - ".join(parts)
         if debit_detail:
             set_col("Detail Narration", debit_detail)
@@ -759,18 +735,14 @@ def diagnose_debit_mapping(
 ) -> List[Dict[str, Any]]:
     """Return a row-by-row explanation of how debit Main A/C is determined.
 
-    Each dict contains: primary_benefit_type, secondary_benefit_type, benefit_item,
-    decision, matched_main_account.
+    Each dict contains: expense_type, purpose_description, decision, matched_main_account.
     """
     diagnostics: List[Dict[str, Any]] = []
     if not source2_rows:
         return diagnostics
     for src in source2_rows:
-        bt_values = _extract_duplicate_header_values(src, "Benefit Type")
-        bt_primary = str(bt_values[0]).strip() if bt_values else ""
-        bt_secondary = str(bt_values[1]).strip() if len(bt_values) > 1 else bt_primary
-        item_values = _extract_duplicate_header_values(src, "Benefit Item")
-        benefit_item = str(item_values[0]).strip() if item_values else ""
+        bt_primary = str(src.get("Claim Expense Type", "") or "").strip()
+        purpose_desc = str(src.get("Purpose/Description", "") or "").strip()
 
         matched = ""
         decision = ""
@@ -778,15 +750,14 @@ def diagnose_debit_mapping(
             matched = "54901"
             decision = "travel_expense"
         elif _is_any_category(bt_primary, ["Business Expenses", "Business Expense"]) and master2_entries:
-            matched = _match_main_account_from_master2(master2_entries, bt_secondary, benefit_item)
+            matched = _match_main_account_from_master2(master2_entries, bt_primary, purpose_desc)
             decision = "business_match" if matched else "business_no_match"
         else:
             decision = "no_rule"
 
         diagnostics.append({
-            "primary_benefit_type": bt_primary,
-            "secondary_benefit_type": bt_secondary,
-            "benefit_item": benefit_item,
+            "expense_type": bt_primary,
+            "purpose_description": purpose_desc,
             "matched_main_account": matched,
             "decision": decision,
         })
@@ -912,7 +883,7 @@ def main() -> None:
     parser.add_argument("--make-template", action="store_true", help="Create a Source1 Excel template and exit")
     parser.add_argument("--template-out", default="source1_template.xlsx", help="Path to write the Source1 template")
     parser.add_argument("--master1", help="Path to Master File 1 (Employee Name, Orion ID)")
-    parser.add_argument("--source2", help="Path to Source File 2 (with Employee, Purpose/Description, Benefit Item, Benefit Amount, Benefit Type)")
+    parser.add_argument("--source2", help="Path to Source File 2 (with Employee, Purpose/Description, Claim Expense Type, Reimbursement Total)")
     parser.add_argument("--master2", help="Path to Master File 2 (mapping Benefit Type/Item or Description contains to Main Account)")
     parser.add_argument("--user-id-col", default="Sub Acct", help="Column name in Source File 1 that contains the user/Orion ID")
     parser.add_argument("--debug", action="store_true", help="Enable verbose debug logging")
