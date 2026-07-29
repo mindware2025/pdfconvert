@@ -1,0 +1,575 @@
+=== TEMPLATE 2 EXTRACTION LOG - 2026-07-29 11:12:41 ===
+
+Line  94: Current Transaction
+Line  95: Duration: 01-Aug-2027-31-Jul-2028
+Line  96: Standard Price: 41.936,76
+Line  97: Channel Margin: 3%
+Line  98: Unit Points: 31,10
+Line  99: Ext Points: 559,80
+[MEP] Found MEP value on next line: 981088.18
+[MEP] MEP set to: 981,088.18
+[HEADER] IBM Opportunity Number: 006gR000006JLLRQA4
+[HEADER] IBM Opportunity Number: 006gR000006JLLRQA4
+[HEADER] IBM Opportunity Number: 006gR000006JLLRQA4
+[HEADER] IBM Opportunity Number: 006gR000006JLLRQA4
+[HEADER] IBM Opportunity Number: 006gR000006JLLRQA4
+[HEADER] IBM Opportunity Number: 006gR000006JLLRQA4
+[HEADER] IBM Opportunity Number: 006gR000006JLLRQA4
+
+================================================================================
+HEADER INFORMATION EXTRACTED
+================================================================================
+Customer Name                 : Burgan Bank
+Bid Number                    : 21768874
+PA Agreement Number           : 275544
+PA Site Number                : 4295246
+Select Territory              : Yes
+Government Entity (GOE)       : Yes
+IBM Opportunity Number        : 006gR000006JLLRQA4
+Reseller Name                 : Khorafi Business Machines W.L.L
+City                          : Al Sharq
+Country                       : KW
+Bid Expiration Date           : 31-Aug-2026
+Maximum End User Price (MEP)  : 981,088.18
+Value Seller Total Commit Value: 
+================================================================================
+
+
+================================================================================
+STARTING LINE ITEM EXTRACTION
+================================================================================
+Subscription Part Pattern: \b[A-Z][A-Z0-9]{4,8}\b
+Date Pattern: \b\d{2}-[A-Za-z]{3}-\d{4}\b
+
+[PRE-SCAN] Checking for multi-row table case...
+[PRE-SCAN] Table row markers found: 15
+[PRE-SCAN] Multi-row case detected: True
+
+[STRATEGY 2] Processing table row: 001 (raw: 001)
+  ℹ️ Quantity column detected in header (line 73)
+  Qty line: '18'
+  ✓ Quantity parsed: 18
+  Duration line (1): '18'
+  Duration line (2): '33.901,00'
+  Duration line (3): '610.218,00'
+  Duration line (4): '66,639'
+  Duration line (5): '191.360,34'
+  ✗ No SKU found for table row 001
+
+[STRATEGY 2] Processing table row: 002 (raw: 002)
+  ℹ️ Quantity column detected in header (line 102)
+  Qty line: '18'
+  ✓ Quantity parsed: 18
+  Duration line (1): '18'
+  Duration line (2): '6.781,00'
+  Duration line (3): '122.058,00'
+  Duration line (4): '65,642'
+  Duration line (5): '40.678,74'
+  ✗ No SKU found for table row 002
+
+[STRATEGY 2] Processing table row: 003 (raw: 003)
+  ℹ️ Quantity column detected in header (line 131)
+  Qty line: '18'
+  ✓ Quantity parsed: 18
+  Duration line (1): '18'
+  Duration line (2): '6.781,00'
+  Duration line (3): '122.058,00'
+  Duration line (4): '64,611'
+  Duration line (5): '41.899,32'
+  ✗ No SKU found for table row 003
+
+[STRATEGY 2] Processing table row: 004 (raw: 004)
+  ℹ️ Quantity column detected in header (line 164)
+  Qty line: '18'
+  ✓ Quantity parsed: 18
+  Duration line (1): '18'
+  Duration line (2): '6.781,00'
+  Duration line (3): '122.058,00'
+  Duration line (4): '63,550'
+  Duration line (5): '43.155,36'
+  ✗ No SKU found for table row 004
+
+[STRATEGY 2] Processing table row: 005 (raw: 005)
+  ℹ️ Quantity column detected in header (line 193)
+  Qty line: '18'
+  ✓ Quantity parsed: 18
+  Duration line (1): '18'
+  Duration line (2): '6.781,00'
+  Duration line (3): '122.058,00'
+  Duration line (4): '62,456'
+  Duration line (5): '44.450,64'
+  ✗ No SKU found for table row 005
+
+[STRATEGY 2] Processing table row: 006 (raw: 006)
+  ℹ️ Quantity column detected in header (line 232)
+  Qty line: '101'
+  ✓ Quantity parsed: 101
+  Duration line (1): '101'
+  Duration line (2): '1-12'
+  ✓ Duration extracted: 1-12
+  ✓ Subscription Part SKU used for this row (backward/nearest-above): D11F7ZX
+  [DESC] Extracting description for D11F7ZX...
+    Found subscription part line at line 220
+    Found service line at line 219: IBM webMethods Hybrid Integration Subscription Resource Unit Subscription License
+    Collecting service block from line 219 to 240:
+    Processing line 219: 'IBM webMethods Hybrid Integration Subscription Resource Unit Subscription License'
+    Line 219: INCLUDED - IBM webMethods Hybrid Integration Subscription Resource Unit Subscription License
+    Processing line 220: 'Subscription Part#: D11F7ZX'
+    Line 220: EXCLUDED - contains 'Subscription Part#'
+    Processing line 221: 'Billing: Upfront'
+    Line 221: INCLUDED - Billing: Upfront
+    Processing line 222: 'Current Transaction'
+    Line 222: EXCLUDED - contains 'Current Transaction'
+    Processing line 223: 'Customer Unit Price: 2.568,00'
+    Line 223: EXCLUDED - contains 'Customer Unit Price'
+    Processing line 224: 'Channel Discount: 14%'
+    Line 224: EXCLUDED - contains 'Channel Discount'
+    Processing line 225: 'Subscription Length:  60 Months'
+    Line 225: INCLUDED - Subscription Length:  60 Months
+    Processing line 226: 'Price Change within Subscription: Increase 3% every 12 months'
+    Processing line 227: 'Renewal Type: Expires at end of Subscription'
+    Line 227: INCLUDED - Renewal Type: Expires at end of Subscription
+    Processing line 228: 'Renewal: No'
+    Line 228: INCLUDED - Renewal: No
+    Processing line 229: 'IBM Opportunity Number: 006gR000006JLLRQA4'
+    Line 229: EXCLUDED - contains 'IBM Opportunity Number'
+    Processing line 230: 'Line'
+      Stopping at line 230: Table header detected
+    ✓ Description extracted (5 lines)
+  ✓ Using cached description for D11F7ZX
+  ℹ️ 'Bid Total Commit Value' column detected in header (line 247)
+  [PRICING] Searching lines 249 to 263 for prices (same as Strategy 1):
+    Line 251: 51.873,60 -> ['51.873,60']
+    Line 252: 51.873,60 -> ['51.873,60']
+    Line 254: 31.124,16 -> ['31.124,16']
+    Line 255: 31.124,16 -> ['31.124,16']
+    Line 256: 308,16 -> ['308,16']
+    Line 257: 26.766,78 -> ['26.766,78']
+    Line 258: 26.766,78 -> ['26.766,78']
+    Line 262: 51.873,60 -> ['51.873,60']
+    All collected prices: ['51.873,60', '51.873,60', '31.124,16', '31.124,16', '308,16', '26.766,78', '26.766,78', '51.873,60']
+    Price candidates (non-zero): ['51.873,60', '51.873,60', '31.124,16', '31.124,16', '308,16', '26.766,78', '26.766,78', '51.873,60']
+    Selected position 4 (index 3): 31.124,16 [Bid Total Commit Value]
+    ✓ Extracted: Total USD 31,124.16, Unit USD 308.16
+  ✓ Prices found: USD 308.16 → AED 1,131.72
+  ✓ Total: USD 31,124.16 → AED 114,303.48
+  ✓ Row added: D11F7ZX x 101
+
+[STRATEGY 2] Processing table row: 007 (raw: 007)
+  ℹ️ Quantity column detected in header (line 232)
+  Qty line: '101'
+  ✓ Quantity parsed: 101
+  Duration line (1): '101'
+  Duration line (2): '13-24'
+  ✓ Duration extracted: 13-24
+  ✓ Subscription Part SKU used for this row (backward/nearest-above): D11F7ZX
+  ✓ Using cached description for D11F7ZX
+  ℹ️ 'Bid Total Commit Value' column detected in header (line 247)
+  [PRICING] Searching lines 260 to 274 for prices (same as Strategy 1):
+    Line 262: 51.873,60 -> ['51.873,60']
+    Line 263: 51.873,60 -> ['51.873,60']
+    Line 265: 32.057,88 -> ['32.057,88']
+    Line 266: 32.057,88 -> ['32.057,88']
+    Line 267: 317,40 -> ['317,40']
+    Line 268: 27.569,78 -> ['27.569,78']
+    Line 269: 27.569,78 -> ['27.569,78']
+    Line 273: 51.873,60 -> ['51.873,60']
+    All collected prices: ['51.873,60', '51.873,60', '32.057,88', '32.057,88', '317,40', '27.569,78', '27.569,78', '51.873,60']
+    Price candidates (non-zero): ['51.873,60', '51.873,60', '32.057,88', '32.057,88', '317,40', '27.569,78', '27.569,78', '51.873,60']
+    Selected position 4 (index 3): 32.057,88 [Bid Total Commit Value]
+    ✓ Extracted: Total USD 32,057.88, Unit USD 317.40
+  ✓ Prices found: USD 317.40 → AED 1,165.67
+  ✓ Total: USD 32,057.88 → AED 117,732.56
+  ✓ Row added: D11F7ZX x 101
+
+[STRATEGY 2] Processing table row: 008 (raw: 008)
+  ℹ️ Quantity column detected in header (line 232)
+  Qty line: '101'
+  ✓ Quantity parsed: 101
+  Duration line (1): '101'
+  Duration line (2): '25-36'
+  ✓ Duration extracted: 25-36
+  ✓ Subscription Part SKU used for this row (backward/nearest-above): D11F7ZX
+  ✓ Using cached description for D11F7ZX
+  ℹ️ 'Bid Total Commit Value' column detected in header (line 247)
+  [PRICING] Searching lines 271 to 285 for prices (same as Strategy 1):
+    Line 273: 51.873,60 -> ['51.873,60']
+    Line 274: 51.873,60 -> ['51.873,60']
+    Line 276: 33.019,62 -> ['33.019,62']
+    Line 277: 33.019,62 -> ['33.019,62']
+    Line 278: 326,93 -> ['326,93']
+    Line 279: 28.396,87 -> ['28.396,87']
+    Line 280: 28.396,87 -> ['28.396,87']
+    Line 284: 51.873,60 -> ['51.873,60']
+    All collected prices: ['51.873,60', '51.873,60', '33.019,62', '33.019,62', '326,93', '28.396,87', '28.396,87', '51.873,60']
+    Price candidates (non-zero): ['51.873,60', '51.873,60', '33.019,62', '33.019,62', '326,93', '28.396,87', '28.396,87', '51.873,60']
+    Selected position 4 (index 3): 33.019,62 [Bid Total Commit Value]
+    ✓ Extracted: Total USD 33,019.62, Unit USD 326.93
+  ✓ Prices found: USD 326.93 → AED 1,200.64
+  ✓ Total: USD 33,019.62 → AED 121,264.55
+  ✓ Row added: D11F7ZX x 101
+
+[STRATEGY 2] Processing table row: 009 (raw: 009)
+  ℹ️ Quantity column detected in header (line 232)
+  Qty line: '101'
+  ✓ Quantity parsed: 101
+  Duration line (1): '101'
+  Duration line (2): '37-48'
+  ✓ Duration extracted: 37-48
+  ✓ Subscription Part SKU used for this row (backward/nearest-above): D11F7ZX
+  ✓ Using cached description for D11F7ZX
+  ℹ️ 'Bid Total Commit Value' column detected in header (line 247)
+  [PRICING] Searching lines 282 to 296 for prices (same as Strategy 1):
+    Line 284: 51.873,60 -> ['51.873,60']
+    Line 285: 51.873,60 -> ['51.873,60']
+    Line 287: 34.010,21 -> ['34.010,21']
+    Line 288: 34.010,21 -> ['34.010,21']
+    Line 289: 336,73 -> ['336,73']
+    Line 290: 29.248,78 -> ['29.248,78']
+    Line 291: 29.248,78 -> ['29.248,78']
+    Line 295: 51.873,60 -> ['51.873,60']
+    All collected prices: ['51.873,60', '51.873,60', '34.010,21', '34.010,21', '336,73', '29.248,78', '29.248,78', '51.873,60']
+    Price candidates (non-zero): ['51.873,60', '51.873,60', '34.010,21', '34.010,21', '336,73', '29.248,78', '29.248,78', '51.873,60']
+    Selected position 4 (index 3): 34.010,21 [Bid Total Commit Value]
+    ✓ Extracted: Total USD 34,010.21, Unit USD 336.73
+  ✓ Prices found: USD 336.73 → AED 1,236.66
+  ✓ Total: USD 34,010.21 → AED 124,902.50
+  ✓ Row added: D11F7ZX x 101
+
+[STRATEGY 2] Processing table row: 010 (raw: 010)
+  ℹ️ Quantity column detected in header (line 232)
+  Qty line: '101'
+  ✓ Quantity parsed: 101
+  Duration line (1): '101'
+  Duration line (2): '49-60'
+  ✓ Duration extracted: 49-60
+  ✓ Subscription Part SKU used for this row (backward/nearest-above): D11F7ZX
+  ✓ Using cached description for D11F7ZX
+  ℹ️ 'Bid Total Commit Value' column detected in header (line 247)
+  [PRICING] Searching lines 293 to 307 for prices (same as Strategy 1):
+    Line 295: 51.873,60 -> ['51.873,60']
+    Line 296: 51.873,60 -> ['51.873,60']
+    Line 298: 35.030,52 -> ['35.030,52']
+    Line 299: 35.030,52 -> ['35.030,52']
+    Line 300: 346,84 -> ['346,84']
+    Line 301: 30.126,24 -> ['30.126,24']
+    Line 302: 30.126,25 -> ['30.126,25']
+    Line 304: 259.368,00 -> ['259.368,00']
+    Line 305: 165.242,39 -> ['165.242,39']
+    Line 306: 142.108,46 USD -> ['142.108,46']
+    All collected prices: ['51.873,60', '51.873,60', '35.030,52', '35.030,52', '346,84', '30.126,24', '30.126,25', '259.368,00', '165.242,39', '142.108,46']
+    Price candidates (non-zero): ['51.873,60', '51.873,60', '35.030,52', '35.030,52', '346,84', '30.126,24', '30.126,25', '259.368,00', '165.242,39', '142.108,46']
+    Selected position 4 (index 3): 35.030,52 [Bid Total Commit Value]
+    ✓ Extracted: Total USD 35,030.52, Unit USD 346.84
+  ✓ Prices found: USD 346.84 → AED 1,273.76
+  ✓ Total: USD 35,030.52 → AED 128,649.58
+  ✓ Row added: D11F7ZX x 101
+
+[STRATEGY 2] Processing table row: 011 (raw: 011)
+  ℹ️ Quantity column detected in header (line 320)
+  Qty line: '18'
+  ✓ Quantity parsed: 18
+  Duration line (1): '18'
+  Duration line (2): '1-12'
+  ✓ Duration extracted: 1-12
+  ✓ Subscription Part SKU used for this row (backward/nearest-above): D2689LL
+  [DESC] Extracting description for D2689LL...
+    Found subscription part line at line 308
+    Found service line at line 307: IBM Cloud Pak for Integration Virtual Processor Core Subscription License
+    Collecting service block from line 307 to 328:
+    Processing line 307: 'IBM Cloud Pak for Integration Virtual Processor Core Subscription License'
+    Line 307: INCLUDED - IBM Cloud Pak for Integration Virtual Processor Core Subscription License
+    Processing line 308: 'Subscription Part#: D2689LL'
+    Line 308: EXCLUDED - contains 'Subscription Part#'
+    Processing line 309: 'Billing: Upfront'
+    Line 309: INCLUDED - Billing: Upfront
+    Processing line 310: 'Current Transaction'
+    Line 310: EXCLUDED - contains 'Current Transaction'
+    Processing line 311: 'Customer Unit Price: 79.620,00'
+    Line 311: EXCLUDED - contains 'Customer Unit Price'
+    Processing line 312: 'Channel Discount: 14%'
+    Line 312: EXCLUDED - contains 'Channel Discount'
+    Processing line 313: 'Subscription Length:  60 Months'
+    Line 313: INCLUDED - Subscription Length:  60 Months
+    Processing line 314: 'Price Change within Subscription: Increase 3% every 12 months'
+    Processing line 315: 'Renewal Type: Expires at end of Subscription'
+    Line 315: INCLUDED - Renewal Type: Expires at end of Subscription
+    Processing line 316: 'Renewal: No'
+    Line 316: INCLUDED - Renewal: No
+    Processing line 317: 'IBM Opportunity Number: 006gR000006JLLRQA4'
+    Line 317: EXCLUDED - contains 'IBM Opportunity Number'
+    Processing line 318: 'Line'
+      Stopping at line 318: Table header detected
+    ✓ Description extracted (5 lines)
+  ✓ Using cached description for D2689LL
+  ℹ️ 'Bid Total Commit Value' column detected in header (line 335)
+  [PRICING] Searching lines 337 to 351 for prices (same as Strategy 1):
+    Line 339: 286.632,00 -> ['286.632,00']
+    Line 340: 286.632,00 -> ['286.632,00']
+    Line 342: 82.277,72 -> ['82.277,72']
+    Line 343: 82.277,72 -> ['82.277,72']
+    Line 344: 4.570,98 -> ['4.570,98']
+    Line 345: 70.758,84 -> ['70.758,84']
+    Line 346: 70.758,84 -> ['70.758,84']
+    Line 350: 286.632,00 -> ['286.632,00']
+    All collected prices: ['286.632,00', '286.632,00', '82.277,72', '82.277,72', '4.570,98', '70.758,84', '70.758,84', '286.632,00']
+    Price candidates (non-zero): ['286.632,00', '286.632,00', '82.277,72', '82.277,72', '4.570,98', '70.758,84', '70.758,84', '286.632,00']
+    Selected position 4 (index 3): 82.277,72 [Bid Total Commit Value]
+    ✓ Extracted: Total USD 82,277.72, Unit USD 4,570.98
+  ✓ Prices found: USD 4,570.98 → AED 16,786.94
+  ✓ Total: USD 82,277.72 → AED 302,164.93
+  ✓ Row added: D2689LL x 18
+
+[STRATEGY 2] Processing table row: 012 (raw: 012)
+  ℹ️ Quantity column detected in header (line 320)
+  Qty line: '18'
+  ✓ Quantity parsed: 18
+  Duration line (1): '18'
+  Duration line (2): '13-24'
+  ✓ Duration extracted: 13-24
+  ✓ Subscription Part SKU used for this row (backward/nearest-above): D2689LL
+  ✓ Using cached description for D2689LL
+  ℹ️ 'Bid Total Commit Value' column detected in header (line 335)
+  [PRICING] Searching lines 348 to 362 for prices (same as Strategy 1):
+    Line 350: 286.632,00 -> ['286.632,00']
+    Line 351: 286.632,00 -> ['286.632,00']
+    Line 353: 84.746,05 -> ['84.746,05']
+    Line 354: 84.746,05 -> ['84.746,05']
+    Line 355: 4.708,11 -> ['4.708,11']
+    Line 356: 72.881,60 -> ['72.881,60']
+    Line 357: 72.881,60 -> ['72.881,60']
+    Line 361: 286.632,00 -> ['286.632,00']
+    All collected prices: ['286.632,00', '286.632,00', '84.746,05', '84.746,05', '4.708,11', '72.881,60', '72.881,60', '286.632,00']
+    Price candidates (non-zero): ['286.632,00', '286.632,00', '84.746,05', '84.746,05', '4.708,11', '72.881,60', '72.881,60', '286.632,00']
+    Selected position 4 (index 3): 84.746,05 [Bid Total Commit Value]
+    ✓ Extracted: Total USD 84,746.05, Unit USD 4,708.11
+  ✓ Prices found: USD 4,708.11 → AED 17,290.55
+  ✓ Total: USD 84,746.05 → AED 311,229.87
+  ✓ Row added: D2689LL x 18
+
+[STRATEGY 2] Processing table row: 013 (raw: 013)
+  ℹ️ Quantity column detected in header (line 320)
+  Qty line: '18'
+  ✓ Quantity parsed: 18
+  Duration line (1): '18'
+  Duration line (2): '25-36'
+  ✓ Duration extracted: 25-36
+  ✓ Subscription Part SKU used for this row (backward/nearest-above): D2689LL
+  ✓ Using cached description for D2689LL
+  ℹ️ 'Bid Total Commit Value' column detected in header (line 335)
+  [PRICING] Searching lines 359 to 373 for prices (same as Strategy 1):
+    Line 361: 286.632,00 -> ['286.632,00']
+    Line 362: 286.632,00 -> ['286.632,00']
+    Line 364: 87.288,43 -> ['87.288,43']
+    Line 365: 87.288,43 -> ['87.288,43']
+    Line 366: 4.849,36 -> ['4.849,36']
+    Line 367: 75.068,05 -> ['75.068,05']
+    Line 368: 75.068,05 -> ['75.068,05']
+    Line 372: 286.632,00 -> ['286.632,00']
+    All collected prices: ['286.632,00', '286.632,00', '87.288,43', '87.288,43', '4.849,36', '75.068,05', '75.068,05', '286.632,00']
+    Price candidates (non-zero): ['286.632,00', '286.632,00', '87.288,43', '87.288,43', '4.849,36', '75.068,05', '75.068,05', '286.632,00']
+    Selected position 4 (index 3): 87.288,43 [Bid Total Commit Value]
+    ✓ Extracted: Total USD 87,288.43, Unit USD 4,849.36
+  ✓ Prices found: USD 4,849.36 → AED 17,809.26
+  ✓ Total: USD 87,288.43 → AED 320,566.76
+  ✓ Row added: D2689LL x 18
+
+[STRATEGY 2] Processing table row: 014 (raw: 014)
+  ℹ️ Quantity column detected in header (line 320)
+  Qty line: '18'
+  ✓ Quantity parsed: 18
+  Duration line (1): '18'
+  Duration line (2): '37-48'
+  ✓ Duration extracted: 37-48
+  ✓ Subscription Part SKU used for this row (backward/nearest-above): D2689LL
+  ✓ Using cached description for D2689LL
+  ℹ️ 'Bid Total Commit Value' column detected in header (line 335)
+  [PRICING] Searching lines 370 to 384 for prices (same as Strategy 1):
+    Line 372: 286.632,00 -> ['286.632,00']
+    Line 373: 286.632,00 -> ['286.632,00']
+    Line 375: 89.907,08 -> ['89.907,08']
+    Line 376: 89.907,08 -> ['89.907,08']
+    Line 377: 4.994,84 -> ['4.994,84']
+    Line 378: 77.320,09 -> ['77.320,09']
+    Line 379: 77.320,09 -> ['77.320,09']
+    Line 383: 286.632,00 -> ['286.632,00']
+    All collected prices: ['286.632,00', '286.632,00', '89.907,08', '89.907,08', '4.994,84', '77.320,09', '77.320,09', '286.632,00']
+    Price candidates (non-zero): ['286.632,00', '286.632,00', '89.907,08', '89.907,08', '4.994,84', '77.320,09', '77.320,09', '286.632,00']
+    Selected position 4 (index 3): 89.907,08 [Bid Total Commit Value]
+    ✓ Extracted: Total USD 89,907.08, Unit USD 4,994.84
+  ✓ Prices found: USD 4,994.84 → AED 18,343.54
+  ✓ Total: USD 89,907.08 → AED 330,183.75
+  ✓ Row added: D2689LL x 18
+
+[STRATEGY 2] Processing table row: 015 (raw: 015)
+  ℹ️ Quantity column detected in header (line 320)
+  Qty line: '18'
+  ✓ Quantity parsed: 18
+  Duration line (1): '18'
+  Duration line (2): '49-60'
+  ✓ Duration extracted: 49-60
+  ✓ Subscription Part SKU used for this row (backward/nearest-above): D2689LL
+  ✓ Using cached description for D2689LL
+  ℹ️ 'Bid Total Commit Value' column detected in header (line 335)
+  [PRICING] Searching lines 381 to 395 for prices (same as Strategy 1):
+    Line 383: 286.632,00 -> ['286.632,00']
+    Line 384: 286.632,00 -> ['286.632,00']
+    Line 386: 92.604,29 -> ['92.604,29']
+    Line 387: 92.604,29 -> ['92.604,29']
+    Line 388: 5.144,68 -> ['5.144,68']
+    Line 389: 79.639,69 -> ['79.639,69']
+    Line 390: 79.639,69 -> ['79.639,69']
+    Line 392: 1.433.160,00 -> ['1.433.160,00']
+    Line 393: 436.823,57 -> ['436.823,57']
+    Line 394: 375.668,27 USD -> ['375.668,27']
+    All collected prices: ['286.632,00', '286.632,00', '92.604,29', '92.604,29', '5.144,68', '79.639,69', '79.639,69', '1.433.160,00', '436.823,57', '375.668,27']
+    Price candidates (non-zero): ['286.632,00', '286.632,00', '92.604,29', '92.604,29', '5.144,68', '79.639,69', '79.639,69', '1.433.160,00', '436.823,57', '375.668,27']
+    Selected position 4 (index 3): 92.604,29 [Bid Total Commit Value]
+    ✓ Extracted: Total USD 92,604.29, Unit USD 5,144.68
+  ✓ Prices found: USD 5,144.68 → AED 18,893.85
+  ✓ Total: USD 92,604.29 → AED 340,089.26
+  ✓ Row added: D2689LL x 18
+
+================================================================================
+EXTRACTION COMPLETE
+================================================================================
+Total line items found: 0
+Successfully extracted: 10
+Failed/Skipped: -10
+
+================================================================================
+FINAL EXTRACTED DATA SUMMARY
+================================================================================
+
+Row 1:
+  SKU: D11F7ZX
+  Description (full):
+    IBM webMethods Hybrid Integration Subscription Resource Unit Subscription License
+Billing: Upfront
+Subscription Length:  60 Months
+Renewal Type: Expires at end of Subscription
+Renewal: No
+  Qty: 101
+  Duration: 1-12
+  Dates:  to 
+  Prices: Unit=1131.72, Total=114303.48
+
+Row 2:
+  SKU: D11F7ZX
+  Description (full):
+    IBM webMethods Hybrid Integration Subscription Resource Unit Subscription License
+Billing: Upfront
+Subscription Length:  60 Months
+Renewal Type: Expires at end of Subscription
+Renewal: No
+  Qty: 101
+  Duration: 13-24
+  Dates:  to 
+  Prices: Unit=1165.67, Total=117732.56
+
+Row 3:
+  SKU: D11F7ZX
+  Description (full):
+    IBM webMethods Hybrid Integration Subscription Resource Unit Subscription License
+Billing: Upfront
+Subscription Length:  60 Months
+Renewal Type: Expires at end of Subscription
+Renewal: No
+  Qty: 101
+  Duration: 25-36
+  Dates:  to 
+  Prices: Unit=1200.64, Total=121264.55
+
+Row 4:
+  SKU: D11F7ZX
+  Description (full):
+    IBM webMethods Hybrid Integration Subscription Resource Unit Subscription License
+Billing: Upfront
+Subscription Length:  60 Months
+Renewal Type: Expires at end of Subscription
+Renewal: No
+  Qty: 101
+  Duration: 37-48
+  Dates:  to 
+  Prices: Unit=1236.66, Total=124902.5
+
+Row 5:
+  SKU: D11F7ZX
+  Description (full):
+    IBM webMethods Hybrid Integration Subscription Resource Unit Subscription License
+Billing: Upfront
+Subscription Length:  60 Months
+Renewal Type: Expires at end of Subscription
+Renewal: No
+  Qty: 101
+  Duration: 49-60
+  Dates:  to 
+  Prices: Unit=1273.76, Total=128649.58
+
+Row 6:
+  SKU: D2689LL
+  Description (full):
+    IBM Cloud Pak for Integration Virtual Processor Core Subscription License
+Billing: Upfront
+Subscription Length:  60 Months
+Renewal Type: Expires at end of Subscription
+Renewal: No
+  Qty: 18
+  Duration: 1-12
+  Dates:  to 
+  Prices: Unit=16786.94, Total=302164.93
+
+Row 7:
+  SKU: D2689LL
+  Description (full):
+    IBM Cloud Pak for Integration Virtual Processor Core Subscription License
+Billing: Upfront
+Subscription Length:  60 Months
+Renewal Type: Expires at end of Subscription
+Renewal: No
+  Qty: 18
+  Duration: 13-24
+  Dates:  to 
+  Prices: Unit=17290.55, Total=311229.87
+
+Row 8:
+  SKU: D2689LL
+  Description (full):
+    IBM Cloud Pak for Integration Virtual Processor Core Subscription License
+Billing: Upfront
+Subscription Length:  60 Months
+Renewal Type: Expires at end of Subscription
+Renewal: No
+  Qty: 18
+  Duration: 25-36
+  Dates:  to 
+  Prices: Unit=17809.26, Total=320566.76
+
+Row 9:
+  SKU: D2689LL
+  Description (full):
+    IBM Cloud Pak for Integration Virtual Processor Core Subscription License
+Billing: Upfront
+Subscription Length:  60 Months
+Renewal Type: Expires at end of Subscription
+Renewal: No
+  Qty: 18
+  Duration: 37-48
+  Dates:  to 
+  Prices: Unit=18343.54, Total=330183.75
+
+Row 10:
+  SKU: D2689LL
+  Description (full):
+    IBM Cloud Pak for Integration Virtual Processor Core Subscription License
+Billing: Upfront
+Subscription Length:  60 Months
+Renewal Type: Expires at end of Subscription
+Renewal: No
+  Qty: 18
+  Duration: 49-60
+  Dates:  to 
+  Prices: Unit=18893.85, Total=340089.26
+================================================================================
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             2026-07-29 11:12:41,381 - INFO - Debug log saved to template2_extraction_debug.log with 500 messages

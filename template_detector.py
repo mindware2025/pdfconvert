@@ -12,7 +12,7 @@ def detect_ibm_template(file_like) -> str:
     try:
         doc = fitz.open(stream=file_like.read(), filetype="pdf")
         sample_text = ""
-        for page_num in range(min(3, len(doc))):
+        for page_num in range(len(doc)):
             page = doc[page_num]
             sample_text += page.get_text("text") or page.get_text()
         doc.close()
