@@ -1199,13 +1199,16 @@ def _extract_all_config_rows(ws) -> List[Tuple]:
                 data_row += 1
                 continue
             blank_streak = 0
-            if _is_table_stop(row_text_all):
-                data_row += 1
-                continue
             mod = _cell_to_text(ws.cell(data_row, colmap.get("module", 0)).value) if has_real_module_col else ""
             desc = _cell_to_text(ws.cell(data_row, colmap.get("description", 0)).value)
             sku = _cell_to_text(ws.cell(data_row, colmap.get("sku", 0)).value)
             qty = _cell_to_text(ws.cell(data_row, colmap.get("qty", 0)).value)
+            # A row with a real SKU is a config row even if its text mentions a
+            # currency — e.g. power cords described as "... 10A (EUR)".
+            has_real_sku = bool(sku.strip()) and sku.strip().lower() != "sku"
+            if _is_table_stop(row_text_all) and not has_real_sku:
+                data_row += 1
+                continue
             if not has_real_module_col and desc and not any([sku, qty]):
                 mod = desc
                 desc = ""
