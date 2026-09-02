@@ -1030,6 +1030,217 @@ def _extract_pdf_lines(pdf_bytes: bytes) -> List[str]:
     return [l.strip() for l in text.splitlines()]
 
 
+# ==================== PDF: "PREMIER EQUOTE" TEMPLATE ====================
+# Dell's Premier-portal eQuote confirmation PDF ("E-Quote Name:", "E-Quote
+# Creator:", "Premier Page Name:" on page 1; items listed under a "Pricing
+# Summary" table as "N. Description  Qty  $ListPrice  $UnitPrice  $Subtotal").
+# This is structurally different from the "Quote Summary" BTO order-form PDF
+# handled by _extract_items_pdf() above, so it gets its own self-contained
+# parser. It only runs when its unique markers are detected; otherwise the
+# existing _extract_items_pdf()/_extract_config_from_pdf() path is used
+# unchanged.
+
+_PREMIER_ITEM_LINE_PAT = re.compile(
+    r"^\d+\.\s*(.+?)\s+(\d+)\s+[$]?([\d,]+\.\d+)\s+[$]?([\d,]+\.\d+)\s+[$]?([\d,]+\.\d+)\s*$"
+)
+
+
+def _try_extract_premier_pricing_summary_pdf(
+    pdf_bytes: bytes,
+) -> Optional[Tuple[List, Dict, List, str, str, str, float]]:
+    """Parse the Dell Premier eQuote PDF template.
+
+    Returns (items, metadata, config_rows, quote_ref, date_text, expiry_text,
+    consolidation_fee), or None when this template isn't detected so the
+    caller can fall back to the existing PDF parsing path.
+    """
+    lines = _extract_pdf_lines(pdf_bytes)
+    if not any("e-quote name" in l.lower() or "e-quote creator" in l.lower() for l in lines):
+        return None
+
+    metadata = {"company name": "", "customer name": "", "customer number": "",
+                "end user": "", "reseller": "", "quote creator": "", "shipping info": ""}
+    quote_ref = date_text = expiry_text = ""
+    consolidation_fee = 0.0
+    items: List[Tuple] = []
+    in_items = False
+
+    for line in lines:
+        stripped = line.strip()
+        low = stripped.lower()
+        if not low:
+            continue
+
+        if not quote_ref and low.startswith("quote no"):
+            m = re.search(r"\d{6,}(?:\.[A-Za-z0-9]+)?", stripped)
+            if m:
+                quote_ref = m.group(0)
+            continue
+        if not date_text and low.startswith("quoted on"):
+            m = re.search(r"\d{2}/\d{2}/\d{4}", stripped)
+            if m:
+                date_text = m.group(0)
+            continue
+        if low.startswith("expires by"):
+            m = re.search(r"\d{2}/\d{2}/\d{4}", stripped)
+            if m:
+                expiry_text = m.group(0)
+            continue
+        if low.startswith("e-quote creator") and ":" in stripped:
+            metadata["quote creator"] = stripped.split(":", 1)[1].strip()
+            continue
+        if low.startswith("premier page name") and ":" in stripped:
+            val = stripped.split(":", 1)[1].strip()
+            if val and val != "-":
+                metadata["reseller"] = val
+            continue
+        if low.startswith("company name") and ":" in stripped:
+            val = stripped.split(":", 1)[1].strip()
+            if val and val != "-":
+                metadata["company name"] = val
+            continue
+        if low.startswith("customer number") and ":" in stripped:
+            val = stripped.split(":", 1)[1].strip()
+            if val and val != "-":
+                metadata["customer number"] = val
+            continue
+        if low.startswith("shipping:"):
+            fee = _parse_money(stripped.split(":", 1)[1]) or 0.0
+            if abs(fee) > 1e-9:
+                consolidation_fee += fee
+            continue
+
+        if "pricing summary" in low:
+            in_items = True
+            continue
+
+        if in_items:
+            if low.startswith("subtotal:"):
+                in_items = False
+                continue
+            m = _PREMIER_ITEM_LINE_PAT.match(stripped)
+            if m:
+                desc_s, qty_s, _list_s, unit_s, total_s = m.groups()
+                qty_val = int(qty_s)
+                unit_val = _parse_money(unit_s) or 0.0
+                total_val = _parse_money(total_s) or (qty_val * unit_val)
+                items.append((desc_s.strip(), qty_val, unit_val, total_val))
+            elif items and not _is_price_or_qty_line(stripped):
+                old_desc, qty, unit, total = items[-1]
+                items[-1] = (f"{old_desc} {stripped}".strip(), qty, unit, total)
+
+    if not items:
+        return None
+
+    config_rows = _extract_config_from_pdf_module_table(pdf_bytes)
+    return items, metadata, config_rows, quote_ref, date_text, expiry_text, consolidation_fee
+
+
+def _extract_config_from_pdf_module_table(pdf_bytes: bytes) -> List[Tuple]:
+    """Parse the 'Module Description SKU Tax Type Qty' per-item component
+    tables in the Premier eQuote PDF's Product Details section.
+
+    Each tuple: (item_number_str, "", module, description, sku, qty)
+    """
+    sku_pat = re.compile(r"^\d{3,}-[A-Z0-9]+(?:,\d{3,}-[A-Z0-9]+)*$")
+    config_rows: List[Tuple] = []
+    in_product_details = False
+    in_table = False
+    item_number = 0
+    # desc_x..tax_x is treated as one combined "description + SKU" zone since the
+    # SKU header label sits a few points right of where SKU values actually start
+    # (right-aligned data vs. left-aligned header) — the SKU token is picked out of
+    # that zone by pattern instead of a second x boundary.
+    desc_x = tax_x = qty_x = None
+
+    try:
+        import pdfplumber
+        with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
+            for page in pdf.pages:
+                words = page.extract_words(use_text_flow=True)
+                if not words:
+                    continue
+                rows: Dict[int, List] = {}
+                for w in words:
+                    y = round(w.get("top", 0))
+                    rows.setdefault(y, []).append(w)
+
+                for y in sorted(rows):
+                    row_words = sorted(rows[y], key=lambda w: w.get("x0", 0))
+                    line = " ".join(w["text"] for w in row_words).strip()
+                    low = line.lower().strip()
+
+                    if not in_product_details:
+                        if "product details" in low:
+                            in_product_details = True
+                        continue
+
+                    # Repeating page header/footer (timestamp title bar, source-file footer)
+                    if re.match(r"^page\s+\d+$", low) or "file:///" in low or "your dell quote" in low:
+                        continue
+
+                    # End of document
+                    if any(stop in low for stop in (
+                        "purchase order number", "customer signature", "connect with dell",
+                    )):
+                        in_table = False
+                        in_product_details = False
+                        break
+
+                    # Per-item block header ("Qty Unit Price Subtotal") — marks a new item
+                    if low.startswith("qty") and "unit price" in low and "subtotal" in low:
+                        item_number += 1
+                        in_table = False
+                        continue
+
+                    # "Module Description SKU Tax Type Qty" header — capture column x boundaries
+                    if low.startswith("module") and "description" in low and "sku" in low:
+                        for w in row_words:
+                            wt = w["text"].lower()
+                            if wt == "description":
+                                desc_x = w.get("x0")
+                            elif wt == "tax":
+                                tax_x = w.get("x0")
+                            elif wt == "qty":
+                                qty_x = w.get("x0")
+                        in_table = True
+                        continue
+
+                    if not in_table or item_number == 0 or None in (desc_x, tax_x, qty_x):
+                        continue
+
+                    module = " ".join(w["text"] for w in row_words if w.get("x0", 0) < desc_x).strip()
+                    desc_sku_words = [w["text"] for w in row_words if desc_x <= w.get("x0", 0) < tax_x]
+                    sku_words = [w for w in desc_sku_words if sku_pat.match(w)]
+                    description = " ".join(w for w in desc_sku_words if not sku_pat.match(w)).strip()
+                    sku = " ".join(sku_words).strip()
+                    qty = " ".join(w["text"] for w in row_words if w.get("x0", 0) >= qty_x).strip()
+
+                    if not any([module, description, sku, qty]):
+                        continue
+
+                    current_item = str(item_number)
+                    # A real data row always carries a qty (from the trailing "SR N" tax+qty
+                    # pair); a row with no qty is either a wrapped continuation of the row
+                    # above (module/description/SKU text that overflowed onto the next line)
+                    # or a bare section-header ("Components") — the latter always follows an
+                    # item-number transition, so it never has a same-item previous row to
+                    # merge into and is correctly kept standalone.
+                    if not qty and config_rows and config_rows[-1][0] == current_item:
+                        last = config_rows[-1]
+                        merged_module = f"{last[2]} {module}".strip() if module else last[2]
+                        merged_desc = f"{last[3]} {description}".strip() if description else last[3]
+                        merged_sku = f"{last[4]}{sku}" if sku else last[4]
+                        config_rows[-1] = (last[0], last[1], merged_module, merged_desc, merged_sku, last[5])
+                        continue
+
+                    config_rows.append((current_item, "", module, description, sku, qty))
+    except Exception:
+        pass
+
+    return config_rows
+
+
 # ==================== CONFIGURATION SHEET ====================
 
 def _find_config_sheet(wb) -> Optional[object]:
@@ -1991,18 +2202,22 @@ def generate_southcomp_quote(
                 for desc, qty, unit, total in items
             ]
     elif is_pdf:
-        items, raw_meta, config_rows, quote_ref, date_text, expiry_text, consolidation_fee = _extract_items_pdf(input_bytes)
-        config_rows = _extract_config_from_pdf(input_bytes)
-        pos_meta = _extract_pdf_metadata_by_position(input_bytes)
-        quote_meta = raw_meta
-        if pos_meta.get("quote_creator"):
-            quote_meta["quote creator"] = pos_meta["quote_creator"]
-        if pos_meta.get("end_user"):
-            quote_meta["end user"] = pos_meta["end_user"]
-        if pos_meta.get("reseller"):
-            quote_meta["reseller"] = pos_meta["reseller"]
-        if pos_meta.get("quote_name") and not quote_meta.get("company name"):
-            quote_meta["company name"] = pos_meta["quote_name"]
+        premier_result = _try_extract_premier_pricing_summary_pdf(input_bytes)
+        if premier_result is not None:
+            items, quote_meta, config_rows, quote_ref, date_text, expiry_text, consolidation_fee = premier_result
+        else:
+            items, raw_meta, config_rows, quote_ref, date_text, expiry_text, consolidation_fee = _extract_items_pdf(input_bytes)
+            config_rows = _extract_config_from_pdf(input_bytes)
+            pos_meta = _extract_pdf_metadata_by_position(input_bytes)
+            quote_meta = raw_meta
+            if pos_meta.get("quote_creator"):
+                quote_meta["quote creator"] = pos_meta["quote_creator"]
+            if pos_meta.get("end_user"):
+                quote_meta["end user"] = pos_meta["end_user"]
+            if pos_meta.get("reseller"):
+                quote_meta["reseller"] = pos_meta["reseller"]
+            if pos_meta.get("quote_name") and not quote_meta.get("company name"):
+                quote_meta["company name"] = pos_meta["quote_name"]
     else:
         src_wb = openpyxl.load_workbook(BytesIO(input_bytes), data_only=True)
         src_ws = src_wb.active
