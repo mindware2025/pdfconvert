@@ -1126,6 +1126,7 @@ def create_mibb_hardware_excel(
         "Payment Terms:",
         "GOE",
         "Country",
+        "Expiration Date:",
     ]
     right_values = [
         header_info.get("Customer Name", ""),
@@ -1134,8 +1135,9 @@ def create_mibb_hardware_excel(
         "As aligned with Mindware",
         header_info.get("Government Entity (GOE)", ""),
         header_info.get("Country", ""),
+        header_info.get("Bid Expiration Date", ""),
     ]
-    for row, label, value in zip([5, 6, 7, 8, 9, 10], right_labels, right_values):
+    for row, label, value in zip([5, 6, 7, 8, 9, 10, 11], right_labels, right_values):
         ws.merge_cells(f"H{row}:L{row}")
         ws[f"H{row}"] = f"{label} {value}"
         ws[f"H{row}"].font = Font(bold=True, color="1F497D")
