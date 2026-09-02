@@ -388,9 +388,10 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
             header_info["Reseller Name"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
         if "Bid Number:" in line or "Quote Number:" in line:
             header_info["Bid Number"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
-        if "PA Agreement Number:" in line:
-            header_info["PA Agreement Number"] = ""
-        if "PA Site Number:" in line:
+        if "Agreement Number:" in line:
+            header_info["PA Agreement Number"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
+            header_fields_found += 1
+        if "Site Number:" in line:
             header_info["PA Site Number"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
             header_fields_found += 1
         if "IBM Opportunity Number" in line:
