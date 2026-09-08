@@ -2321,21 +2321,15 @@ def describe_input_kind(input_bytes: bytes) -> str:
     return "boq_generic"
 
 
-def generate_southcomp_quote(
-    input_bytes: bytes,
-    margin_percent: float,
-    currency_code: str,
-    exchange_rate: float,
-) -> bytes:
-    """
-    Generate a Southcomp Polaris EUR-style quote workbook.
-    currency_code: 'EUR' or 'USD'
-    exchange_rate: EUR/USD rate (used when currency_code='EUR')
-    Returns raw xlsx bytes.
-    """
-    currency_code = (currency_code or "EUR").upper()
-    effective_rate = exchange_rate if currency_code == "EUR" else 1.0
+def extract_quote_source_data(input_bytes: bytes) -> Dict[str, object]:
+    """Extract items, config_rows and metadata from any supported Dell quote
+    input (PDF, Excel BOQ, or Word order form).
 
+    This is the exact dispatch logic generate_southcomp_quote() has always
+    used, factored out unchanged so a second tool (item-code/description
+    extraction) can reuse the same parsing without duplicating — or
+    risking drifting from — it.
+    """
     is_pdf = input_bytes.lstrip().startswith(b"%PDF")
     is_docx = not is_pdf and _is_docx(input_bytes)
     items: List[Tuple] = []
@@ -2415,25 +2409,365 @@ def generate_southcomp_quote(
 
     quote_meta = {k: _strip_trailing_asterisk(v) for k, v in quote_meta.items()}
 
+    return {
+        "items": items,
+        "config_rows": config_rows,
+        "quote_ref": quote_ref,
+        "date_text": date_text,
+        "expiry_text": expiry_text,
+        "quote_meta": quote_meta,
+        "consolidation_fee": consolidation_fee,
+        "part_numbers": part_numbers,
+        "is_pdf": is_pdf,
+        "is_docx": is_docx,
+    }
+
+
+def generate_southcomp_quote(
+    input_bytes: bytes,
+    margin_percent: float,
+    currency_code: str,
+    exchange_rate: float,
+) -> bytes:
+    """
+    Generate a Southcomp Polaris EUR-style quote workbook.
+    currency_code: 'EUR' or 'USD'
+    exchange_rate: EUR/USD rate (used when currency_code='EUR')
+    Returns raw xlsx bytes.
+    """
+    currency_code = (currency_code or "EUR").upper()
+    effective_rate = exchange_rate if currency_code == "EUR" else 1.0
+
+    data = extract_quote_source_data(input_bytes)
+
     # Apply margin to consolidation fee (margin as share of selling price)
     margin_factor = margin_percent / 100.0
+    consolidation_fee = data["consolidation_fee"]
     adjusted_consolidation_fee = consolidation_fee / (1 - margin_factor) if margin_factor < 1 else consolidation_fee
 
     return _build_quote_workbook(
-        items=items,
-        config_rows=config_rows,
-        quote_ref=quote_ref,
-        date_text=date_text,
-        expiry_text=expiry_text,
-        quote_meta=quote_meta,
+        items=data["items"],
+        config_rows=data["config_rows"],
+        quote_ref=data["quote_ref"],
+        date_text=data["date_text"],
+        expiry_text=data["expiry_text"],
+        quote_meta=data["quote_meta"],
         currency_code=currency_code,
         exchange_rate=effective_rate,
         consolidation_fee=adjusted_consolidation_fee,
         margin_percent=margin_percent,
-        is_pdf=is_pdf,
-        part_numbers=part_numbers or None,
-        include_config_sheet=not is_docx,
+        is_pdf=data["is_pdf"],
+        part_numbers=data["part_numbers"] or None,
+        include_config_sheet=not data["is_docx"],
     )
+
+
+
+# ==================== ITEM CREATION (Item code + compact spec Description) ====================
+# Builds a 2-column "Item / Description" list from any supported Dell quote
+# input, reusing extract_quote_source_data() so it always sees exactly the
+# same items/config_rows the quotation-generator tool does. The Description
+# is assembled from a fixed set of Product Details / Configuration modules
+# (Base, Display, Processor, Memory, Storage, Wireless, Operating System,
+# Primary Battery), each compacted down to its essentials — a module that
+# isn't present for a given item (e.g. a server has no Display or Wireless)
+# is simply skipped rather than left as an error.
+
+_TRADEMARK_RE = re.compile(r"[®™]|\(R\)|\(TM\)", re.IGNORECASE)
+
+# Intel Core "Ultra 7 265U" / "Ultra 5 236V" style: captures tier + model code.
+# The optional "(?:processor\s+)?" skips the filler word some PDFs insert
+# between the tier and the model, e.g. "Ultra 7 processor 265HX".
+_PROC_ULTRA_RE = re.compile(r"ultra\D{0,12}?(\d+)\s+(?:processor\s+)?([A-Za-z0-9]+)", re.IGNORECASE)
+# Intel Core "i3-14100" / "i7-1370P" style.
+_PROC_COREI_RE = re.compile(r"\bi([3579])[\s\-]+(\S+)", re.IGNORECASE)
+# Intel Xeon "Silver 4410Y" / "Gold 5418Y" style — tier word is dropped, model kept.
+_PROC_XEON_RE = re.compile(
+    r"xeon(?:\s*(?:®|\(r\)))?\s*(?:gold|silver|platinum|bronze)?\s*([A-Za-z0-9]+)",
+    re.IGNORECASE,
+)
+# AMD "EPYC 9555P" style.
+_PROC_EPYC_RE = re.compile(r"epyc\s+([A-Za-z0-9]+)", re.IGNORECASE)
+# "12 cores" or the "12C/24T" shorthand server BOQs use. \b before the digit
+# keeps this from matching digits embedded in a compound token like "A725".
+_PROC_CORES_RE = re.compile(r"\b(\d+)\s*(?:cores?\b|C/\d+T)", re.IGNORECASE)
+# "up to 5.0 GHz" / "3.20GHz" (space optional).
+_PROC_GHZ_RE = re.compile(r"\b(\d+(?:\.\d+)?)\s*GHz", re.IGNORECASE)
+# Dell's server-BOQ shorthand, e.g. "...Silver 4410Y 2G, 12C/24T,..." -> "2G" = 2.0GHz.
+_PROC_GSHORT_RE = re.compile(r"\b(\d+(?:\.\d+)?)G\b(?=[,\s])", re.IGNORECASE)
+# "... with 32GB Memory" tail some Ultra chips fold their onboard RAM into.
+_PROC_MEM_TAIL_RE = re.compile(r"with\s+(\d+)\s*GB\s+Memory", re.IGNORECASE)
+
+_DISPLAY_INCH_RE = re.compile(r'(\d+(?:\.\d+)?)\s*"')
+_GB_RE = re.compile(r"\b(\d+(?:\.\d+)?)\s*GB", re.IGNORECASE)
+_STORAGE_SIZE_RE = re.compile(r"\b(\d+(?:\.\d+)?)\s*(GB|TB)\b", re.IGNORECASE)
+_STORAGE_TYPE_RE = re.compile(r"\b(SSD|HDD|NVMe)\b", re.IGNORECASE)
+_BATTERY_YEAR_RE = re.compile(r"\b(\d+)[\s-]*year", re.IGNORECASE)
+# A Dell SKU-shaped bracketed code, e.g. "(210-BPPK)" — NOT "(AZERTY)" (no
+# digit/dash). Used only against untrusted text (an item's own top-level
+# pricing-line name, which can contain unrelated brackets like a language
+# or layout code).
+_SKU_BRACKET_RE = re.compile(r"\((\d{3,4}-[A-Za-z0-9]{2,10})\)")
+# A looser bracketed model code, e.g. "(PB14250)" — allowed only against text
+# already confirmed to be the "Base" module's own description, where a
+# bracket is reliably a Dell model code even without the digit-dash shape.
+_MODEL_BRACKET_RE = re.compile(r"\(([A-Za-z0-9\-]{4,15})\)")
+
+
+def _abbreviate_base(desc: str) -> str:
+    return desc.split("(", 1)[0].strip() or desc.strip()
+
+
+def _abbreviate_processor(desc: str) -> str:
+    prefix = ""
+    m = _PROC_ULTRA_RE.search(desc)
+    if m:
+        prefix = f"Cu{m.group(1)}-{m.group(2)}"
+    else:
+        m = _PROC_COREI_RE.search(desc)
+        if m:
+            prefix = f"i{m.group(1)}-{m.group(2)}"
+        else:
+            m = _PROC_XEON_RE.search(desc)
+            if m:
+                prefix = f"Xeon-{m.group(1)}"
+            else:
+                m = _PROC_EPYC_RE.search(desc)
+                if m:
+                    prefix = f"EPYC-{m.group(1)}"
+
+    parts = [prefix] if prefix else []
+    mc = _PROC_CORES_RE.search(desc)
+    if mc:
+        parts.append(f"{mc.group(1)}C")
+    mg = _PROC_GHZ_RE.search(desc) or _PROC_GSHORT_RE.search(desc)
+    if mg:
+        parts.append(f"{mg.group(1)}GHz")
+    mm = _PROC_MEM_TAIL_RE.search(desc)
+    if mm:
+        parts.append(f"{mm.group(1)}GB")
+
+    if parts:
+        return " ".join(parts)
+    # Unrecognized processor family — fall back to the same "before the (" trim as Base.
+    return desc.split("(", 1)[0].strip()
+
+
+def _abbreviate_display(desc: str) -> str:
+    m = _DISPLAY_INCH_RE.search(desc)
+    return f'{m.group(1)}"' if m else ""
+
+
+def _abbreviate_memory(desc: str) -> str:
+    m = _GB_RE.search(desc)
+    return f"{m.group(1)}GB" if m else ""
+
+
+def _abbreviate_storage(desc: str) -> str:
+    size_m = _STORAGE_SIZE_RE.search(desc)
+    size = f"{size_m.group(1)}{size_m.group(2).upper()}" if size_m else ""
+    type_m = _STORAGE_TYPE_RE.search(desc)
+    typ = type_m.group(1).upper() if type_m else ""
+    return f"{size} {typ}".strip()
+
+
+def _abbreviate_wireless(desc: str) -> str:
+    text = _TRADEMARK_RE.sub("", desc)
+    text = text.split(",", 1)[0].strip()
+    text = re.sub(r"^(Intel|Dell)\s+", "", text, flags=re.IGNORECASE)
+    return text.strip()
+
+
+def _abbreviate_os(desc: str) -> str:
+    return desc.split(",", 1)[0].strip()
+
+
+def _abbreviate_battery(desc: str) -> str:
+    m = _BATTERY_YEAR_RE.search(desc)
+    return f"{m.group(1)}Y" if m else ""
+
+
+# (module names to look for, in the order they're concatenated) -> abbreviator.
+# A module name that isn't present for a given item is simply skipped.
+_ITEM_DESC_FIELDS: List[Tuple[Tuple[str, ...], "callable"]] = [
+    (("base",), _abbreviate_base),
+    (("display",), _abbreviate_display),
+    (("processor",), _abbreviate_processor),
+    (("memory", "memory capacity"), _abbreviate_memory),
+    (("storage", "hard drives"), _abbreviate_storage),
+    (("wireless",), _abbreviate_wireless),
+    (("operating system",), _abbreviate_os),
+    (("primary battery",), _abbreviate_battery),
+]
+
+
+def _find_module_value(item_no: str, config_rows: List[Tuple], names: Tuple[str, ...]) -> str:
+    # Some BOQs list the same module twice for one item — e.g. a "Wireless"
+    # row for a mechanical filler screw followed by the actual wireless card.
+    # The later row is consistently the real component, so keep the last
+    # match rather than the first.
+    names_norm = {re.sub(r"\s+", " ", n).strip().lower() for n in names}
+    found = ""
+    for row in config_rows:
+        if row[0] != item_no:
+            continue
+        mod_norm = re.sub(r"\s+", " ", (row[2] or "")).strip().lower()
+        if mod_norm in names_norm and row[3]:
+            found = row[3]
+    return found
+
+
+def _build_item_description(item_no: str, config_rows: List[Tuple]) -> str:
+    parts = []
+    for names, abbreviate in _ITEM_DESC_FIELDS:
+        raw = _find_module_value(item_no, config_rows, names)
+        if not raw:
+            continue
+        abbr = abbreviate(raw)
+        if abbr:
+            parts.append(abbr)
+    return " ".join(parts)
+
+
+def _resolve_item_code(item_no: str, config_rows: List[Tuple], fallback_desc: str) -> str:
+    """Resolve the Dell part number to show as this item's code.
+
+    Tried in order, since not every template exposes a SKU the same way:
+      1. The "Base" module's own SKU column (most templates).
+      2. A bracketed model code inside the "Base" module's own description,
+         e.g. "(PB14250)" — still a trusted source (it IS the Base row),
+         just not shaped like a full order SKU.
+      3. A SKU-shaped bracketed code in the item's heading text — some
+         Configuration-sheet Excel exports name the base module after the
+         product itself (e.g. "PowerEdge R6715") instead of "Base", but still
+         carry "(210-BPPK)"-style brackets in the per-item heading.
+      4. The first config row for this item that carries any real SKU at
+         all (covers BOQs where even the first/base row uses the product
+         name as its module label, with no separate "Base" row).
+      5. A SKU-shaped bracketed code in the item's own top-level pricing
+         description — last resort, and deliberately strict (digit-dash
+         shaped only) since this text is untrusted: it can carry unrelated
+         brackets like "(AZERTY)", a keyboard layout, not a part number.
+    """
+    base_sku = ""
+    base_desc = ""
+    heading_code = ""
+    first_sku = ""
+    for row in config_rows:
+        if row[0] != item_no:
+            continue
+        sku = (row[4] or "").strip()
+        if (row[2] or "").strip().lower() == "base" and not base_sku:
+            base_desc = row[3] or ""
+            base_sku = sku
+        if sku and not first_sku:
+            first_sku = sku
+        if not heading_code:
+            heading = row[1] or ""
+            if heading:
+                m = _SKU_BRACKET_RE.search(heading)
+                if m:
+                    heading_code = m.group(1)
+
+    if base_sku:
+        return base_sku
+    m = _MODEL_BRACKET_RE.search(base_desc)
+    if m:
+        return m.group(1)
+    if heading_code:
+        return heading_code
+    if first_sku:
+        return first_sku
+    m = _SKU_BRACKET_RE.search(fallback_desc or "")
+    return m.group(1) if m else ""
+
+
+def extract_item_creation_rows(input_bytes: bytes) -> List[Tuple[str, str]]:
+    """Return [(item_code, description), ...] for one uploaded Dell quote.
+
+    Uses extract_quote_source_data() — the same parsing generate_southcomp_quote()
+    uses — so this stays in sync with the quotation tool automatically as that
+    parsing improves, and covers every template it covers.
+    """
+    data = extract_quote_source_data(input_bytes)
+    items = data["items"]
+    config_rows = data["config_rows"]
+    rows: List[Tuple[str, str]] = []
+    for idx, item in enumerate(items, start=1):
+        item_no = str(idx)
+        fallback_desc = item[0] if item else ""
+        description = _build_item_description(item_no, config_rows)
+        item_code = _resolve_item_code(item_no, config_rows, fallback_desc)
+        if item_code or description:
+            rows.append((item_code, description))
+    return rows
+
+
+def generate_item_creation_excel(rows: List[Tuple[str, str]]) -> bytes:
+    """Build the 2-column Item/Description workbook."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Items"
+    ws.sheet_view.showGridLines = False
+
+    header_fill = PatternFill(start_color="9BC2E6", end_color="9BC2E6", fill_type="solid")
+    header_font = Font(bold=True, color="000000")
+    border_thin = Border(
+        left=Side(style="thin", color="000000"),
+        right=Side(style="thin", color="000000"),
+        top=Side(style="thin", color="000000"),
+        bottom=Side(style="thin", color="000000"),
+    )
+
+    ws["A1"] = "Item"
+    ws["B1"] = "Description"
+    for col in ("A", "B"):
+        cell = ws[f"{col}1"]
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = border_thin
+        cell.alignment = Alignment(horizontal="left", vertical="center")
+
+    ws.column_dimensions["A"].width = 18
+    ws.column_dimensions["B"].width = 72
+
+    r = 2
+    for item_code, description in rows:
+        ws.cell(r, 1, item_code).border = border_thin
+        desc_cell = ws.cell(r, 2, description)
+        desc_cell.border = border_thin
+        desc_cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        r += 1
+
+    ws.freeze_panes = "A2"
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def generate_item_creation_excel_from_inputs(
+    inputs: List[Tuple[str, bytes]],
+) -> Tuple[bytes, int]:
+    """inputs: [(source_name, file_bytes), ...]. Returns (xlsx_bytes, row_count).
+
+    Rows from all uploaded quotes are combined into one workbook; an
+    (item, description) pair already seen (e.g. the same laptop config
+    quoted twice) is written once.
+    """
+    all_rows: List[Tuple[str, str]] = []
+    seen = set()
+    for _name, data in inputs:
+        for pair in extract_item_creation_rows(data):
+            if pair in seen:
+                continue
+            seen.add(pair)
+            all_rows.append(pair)
+    return generate_item_creation_excel(all_rows), len(all_rows)
+
+
+def build_item_creation_filename() -> str:
+    return f"Southcomp_Polaris_Item_Creation_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
 
 
 def build_output_filename(currency_code: str = "EUR", source_name: str = "") -> str:

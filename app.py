@@ -21,6 +21,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 from extractors.ibm_cn_ksa import build_ibm_ksa_output_filename, prepare_ibm_ksa_excel_bytes, process_ibm_ksa_pdfs
 from sales.dell_southcomp import render_southcomp_tool
+from sales.dell_southcomp_items import render_southcomp_item_creation_tool
 from extractors.barcodeper50 import barcode_tooll
 from extractors.aws import AWS_OUTPUT_COLUMNS, build_dnts_cnts_rows, process_multiple_aws_pdfs
 from extractors.google_dnts import extract_invoice_info, extract_table_from_text, make_dnts_header_row, DNTS_HEADER_COLS, DNTS_ITEM_COLS
@@ -993,6 +994,7 @@ elif team == "Sales":
         "💻 Dell Quotation",
         "💻 Dell Quotation (Orion)",
         "💻 Dell Quotation Southcomp Polaris",
+        "💻 Dell Quotation Southcomp Polaris item creation",
         "💻 Lenovo Quotation"
     ]
 else:
@@ -2335,8 +2337,12 @@ elif tool == "💻 Dell Quotation (Orion)":
 
 elif tool == "💻 Dell Quotation Southcomp Polaris":
     render_southcomp_tool(team, update_usage)
-    
-    
+
+
+elif tool == "💻 Dell Quotation Southcomp Polaris item creation":
+    render_southcomp_item_creation_tool(team, update_usage)
+
+
 elif tool == "🟪 IBM Credit Note Automation (KSA)":
 
     st.title("IBM Credit Note Automation (KSA)")
