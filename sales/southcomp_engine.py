@@ -1241,6 +1241,159 @@ def _extract_config_from_pdf_module_table(pdf_bytes: bytes) -> List[Tuple]:
     return config_rows
 
 
+# ==================== PDF: "CHECKOUT CONFIRMATION" TEMPLATE ====================
+# Dell's "Your quote is ready for purchase." checkout-confirmation PDF
+# (sent from the online checkout flow, with a "Place your order" button).
+# Page 1 shows label/value pairs ("Quote No.:", "Company Name:", "End User:",
+# ...) whose LABEL text is duplicated in the PDF's underlying content stream
+# — e.g. what renders as "Quote No.: 123" is actually stored as
+# "Quote Quote No.: No.: 123" — even though the rendered PDF looks completely
+# normal. Items sit under a "Pricing Summary" table as
+# "N. Description  Qty  $UnitPrice  $Subtotal" (two price columns), which is
+# structurally different from both the "Quote Summary" order-form PDF
+# handled by _extract_items_pdf() (single un-duplicated label lines, no
+# price columns in the item line) and the Premier eQuote PDF handled by
+# _try_extract_premier_pricing_summary_pdf() (three price columns, requires
+# "E-Quote Name"/"E-Quote Creator" markers). This parser only runs when its
+# own unique markers are detected; otherwise the existing PDF parsing paths
+# are used unchanged. The "Product Details" component tables use the same
+# "Module Description SKU Tax Type Qty" layout as the Premier template, so
+# they're read with the existing _extract_config_from_pdf_module_table().
+
+_CHECKOUT_ITEM_LINE_PAT = re.compile(
+    r"^\d+\.\s*(.+?)\s+(\d+)\s+[$]?([\d,]+\.\d+)\s+[$]?([\d,]+\.\d+)\s*$"
+)
+
+# Label -> quote_meta key. "company name" is folded into "reseller" below
+# (this tool is dedicated to Southcomp Polaris quotes, and this template has
+# no separate "Reseller:" label of its own); "sales representative" is
+# folded into "quote creator" (Dell's internal owner of the quote).
+_CHECKOUT_LABEL_MAP: Dict[str, str] = {
+    "company name": "company name",
+    "customer name": "customer name",
+    "customer number": "customer number",
+    "end user": "end user",
+    "sales representative": "quote creator",
+}
+
+
+def _dedupe_adjacent_words(line: str) -> str:
+    """Collapse immediately-repeated words: 'Quote Quote No.: No.: 123 123' -> 'Quote No.: 123'.
+
+    Scoped to the checkout-confirmation PDF parser only — used nowhere else,
+    so it cannot change behavior for any other template.
+    """
+    words = line.split(" ")
+    out: List[str] = []
+    for w in words:
+        if out and out[-1] == w:
+            continue
+        out.append(w)
+    return " ".join(out)
+
+
+def _try_extract_checkout_confirmation_pdf(
+    pdf_bytes: bytes,
+) -> Optional[Tuple[List, Dict, List, str, str, str, float]]:
+    """Parse the Dell 'Your quote is ready for purchase' checkout-confirmation PDF.
+
+    Returns (items, metadata, config_rows, quote_ref, date_text, expiry_text,
+    consolidation_fee), or None when this template isn't detected so the
+    caller falls back to the existing PDF parsing paths.
+    """
+    raw_lines = _extract_pdf_lines(pdf_bytes)
+    if not any(
+        "quote is ready for purchase" in l.lower() or "place your order" in l.lower()
+        for l in raw_lines
+    ):
+        return None
+
+    lines = [_dedupe_adjacent_words(l) for l in raw_lines]
+
+    metadata = {"company name": "", "customer name": "", "customer number": "",
+                "end user": "", "reseller": "", "quote creator": "", "shipping info": ""}
+    quote_ref = date_text = expiry_text = ""
+    consolidation_fee = 0.0
+    items: List[Tuple] = []
+    in_items = False
+
+    for line in lines:
+        stripped = line.strip()
+        low = stripped.lower()
+        if not low:
+            continue
+
+        if not quote_ref and low.startswith("quote no"):
+            m = re.search(r"\d{6,}(?:\.[A-Za-z0-9]+)?", stripped)
+            if m:
+                quote_ref = m.group(0)
+            continue
+        if not date_text and low.startswith("quoted on"):
+            m = re.search(r"\d{2}/\d{2}/\d{4}", stripped)
+            if m:
+                date_text = m.group(0)
+            continue
+        if low.startswith("expires by"):
+            m = re.search(r"\d{2}/\d{2}/\d{4}", stripped)
+            if m:
+                expiry_text = m.group(0)
+            continue
+
+        if not in_items:
+            matched_label = False
+            for label, meta_key in _CHECKOUT_LABEL_MAP.items():
+                if low.startswith(label + ":"):
+                    val = stripped.split(":", 1)[1].strip()
+                    if val:
+                        metadata[meta_key] = val
+                    matched_label = True
+                    break
+            if matched_label:
+                continue
+
+        if low.startswith("consolidation fee:"):
+            # Note the trailing colon: the Product Details tables also contain
+            # module rows labelled "Consolidation Fees -" (plural, no colon,
+            # followed by an unrelated SKU number) which must NOT match here.
+            m = re.search(r"[\d,]+\.?\d*", stripped)
+            if m:
+                consolidation_fee += _parse_money(m.group(0)) or 0.0
+            continue
+        if low.startswith("shipping:"):
+            fee = _parse_money(stripped.split(":", 1)[1]) or 0.0
+            if abs(fee) > 1e-9:
+                consolidation_fee += fee
+            continue
+
+        if "pricing summary" in low:
+            in_items = True
+            continue
+
+        if in_items:
+            if low.startswith("subtotal:"):
+                in_items = False
+                continue
+            m = _CHECKOUT_ITEM_LINE_PAT.match(stripped)
+            if m:
+                desc_s, qty_s, unit_s, total_s = m.groups()
+                qty_val = int(qty_s)
+                unit_val = _parse_money(unit_s) or 0.0
+                total_val = _parse_money(total_s) or (qty_val * unit_val)
+                items.append((desc_s.strip(), qty_val, unit_val, total_val))
+            elif items and not _is_price_or_qty_line(stripped):
+                old_desc, qty, unit, total = items[-1]
+                items[-1] = (f"{old_desc} {stripped}".strip(), qty, unit, total)
+
+    if not items:
+        return None
+
+    if metadata.get("company name") and not metadata.get("reseller"):
+        metadata["reseller"] = metadata["company name"]
+
+    config_rows = _extract_config_from_pdf_module_table(pdf_bytes)
+    return items, metadata, config_rows, quote_ref, date_text, expiry_text, consolidation_fee
+
+
 # ==================== CONFIGURATION SHEET ====================
 
 def _find_config_sheet(wb) -> Optional[object]:
@@ -2203,8 +2356,11 @@ def generate_southcomp_quote(
             ]
     elif is_pdf:
         premier_result = _try_extract_premier_pricing_summary_pdf(input_bytes)
+        checkout_result = None if premier_result is not None else _try_extract_checkout_confirmation_pdf(input_bytes)
         if premier_result is not None:
             items, quote_meta, config_rows, quote_ref, date_text, expiry_text, consolidation_fee = premier_result
+        elif checkout_result is not None:
+            items, quote_meta, config_rows, quote_ref, date_text, expiry_text, consolidation_fee = checkout_result
         else:
             items, raw_meta, config_rows, quote_ref, date_text, expiry_text, consolidation_fee = _extract_items_pdf(input_bytes)
             config_rows = _extract_config_from_pdf(input_bytes)
