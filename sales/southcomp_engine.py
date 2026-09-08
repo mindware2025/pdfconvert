@@ -2695,8 +2695,15 @@ def extract_item_creation_rows(input_bytes: bytes) -> List[Tuple[str, str]]:
     rows: List[Tuple[str, str]] = []
     for idx, item in enumerate(items, start=1):
         item_no = str(idx)
-        fallback_desc = item[0] if item else ""
+        fallback_desc = (item[0] if item else "").strip()
         description = _build_item_description(item_no, config_rows)
+        if not description:
+            # No usable configuration breakdown for this item (either no
+            # config rows at all — a plain accessory — or rows with no
+            # recognizable module labels, as some rack-server BOQs have).
+            # Fall back to the item's own Pricing Summary line rather than
+            # leaving the row empty.
+            description = fallback_desc
         item_code = _resolve_item_code(item_no, config_rows, fallback_desc)
         if item_code or description:
             rows.append((item_code, description))
