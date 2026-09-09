@@ -1264,6 +1264,37 @@ _CHECKOUT_ITEM_LINE_PAT = re.compile(
     r"^\d+\.\s*(.+?)\s+(\d+)\s+[$]?([\d,]+\.\d+)\s+[$]?([\d,]+\.\d+)\s*$"
 )
 
+# Each item's own Product Details heading is split across a few lines by the
+# 2-column PDF layout: the description, then "N. Qty $Unit $Subtotal", then
+# the item's real Dell SKU alone in parentheses on its own line. A simple
+# accessory (mouse, keyboard, sleeve, ...) has no "Module Description SKU..."
+# component table at all, so this is the ONLY place its SKU appears.
+_CHECKOUT_ITEM_QTY_LINE_RE = re.compile(r"^(\d+)\.\s+\d+\s+[$]?[\d,]+\.\d+\s+[$]?[\d,]+\.\d+\s*$")
+_CHECKOUT_SKU_ONLY_LINE_RE = re.compile(r"^\((\d{3,4}-[A-Za-z0-9]+)\)$")
+
+
+def _extract_checkout_pricing_item_skus(pdf_bytes: bytes) -> Dict[str, str]:
+    """Map item number -> Dell SKU read from the Product Details per-item
+    heading block (see comment above)."""
+    lines = _extract_pdf_lines(pdf_bytes)
+    out: Dict[str, str] = {}
+    for i, line in enumerate(lines):
+        m = _CHECKOUT_ITEM_QTY_LINE_RE.match(line.strip())
+        if not m:
+            continue
+        item_no = m.group(1)
+        if item_no in out:
+            continue
+        for j in range(i + 1, min(i + 3, len(lines))):
+            nxt = lines[j].strip()
+            if not nxt:
+                continue
+            sm = _CHECKOUT_SKU_ONLY_LINE_RE.match(nxt)
+            if sm:
+                out[item_no] = sm.group(1)
+            break
+    return out
+
 # Label -> quote_meta key. "company name" is folded into "reseller" below
 # (this tool is dedicated to Southcomp Polaris quotes, and this template has
 # no separate "Reseller:" label of its own); "sales representative" is
@@ -1391,6 +1422,23 @@ def _try_extract_checkout_confirmation_pdf(
         metadata["reseller"] = metadata["company name"]
 
     config_rows = _extract_config_from_pdf_module_table(pdf_bytes)
+
+    # A simple accessory (mouse, keyboard, dock, sleeve, ...) has no
+    # component table at all, so it never gets a "Base" row above — but it
+    # does have its own real Dell SKU in the Product Details heading. Add it
+    # with a blank module name (not "Base") so it's available as an item
+    # code but never mistaken for a config field when the description is
+    # built.
+    items_with_base = {row[0] for row in config_rows if (row[2] or "").strip().lower() == "base"}
+    accessory_skus = _extract_checkout_pricing_item_skus(pdf_bytes)
+    for idx, item in enumerate(items, start=1):
+        item_no = str(idx)
+        if item_no in items_with_base:
+            continue
+        sku = accessory_skus.get(item_no)
+        if sku:
+            config_rows.append((item_no, "", "", item[0], sku, ""))
+
     return items, metadata, config_rows, quote_ref, date_text, expiry_text, consolidation_fee
 
 
