@@ -217,6 +217,13 @@ def create_styled_excel_v2(
         ws[f"H{row}"].font = Font(bold=True, color="1F497D")
         ws[f"H{row}"].alignment = Alignment(horizontal="left", vertical="center")
 
+    customer_number = header_info.get('Customer Number', '')
+    if customer_number:
+        ws.merge_cells("H13:L13")
+        ws["H13"] = f"Customer Number: {customer_number}"
+        ws["H13"].font = Font(bold=True, color="1F497D")
+        ws["H13"].alignment = Alignment(horizontal="left", vertical="center")
+
     # --- Table Headers ---
     curr = _currency_label(country)
     if country in {"Qatar", "Levant"}:

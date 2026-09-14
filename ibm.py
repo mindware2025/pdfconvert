@@ -363,6 +363,7 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
     debug_logger.info("Extracting header information...")
     header_info = {
         "Customer Name": "",
+        "Customer Number": "",
         "Bid Number": "",
         "PA Agreement Number": "",
         "PA Site Number": "",
@@ -383,6 +384,13 @@ def extract_ibm_data_from_pdf(file_like) -> tuple[list, dict]:
     for i, line in enumerate(lines):
         if "Customer Name:" in line:
             header_info["Customer Name"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
+            header_fields_found += 1
+        if "Customer Number" in line:
+            num_match = re.search(r'(?:IBM\s+)?Customer Number:?\s*(\S.*)$', line, re.I)
+            if num_match and num_match.group(1).strip():
+                header_info["Customer Number"] = num_match.group(1).strip()
+            elif i + 1 < len(lines):
+                header_info["Customer Number"] = lines[i + 1].strip()
             header_fields_found += 1
         if "Reseller Name:" in line:
             header_info["Reseller Name"] = lines[i + 1].strip() if i + 1 < len(lines) else ""
@@ -1528,7 +1536,14 @@ def create_styled_excel_template2(
         ws[f"F{row}"] = f"{label} {value}"
         ws[f"F{row}"].font = Font(bold=True, color="1F497D")
         ws[f"F{row}"].alignment = Alignment(horizontal="left", vertical="center")
-    
+
+    customer_number = header_info.get('Customer Number', '')
+    if customer_number:
+        ws.merge_cells("F13:I13")
+        ws["F13"] = f"Customer Number: {customer_number}"
+        ws["F13"].font = Font(bold=True, color="1F497D")
+        ws["F13"].alignment = Alignment(horizontal="left", vertical="center")
+
     # --- Template 2 Table Headers (8 columns ONLY) ---
     headers = [
         "SI",                          # Column B (2)

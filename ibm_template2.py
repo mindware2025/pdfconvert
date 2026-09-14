@@ -176,6 +176,7 @@ def extract_ibm_template2_from_pdf(file_like, country: str = "UAE") -> tuple[lis
     # Header info extraction
     header_info = {
         "Customer Name": "",
+        "Customer Number": "",
         "Bid Number": "",
         "PA Agreement Number": "",
         "PA Site Number": "",
@@ -194,6 +195,12 @@ def extract_ibm_template2_from_pdf(file_like, country: str = "UAE") -> tuple[lis
     for i, line in enumerate(lines):
         if "Customer Name:" in line:
             header_info["Customer Name"] = lines[i + 1] if i + 1 < len(lines) else ""
+        elif "Customer Number" in line:
+            num_match = re.search(r'(?:IBM\s+)?Customer Number:?\s*(\S.*)$', line, re.I)
+            if num_match and num_match.group(1).strip():
+                header_info["Customer Number"] = num_match.group(1).strip()
+            elif i + 1 < len(lines):
+                header_info["Customer Number"] = lines[i + 1].strip()
         elif "City:" in line:
             header_info["City"] = lines[i + 1] if i + 1 < len(lines) else ""
         elif "Country:" in line:
