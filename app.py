@@ -1997,6 +1997,11 @@ elif tool == "IBM Quotation":
                     file_name=f"Rebate_{bid_number}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     key="ibm_rebate_download",
+                    on_click=lambda co=country: update_usage(
+                        f"IBM Rebate ({co})",
+                        team,
+                        pdf_count=count_uploaded_files(uploaded_pdf, (".pdf",)),
+                    ),
                 )
 
 
