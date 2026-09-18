@@ -17,4 +17,5 @@ pdf417
 docx
 pathlib
 PyPDF2
+pypdf
 xlrd>=2.0.1
