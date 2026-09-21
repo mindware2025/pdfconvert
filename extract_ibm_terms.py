@@ -7,12 +7,16 @@ def extract_ibm_terms_text(file_like) -> str:
     useful_resources_lines = []
     capture_useful = False
     useful_resources_captured = False  # Track if we've already captured useful resources
+    customer_number_line = ""  # Printed at the bottom of the page; added as the last line
 
     for page in doc:
         lines = (page.get_text("text") or page.get_text()).splitlines()
         for line in lines:
             line = line.strip()
-            if "IBM Terms and Conditions" in line:
+            if line.startswith("IBM Customer Number:"):
+                customer_number_line = line
+                continue
+            if "IBM Terms and Conditions" in line or line == "IBM Terms":
                 found_terms = True
                 capture_useful = False
                 continue  # skip the header itself
@@ -39,7 +43,12 @@ def extract_ibm_terms_text(file_like) -> str:
             line.startswith("The quote or order") or
             line.startswith("Unless specifically") or
             line.startswith("The terms of the IBM") or
-            line.startswith("If you have any trouble")):
+            line.startswith("If you have any trouble") or
+            line.startswith("Client has read") or
+            line.startswith("Product Attachment") or
+            line.startswith("IBM's Data Processing") or
+            line.startswith("Unless the parties") or
+            line.startswith("Please read all terms")):
             if current_paragraph:
                 reconstructed_ibm_terms.append(" ".join(current_paragraph))
                 current_paragraph = []
@@ -56,4 +65,6 @@ def extract_ibm_terms_text(file_like) -> str:
     if useful_resources_lines:
         all_content.append("")
         all_content.extend(useful_resources_lines)
+    if customer_number_line:
+        all_content.append(customer_number_line)
     return "\n\n".join(all_content)

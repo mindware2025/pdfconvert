@@ -864,10 +864,15 @@ def extract_last_page_text(file_like) -> str:
     # Split into sections
     capture_useful = False
     capture_ibm_terms = False
+    customer_number_line = ""  # Printed at the bottom of the page; added as the last line
     
     for line in lines:
         line = line.strip()
         
+        if line.startswith("IBM Customer Number:"):
+            customer_number_line = line
+            continue
+
         # Start capturing useful resources section
         if "Useful/Important web resources:" in line:
             capture_useful = True
@@ -875,7 +880,7 @@ def extract_last_page_text(file_like) -> str:
             continue
             
         # Start capturing IBM terms section
-        if "IBM Terms and Conditions" in line:
+        if "IBM Terms and Conditions" in line or line == "IBM Terms":
             capture_ibm_terms = True
             capture_useful = False  # Stop capturing useful resources
             continue  # Skip the header itself
@@ -910,8 +915,13 @@ def extract_last_page_text(file_like) -> str:
             line.startswith("The quote or order") or
             line.startswith("Unless specifically") or
             line.startswith("The terms of the IBM") or
-            line.startswith("If you have any trouble")):
-            
+            line.startswith("If you have any trouble") or
+            line.startswith("Client has read") or
+            line.startswith("Product Attachment") or
+            line.startswith("IBM's Data Processing") or
+            line.startswith("Unless the parties") or
+            line.startswith("Please read all terms")):
+
             # Save previous paragraph if exists
             if current_paragraph:
                 reconstructed_ibm_terms.append(" ".join(current_paragraph))
@@ -936,6 +946,8 @@ def extract_last_page_text(file_like) -> str:
         all_content.append("")  # Add spacing
         all_content.extend(useful_resources_section)
     
+    if customer_number_line:
+        all_content.append(customer_number_line)
     result = "\n\n".join(all_content)  # Use double newlines for paragraph separation
     return result
 
