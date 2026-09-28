@@ -23,7 +23,8 @@ from io import BytesIO
 import logging
 
 
-def process_ibm_combo(pdf_file, excel_file=None, master_csv=None, country="UAE"):
+def process_ibm_combo(pdf_file, excel_file=None, master_csv=None, country="UAE",
+                      quote_company=None, quote_currency=None):
     """
     Unified processing for Template 1 (Excel-to-Excel) and Template 2 (PDF-to-Excel).
     - If excel_file is provided and template is 1: use Excel-to-Excel logic (ibm_v2)
@@ -67,6 +68,9 @@ def process_ibm_combo(pdf_file, excel_file=None, master_csv=None, country="UAE")
                 except Exception as e:
                     result['error'] = f"Failed to extract data from Excel: {e}"
             result['header_info'] = header_info
+            if header_info:
+                header_info['_quote_company'] = quote_company
+                header_info['_quote_currency'] = quote_currency
             result['ibm_terms_text'] = ibm_terms_text
 
             # Date validation: Compare Excel dates with PDF dates for template 1
@@ -210,6 +214,8 @@ def process_ibm_combo(pdf_file, excel_file=None, master_csv=None, country="UAE")
             # Template 2: PDF-to-Excel logic (ibm_template2.py)
             try:
                 data, header_info = extract_ibm_template2_from_pdf(pdf_file, country=country)
+                header_info['_quote_company'] = quote_company
+                header_info['_quote_currency'] = quote_currency
                 pdf_file.seek(0)
                 ibm_terms_text = extract_ibm_terms_text(pdf_file)
                 result['header_info'] = header_info

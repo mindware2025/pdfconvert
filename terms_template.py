@@ -1,5 +1,60 @@
 
+UAE_COMPANIES = ["Mindware FZ-LLC", "Mindware Technology Trading LLC"]
+UAE_CURRENCIES = ["AED", "USD"]
+UAE_DELIVERY_TIME = "7-14 working days"
+
+
+def _uae_terms_points(company, currency):
+    """Mindware quotation T&Cs (Quotation Terms and Conditions_EN_08.09.2026.docx)."""
+    points = [
+        "Payment Terms. Payment shall be made in accordance with the payment terms specified in this quotation.",
+        f"Purchase Orders. All Purchase Orders must be issued to {company} and must reference this quotation. Purchase Orders shall be duly signed and stamped by the Partner, unless electronically generated through the Partner's approved procurement system.",
+        "End User Identification. The Partner shall clearly specify the name of the end user/customer in the Purchase Order.",
+        f"Non-Cancellable and Non-Returnable Orders. All accepted orders are firm, non-cancellable, and non-returnable (\"NCNR\"), unless otherwise expressly agreed in writing by {company}.",
+        f"Delivery. The delivery of the Products under this quotation is limited to {UAE_DELIVERY_TIME}, unless otherwise expressly stated herein.",
+        f"Pricing and Taxes. All prices are quoted in {currency} and are exclusive of VAT, withholding taxes, customs duties, and any other applicable taxes, levies, or governmental charges, which shall be borne by the Partner.",
+        f"Price Validity. Prices contained in this quotation are subject to change at any time prior to receipt and acceptance by {company} of a valid Purchase Order.",
+        f"Delivery. The estimated delivery lead time is {UAE_DELIVERY_TIME} and is subject to product availability, manufacturer/vendor confirmation, logistics constraints, governmental approvals, export/import regulations, and any other applicable requirements.",
+        "Subscription and License Renewals. Unless otherwise specified by the manufacturer/vendor, all subscription and license renewals shall commence from the expiration date of the existing subscription or license term.",
+        f"Automatic Renewal of Subscription and Licenses. Unless otherwise specified by the applicable manufacturer or vendor, any subscription, maintenance, support, or license renewal quoted by {company} shall automatically renew for the applicable renewal term unless the Partner provides written notice of its intention not to renew at least ninety (90) days prior to the expiration of the then-current subscription, maintenance, support, or license term. In the absence of such notice, the renewal shall be deemed accepted by the Partner, and the Partner shall remain liable for all applicable renewal fees and charges.",
+        "Quantity Limitation. The pricing offered under this quotation is valid solely for the quantities expressly specified herein. Any change in quantities may result in revised pricing.",
+        f"Warranty. Products, software, and services supplied under this quotation are subject solely to the applicable manufacturer’s or vendor’s warranty and support policies. {company} provides no additional warranties, whether express, implied, statutory, or otherwise.",
+        f"Exclusion of Commercial Remedies. No cancellation charges, penalties, liquidated damages, service credits, retention amounts, back charges, set-offs, deductions, or similar remedies shall apply to {company} in connection with any accepted Purchase Order, unless expressly agreed in writing by {company}.",
+        f"Force Majeure and Supply Chain Disruptions. The Partner acknowledges that regional geopolitical developments, including those affecting the Middle East, may impact international transportation routes, customs clearance processes, supply chains, and product availability. Such events, together with any other events beyond the reasonable control of {company}, shall constitute Force Majeure events. {company} shall not be liable for any delay, non-performance, increased costs, or failure to deliver resulting from such events.",
+        f"Governing Terms. The terms and conditions contained in this quotation shall govern and form an integral part of any Purchase Order issued by the Partner pursuant to or in connection with this quotation and any related transaction between {company} and the Partner, notwithstanding the expiration of the quotation validity period, unless otherwise expressly agreed in writing by {company}.",
+        f"Conflicting Terms. Any additional, conflicting, inconsistent, or supplementary terms contained in any Purchase Order, acknowledgment, acceptance, procurement portal, standard terms and conditions, or other document issued by the Partner shall be null and void and shall not apply unless expressly accepted in writing by an authorized representative of {company}.",
+        f"Order Acceptance. No Purchase Order shall be binding upon {company} unless and until accepted in writing by {company}.",
+        "Order of Precedence. In the event of any conflict or inconsistency between the terms of this quotation and any document issued by the Partner, the terms of this quotation shall prevail.",
+    ]
+    return [f"{i}. {text}" for i, text in enumerate(points, 1)]
+
+
 def get_terms_section(header_info, total_price_sum):
+    terms = _get_base_terms_section(header_info, total_price_sum)
+    if (header_info.get('country') or '').strip().upper() != 'UAE':
+        return terms
+
+    # UAE: the new Mindware T&Cs replace the general bullets (C30, C31);
+    # the IBM compliance sections below are kept and shifted down.
+    company = header_info.get('_quote_company') or UAE_COMPANIES[0]
+    currency = header_info.get('_quote_currency') or UAE_CURRENCIES[0]
+    points = _uae_terms_points(company, currency)
+    shift = len(points) - 2
+
+    uae_terms = []
+    for cell_addr, text, *style in terms:
+        row = int(cell_addr[1:])
+        if row in (30, 31):
+            continue
+        if row > 31:
+            cell_addr = f"{cell_addr[0]}{row + shift}"
+            text = text.replace("Mindware FZ-LLC", company)
+        uae_terms.append((cell_addr, text, *style))
+    uae_terms[1:1] = [(f"C{30 + i}", point) for i, point in enumerate(points)]
+    return uae_terms
+
+
+def _get_base_terms_section(header_info, total_price_sum):
         # DEBUG: Print all header_info keys and values to diagnose extraction issues
     print("[DEBUG] header_info keys:", list(header_info.keys()))
     print("[DEBUG] header_info values:", header_info)

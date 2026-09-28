@@ -1926,6 +1926,13 @@ elif tool == "IBM Quotation":
     # Country selection
     country = st.selectbox("Choose a country:", ["UAE", "Qatar", "Levant", "KSA"])
 
+    # UAE only: company and currency used in the quotation T&Cs
+    quote_company = quote_currency = None
+    if country == "UAE":
+        from terms_template import UAE_COMPANIES, UAE_CURRENCIES
+        quote_company = st.selectbox("Company name:", UAE_COMPANIES)
+        quote_currency = st.selectbox("Currency:", UAE_CURRENCIES)
+
     logo_path = "image.png"
     compliance_text = ""  # Add compliance text if needed
 
@@ -1950,7 +1957,10 @@ elif tool == "IBM Quotation":
         pdf_raw_bytes = bytes(uploaded_pdf.getbuffer())
         pdf_bytes = io.BytesIO(pdf_raw_bytes)
         excel_bytes = io.BytesIO(uploaded_excel.getbuffer()) if uploaded_excel else None
-        result = process_ibm_combo(pdf_bytes, excel_bytes, country=country)
+        result = process_ibm_combo(
+            pdf_bytes, excel_bytes, country=country,
+            quote_company=quote_company, quote_currency=quote_currency,
+        )
         # Rebate is a separate, backend-only output (UAE only) computed by an
         # independent parser -- it never touches process_ibm_combo's inputs
         # or output, so it can't affect the quotation above.
