@@ -38,7 +38,8 @@ def get_terms_section(header_info, total_price_sum):
     # the IBM compliance sections below are kept and shifted down.
     company = header_info.get('_quote_company') or UAE_COMPANIES[0]
     currency = header_info.get('_quote_currency') or UAE_CURRENCIES[0]
-    points = _uae_terms_points(company, currency)
+    quote_validity = header_info.get("Bid Expiration Date") or "N/A"
+    points = [f"Quote Validity: {quote_validity}"] + _uae_terms_points(company, currency)
     shift = len(points) - 2
 
     uae_terms = []
