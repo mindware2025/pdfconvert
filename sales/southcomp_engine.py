@@ -2730,36 +2730,64 @@ def _resolve_item_code(item_no: str, config_rows: List[Tuple], fallback_desc: st
     return m.group(1) if m else ""
 
 
+_SOUTHCOMP_IMPORT_HEADERS = [
+    "Item", "Description", "ItemType", "LottedYN", "ShwRoom", "ProductLine", "SalesCat", "AccountCode", "Currency", "TaxClass", "Unit", "DeprecType", "StdProdLine", "StdProdCateg", "Userfield1", "Userfield2", "Userfield3", "UserFld4", "UserField 5", "COO", "HSCode", "VendorId", "ECCN", "ItemStatus", "StdProdLineType", "UPC", "ItemGroup", "SpecialLCId", "EcotaxeID", "SorecopID", "StCondId", "ProvCountry", "CTOYN", "ArabDescr", "ArabAddlDescr", "HighValueYN", "QtyOrderMin", "STKUseAsSerYN", "Weight", "ModelNo", "SplitSectorYN", "UserField6", "UserField7", "UserField8", "WHTVatId", "WHTIncId", "WhseItemYN", "RegNum", "RemoveDiscountFOCYN", "Userfield9", "Userfield10", "Userfield11", "Userfield12", "Userfield13", "Userfield14", "AcceptFOCYN", "Integration1", "Integration2", "Integration3", "MOHCode", "GTIN", "ExtWarr", "CTOItemId", "DemoYN", "AddlDescr", "StdItemId", "RptLoc",
+]
+
+_SOUTHCOMP_IMPORT_FIXED_BLANK_ROW = [
+    None, None, 'fixed', 'fixed', 'blank', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'blank', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', None, 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, 'blank'
+]
+
+
 def extract_item_creation_rows(input_bytes: bytes) -> List[Tuple[str, str]]:
     """Return [(item_code, description), ...] for one uploaded Dell quote.
 
-    Uses extract_quote_source_data() — the same parsing generate_southcomp_quote()
-    uses — so this stays in sync with the quotation tool automatically as that
-    parsing improves, and covers every template it covers.
+    The item code is prefixed with the quote reference to match Southcomp item
+    creation imports, e.g. "3400023336849.1-210-BPCK".
     """
     data = extract_quote_source_data(input_bytes)
     items = data["items"]
     config_rows = data["config_rows"]
+    quote_ref = (data.get("quote_ref") or "").strip()
     rows: List[Tuple[str, str]] = []
     for idx, item in enumerate(items, start=1):
         item_no = str(idx)
         fallback_desc = (item[0] if item else "").strip()
         description = _build_item_description(item_no, config_rows)
         if not description:
-            # No usable configuration breakdown for this item (either no
-            # config rows at all — a plain accessory — or rows with no
-            # recognizable module labels, as some rack-server BOQs have).
-            # Fall back to the item's own Pricing Summary line rather than
-            # leaving the row empty.
             description = fallback_desc
         item_code = _resolve_item_code(item_no, config_rows, fallback_desc)
+        if quote_ref and item_code and not item_code.startswith(quote_ref):
+            item_code = f"{quote_ref}-{item_code}"
         if item_code or description:
             rows.append((item_code, description))
     return rows
 
 
+def _build_item_import_row(item_code: str, description: str) -> list:
+    row = [None] * len(_SOUTHCOMP_IMPORT_HEADERS)
+    row[0] = item_code
+    row[1] = description
+    row[2] = 1
+    row[3] = 0
+    row[4] = "Entrepot"
+    row[5] = "DELL"
+    row[6] = "DL"
+    row[7] = "SE"
+    row[8] = "EUR"
+    row[9] = 0
+    row[10] = "PCS"
+    row[12] = "BR_0042"
+    row[14] = "DELL"
+    row[15] = "DELL"
+    row[21] = 4012142
+    row[23] = 1
+    row[66] = "CODE REPORTING"
+    return row
+
+
 def generate_item_creation_excel(rows: List[Tuple[str, str]]) -> bytes:
-    """Build the 2-column Item/Description workbook."""
+    """Build the Southcomp item-creation workbook matching the sample template."""
     wb = Workbook()
     ws = wb.active
     ws.title = "Items"
@@ -2774,27 +2802,33 @@ def generate_item_creation_excel(rows: List[Tuple[str, str]]) -> bytes:
         bottom=Side(style="thin", color="000000"),
     )
 
-    ws["A1"] = "Item"
-    ws["B1"] = "Description"
-    for col in ("A", "B"):
-        cell = ws[f"{col}1"]
+    ws.append(_SOUTHCOMP_IMPORT_HEADERS)
+    for col, header in enumerate(_SOUTHCOMP_IMPORT_HEADERS, start=1):
+        cell = ws.cell(1, col)
         cell.font = header_font
         cell.fill = header_fill
         cell.border = border_thin
         cell.alignment = Alignment(horizontal="left", vertical="center")
 
-    ws.column_dimensions["A"].width = 18
-    ws.column_dimensions["B"].width = 72
-
-    r = 2
     for item_code, description in rows:
-        ws.cell(r, 1, item_code).border = border_thin
-        desc_cell = ws.cell(r, 2, description)
-        desc_cell.border = border_thin
-        desc_cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
-        r += 1
+        ws.append(_build_item_import_row(item_code, description))
+        ws.append(_SOUTHCOMP_IMPORT_FIXED_BLANK_ROW)
 
+    for col_idx, _ in enumerate(_SOUTHCOMP_IMPORT_HEADERS, start=1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = 14
+    ws.column_dimensions["A"].width = 24
+    ws.column_dimensions["B"].width = 68
     ws.freeze_panes = "A2"
+
+    for row_idx in range(1, ws.max_row + 1):
+        for col_idx in range(1, ws.max_column + 1):
+            cell = ws.cell(row_idx, col_idx)
+            cell.border = border_thin
+            if row_idx == 1:
+                cell.alignment = Alignment(horizontal="left", vertical="center")
+            elif row_idx >= 2:
+                cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
     buf = BytesIO()
     wb.save(buf)
     buf.seek(0)
