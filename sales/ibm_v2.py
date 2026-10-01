@@ -74,10 +74,17 @@ def check_bid_number_match(excel_file, pdf_bid_number):
 USD_TO_AED = 3.6725
 USD_TO_SAR = 3.75  # KSA
 
-def _usd_rate(country: str):
+def _uae_usd(country: str, quote_currency=None):
+    return bool(country) and str(country).upper() == "UAE" and quote_currency == "USD"
+
+def _usd_rate(country: str, quote_currency=None):
+    if _uae_usd(country, quote_currency):
+        return 1.0
     return USD_TO_SAR if (country and str(country).upper() == "KSA") else USD_TO_AED
 
-def _currency_label(country: str):
+def _currency_label(country: str, quote_currency=None):
+    if _uae_usd(country, quote_currency):
+        return "USD"
     return "SAR" if (country and str(country).upper() == "KSA") else "AED"
 
 def _partner_discount_rate(country: str):
@@ -110,7 +117,9 @@ def create_styled_excel_v2(
     data rows (Qatar): [SKU, Product Description, Quantity, Start Date, End Date, Unit Price in USD, Cost (USD), Partner Discount, Partner Price in USD]
     data rows (UAE):   [SKU, Product Description, Quantity, Start Date, End Date, Cost]
     Table data is provided from Excel, not PDF.
+    UAE with header_info['_quote_currency'] == "USD": prices stay in USD (rate 1).
     """
+    quote_currency = header_info.get('_quote_currency')
     wb = Workbook()
     ws = wb.active
     ws.title = "Quotation"
@@ -225,7 +234,7 @@ def create_styled_excel_v2(
         ws["H13"].alignment = Alignment(horizontal="left", vertical="center")
 
     # --- Table Headers ---
-    curr = _currency_label(country)
+    curr = _currency_label(country, quote_currency)
     if country in {"Qatar", "Levant"}:
         headers = [
                    "Sl", "SKU", "Product Description", "Quantity", "Start Date", "End Date",
@@ -310,7 +319,7 @@ def create_styled_excel_v2(
             ws.cell(row=excel_row, column=9, value=cost).number_format = '"USD"#,##0.00'
             ws.cell(row=excel_row, column=9).font = Font(size=11, color="1F497D")
 
-            total_formula = f"=I{excel_row}*{_usd_rate(country)}"
+            total_formula = f"=I{excel_row}*{_usd_rate(country, quote_currency)}"
             ws.cell(row=excel_row, column=10, value=total_formula)
             ws.cell(row=excel_row, column=10).font = Font(size=11, color="1F497D")
 
@@ -323,7 +332,7 @@ def create_styled_excel_v2(
             ws.cell(row=excel_row, column=12).font = Font(size=11, color="1F497D")
 
             for price_col in [8, 10, 11, 12]:
-                ws.cell(row=excel_row, column=price_col).number_format = f'"{_currency_label(country)}"#,##0.00'
+                ws.cell(row=excel_row, column=price_col).number_format = f'"{_currency_label(country, quote_currency)}"#,##0.00'
             ws.cell(row=excel_row, column=9).number_format = '"USD"#,##0.00'
 
             for col in range(2, 2 + len(headers)):
@@ -382,7 +391,7 @@ def create_styled_excel_v2(
 
             total_formula = f"=SUM(J{data_start_row}:J{data_end_row})"
             ws[f"J{summary_row}"] = total_formula
-            ws[f"J{summary_row}"].number_format = f'"{_currency_label(country)}"#,##0.00'
+            ws[f"J{summary_row}"].number_format = f'"{_currency_label(country, quote_currency)}"#,##0.00'
             ws[f"J{summary_row}"].font = Font(bold=True, color="1F497D")
             ws[f"J{summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
 
@@ -395,7 +404,7 @@ def create_styled_excel_v2(
 
             bp_total_formula = f"=SUM(L{data_start_row}:L{data_end_row})"
             ws[f"L{bp_summary_row}"] = bp_total_formula
-            ws[f"L{bp_summary_row}"].number_format = f'"{_currency_label(country)}"#,##0.00'
+            ws[f"L{bp_summary_row}"].number_format = f'"{_currency_label(country, quote_currency)}"#,##0.00'
             ws[f"L{bp_summary_row}"].font = Font(bold=True, color="1F497D")
             ws[f"L{bp_summary_row}"].fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
 

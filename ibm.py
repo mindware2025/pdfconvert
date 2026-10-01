@@ -1428,6 +1428,11 @@ def create_styled_excel_template2(
     else:
         currency_label = "AED"
         usd_to_local = 3.6725
+    # Rows arrive already converted at the country rate; keep it to recover USD
+    extraction_rate = usd_to_local
+    if c == "UAE" and header_info.get('_quote_currency') == "USD":
+        currency_label = "USD"
+        usd_to_local = 1.0
     add_debug(f"[TEMPLATE2 EXCEL] Creating Template 2 Excel with {len(data)} rows - 8 COLUMNS ONLY")
 
     wb = Workbook()
@@ -1599,7 +1604,7 @@ def create_styled_excel_template2(
         bid_total_aed_extracted = row[7] if len(row) > 7 else 0  # Already converted AED amount
         
         # Convert back to USD to use in the H formula
-        extracted_total_usd = round(bid_total_aed_extracted / usd_to_local, 2) if bid_total_aed_extracted else 0
+        extracted_total_usd = round(bid_total_aed_extracted / extraction_rate, 2) if bid_total_aed_extracted else 0
         
         # Fill basic data in columns C, D, E, F (no formulas)
         basic_data = [sku, desc, qty, duration]
@@ -1629,7 +1634,7 @@ def create_styled_excel_template2(
         # Otherwise, calculate from total/qty
         if bid_total_aed_extracted == 0 and bid_unit_aed > 0:
             # No "Bid Total Commit Value" column - use extracted unit price directly
-            unit_price_formula = f"={bid_unit_aed}"
+            unit_price_formula = f"={round(bid_unit_aed / extraction_rate * usd_to_local, 2)}"
             add_debug(f"[TEMPLATE2 FORMULA] Unit Price AED: {unit_price_formula} (from extracted Bid Unit Price)")
         elif qty and qty > 0:
             # Normal case - calculate unit price from total
