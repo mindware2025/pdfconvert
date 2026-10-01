@@ -70,6 +70,7 @@ def _get_base_terms_section(header_info, total_price_sum):
          mep_value = header_info.get("Value Seller Total Commit Value", "")
     # Conversion rate and currency by country: KSA -> 3.75 SAR; UAE/Qatar -> 3.6725 AED
     c = (header_info.get('country') or '').strip().upper()
+    quote_currency = (header_info.get('_quote_currency') or '').strip().upper()
     rate = 3.75 if c == 'KSA' else 3.6725
     currency = 'SAR' if c == 'KSA' else 'AED'
     # Create text with MEP placeholder - will be processed to include formula
@@ -79,7 +80,7 @@ def _get_base_terms_section(header_info, total_price_sum):
                         mep_numeric = float(mep_value.replace(",", ""))
                         header_info["_MEP_NUMERIC"] = mep_numeric
                         mep_local = mep_numeric * rate
-                        if header_info.get('country', '').lower() == 'qatar':
+                        if quote_currency == 'USD' or c == 'QATAR':
                                 formatted_price = f"USD {mep_value}"
                         else:
                                 formatted_price = f"USD {mep_value} ({currency} {mep_local:,.2f})"
