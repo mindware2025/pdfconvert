@@ -28,6 +28,7 @@ def render_southcomp_item_creation_tool(team, update_usage) -> None:
         ("southcomp_items_output_bytes", None),
         ("southcomp_items_output_name", None),
         ("southcomp_items_row_count", 0),
+        ("southcomp_items_notes", []),
         ("southcomp_items_uploaded_hash", None),
     ]:
         if key not in st.session_state:
@@ -45,6 +46,7 @@ def render_southcomp_item_creation_tool(team, update_usage) -> None:
             st.session_state["southcomp_items_output_bytes"] = None
             st.session_state["southcomp_items_output_name"] = None
             st.session_state["southcomp_items_row_count"] = 0
+            st.session_state["southcomp_items_notes"] = []
     else:
         inputs = []
 
@@ -54,10 +56,11 @@ def render_southcomp_item_creation_tool(team, update_usage) -> None:
         else:
             try:
                 with st.spinner("⚙️ Extracting item configurations..."):
-                    xlsx_bytes, row_count = generate_item_creation_excel_from_inputs(inputs)
-                    st.session_state["southcomp_items_output_bytes"] = xlsx_bytes
+                    xlsx_bytes, row_count, notes = generate_item_creation_excel_from_inputs(inputs)
+                    st.session_state["southcomp_items_output_bytes"] = xlsx_bytes if row_count else None
                     st.session_state["southcomp_items_output_name"] = build_item_creation_filename()
                     st.session_state["southcomp_items_row_count"] = row_count
+                    st.session_state["southcomp_items_notes"] = notes
                 if row_count:
                     st.success(f"✅ Item list generated — {row_count} item(s) extracted.")
                 else:
@@ -70,7 +73,11 @@ def render_southcomp_item_creation_tool(team, update_usage) -> None:
             except Exception as e:
                 st.session_state["southcomp_items_output_bytes"] = None
                 st.session_state["southcomp_items_output_name"] = None
+                st.session_state["southcomp_items_notes"] = []
                 st.error(str(e))
+
+    if st.session_state.get("southcomp_items_notes"):
+        st.warning("Please check:\n\n" + "\n".join(f"- {n}" for n in st.session_state["southcomp_items_notes"]))
 
     if st.session_state.get("southcomp_items_output_bytes"):
         pdf_count = sum(1 for name, _ in inputs if name.lower().endswith(".pdf")) if inputs else 0

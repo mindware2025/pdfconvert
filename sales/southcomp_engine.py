@@ -555,11 +555,23 @@ def _is_grouped_summary_row(ws, r: int, cols: Dict) -> bool:
     return "total" in row_text and "total selling price" not in row_text
 
 
-def _extract_items_grouped(ws) -> Tuple[List, List]:
+_QUOTE_REF_PAT = re.compile(r"\b\d{6,}(?:\.[A-Za-z0-9]+)?[A-Za-z0-9\-]*\b")
+
+
+def _extract_items_grouped(ws, item_quote_refs: Optional[Dict[str, str]] = None) -> Tuple[List, List]:
+    """item_quote_refs, when given, is filled with {item_no: quote ref} — each
+    item's ref comes from the "Quote | <ref>" row above it (a grouped BOQ can
+    hold several quotes), falling back to the item row's own "Config" cell."""
     header_info = _find_grouped_header(ws)
     if not header_info:
         return [], []
     header_row, cols = header_info
+    config_col = next(
+        (c for c in range(1, ws.max_column + 1)
+         if _cell_to_text(ws.cell(header_row, c).value).strip().lower() == "config"),
+        None,
+    )
+    current_quote_ref = ""
     items: List[Tuple] = []
     config_rows: List[Tuple] = []
     current_item: Optional[str] = None
@@ -572,6 +584,10 @@ def _extract_items_grouped(ws) -> Tuple[List, List]:
                 break
             continue
         blank_streak = 0
+        if _cell_to_text(ws.cell(r, 1).value).strip().lower().startswith("quote"):
+            m = _QUOTE_REF_PAT.search(_row_text(ws, r, 2, ws.max_column))
+            if m:
+                current_quote_ref = m.group(0)
         if _is_grouped_summary_row(ws, r, cols):
             continue
         first_cell = _cell_to_text(ws.cell(r, 1).value).strip()
@@ -590,6 +606,13 @@ def _extract_items_grouped(ws) -> Tuple[List, List]:
             if desc:
                 items.append((desc, qty_val, unit_price, total_price))
                 current_item = str(len(items))
+                if item_quote_refs is not None:
+                    ref = current_quote_ref
+                    if not ref and config_col:
+                        m = _QUOTE_REF_PAT.search(_cell_to_text(ws.cell(r, config_col).value))
+                        ref = m.group(0) if m else ""
+                    if ref:
+                        item_quote_refs[current_item] = ref
             continue
         if current_item and desc:
             config_rows.append((current_item, "", "", desc, sku, qty_raw))
@@ -1348,7 +1371,7 @@ def _try_extract_checkout_confirmation_pdf(
     items: List[Tuple] = []
     in_items = False
 
-    for line in lines:
+    for raw_line, line in zip(raw_lines, lines):
         stripped = line.strip()
         low = stripped.lower()
         if not low:
@@ -1404,7 +1427,11 @@ def _try_extract_checkout_confirmation_pdf(
             if low.startswith("subtotal:"):
                 in_items = False
                 continue
-            m = _CHECKOUT_ITEM_LINE_PAT.match(stripped)
+            # Item lines are matched on the raw text first: de-duplicating
+            # words also collapses "$9,800.20 $9,800.20" (unit price equals
+            # subtotal whenever qty is 1) into a single price, which then no
+            # longer fits the two-price pattern and the item is lost.
+            m = _CHECKOUT_ITEM_LINE_PAT.match(raw_line.strip()) or _CHECKOUT_ITEM_LINE_PAT.match(stripped)
             if m:
                 desc_s, qty_s, unit_s, total_s = m.groups()
                 qty_val = int(qty_s)
@@ -1647,6 +1674,32 @@ def _extract_all_config_rows(ws) -> List[Tuple]:
         i += 1
 
     return cleaned
+
+
+_HEADING_SKU_RE = re.compile(r"\((\d{3,4}-[A-Za-z0-9]{2,10})\)\s*$")
+
+
+def _extract_product_detail_heading_skus(ws) -> Dict[str, str]:
+    """{item_no: SKU} from the Product Details per-item headings, e.g.
+    "3." | "12Gb HD-Mini SAS cable, 2m, Customer Kit [...] (470-ABDR)".
+
+    _extract_all_config_rows() only reads headings that have a component
+    table under them, so a plain accessory's SKU is otherwise lost. Items are
+    numbered the same way (one per "N." heading, in order).
+    """
+    anchor = _find_product_details_anchor(ws)
+    if not anchor:
+        return {}
+    out: Dict[str, str] = {}
+    item_counter = 0
+    for r in range(anchor + 1, ws.max_row + 1):
+        if not re.match(r"^\d+\.$", _cell_to_text(ws.cell(r, 1).value)):
+            continue
+        item_counter += 1
+        m = _HEADING_SKU_RE.search(_cell_to_text(ws.cell(r, 2).value))
+        if m:
+            out[str(item_counter)] = m.group(1)
+    return out
 
 
 def _extract_consolidation_fee(ws) -> float:
@@ -2369,7 +2422,7 @@ def describe_input_kind(input_bytes: bytes) -> str:
     return "boq_generic"
 
 
-def extract_quote_source_data(input_bytes: bytes) -> Dict[str, object]:
+def extract_quote_source_data(input_bytes: bytes, exchange_rate: float = 0.0) -> Dict[str, object]:
     """Extract items, config_rows and metadata from any supported Dell quote
     input (PDF, Excel BOQ, or Word order form).
 
@@ -2377,6 +2430,9 @@ def extract_quote_source_data(input_bytes: bytes) -> Dict[str, object]:
     used, factored out unchanged so a second tool (item-code/description
     extraction) can reuse the same parsing without duplicating — or
     risking drifting from — it.
+
+    exchange_rate (EUR/USD) is only used to normalize a EUR-priced Word form
+    back to USD; callers that don't need prices can leave it at 0.
     """
     is_pdf = input_bytes.lstrip().startswith(b"%PDF")
     is_docx = not is_pdf and _is_docx(input_bytes)
@@ -2386,6 +2442,8 @@ def extract_quote_source_data(input_bytes: bytes) -> Dict[str, object]:
     quote_meta: Dict[str, str] = {}
     consolidation_fee = 0.0
     part_numbers: Dict[str, str] = {}
+    item_quote_refs: Dict[str, str] = {}
+    heading_skus: Dict[str, str] = {}
 
     if is_docx:
         items, quote_meta, quote_ref, date_text, source_currency, part_numbers = _extract_southcomp_docx(input_bytes)
@@ -2427,7 +2485,7 @@ def extract_quote_source_data(input_bytes: bytes) -> Dict[str, object]:
         # Try grouped template
         elif _find_grouped_header(src_ws) is not None:
             quote_ref, date_text = _extract_grouped_metadata(src_ws)
-            items, grp_config_rows = _extract_items_grouped(src_ws)
+            items, grp_config_rows = _extract_items_grouped(src_ws, item_quote_refs)
             config_rows = _extract_config_rows(config_ws) if config_ws else grp_config_rows
         else:
             # Metadata
@@ -2451,6 +2509,7 @@ def extract_quote_source_data(input_bytes: bytes) -> Dict[str, object]:
 
             consolidation_fee = _extract_consolidation_fee(src_ws) + _extract_shipping_fee(src_ws)
             part_numbers = _extract_part_numbers(config_ws or src_ws)
+            heading_skus = _extract_product_detail_heading_skus(src_ws)
 
         if not quote_meta:
             quote_meta = _extract_quote_metadata(src_ws)
@@ -2466,6 +2525,8 @@ def extract_quote_source_data(input_bytes: bytes) -> Dict[str, object]:
         "quote_meta": quote_meta,
         "consolidation_fee": consolidation_fee,
         "part_numbers": part_numbers,
+        "item_quote_refs": item_quote_refs,
+        "heading_skus": heading_skus,
         "is_pdf": is_pdf,
         "is_docx": is_docx,
     }
@@ -2486,7 +2547,7 @@ def generate_southcomp_quote(
     currency_code = (currency_code or "EUR").upper()
     effective_rate = exchange_rate if currency_code == "EUR" else 1.0
 
-    data = extract_quote_source_data(input_bytes)
+    data = extract_quote_source_data(input_bytes, exchange_rate)
 
     # Apply margin to consolidation fee (margin as share of selling price)
     margin_factor = margin_percent / 100.0
@@ -2512,14 +2573,14 @@ def generate_southcomp_quote(
 
 
 # ==================== ITEM CREATION (Item code + compact spec Description) ====================
-# Builds a 2-column "Item / Description" list from any supported Dell quote
-# input, reusing extract_quote_source_data() so it always sees exactly the
-# same items/config_rows the quotation-generator tool does. The Description
-# is assembled from a fixed set of Product Details / Configuration modules
-# (Base, Display, Processor, Memory, Storage, Wireless, Operating System,
-# Primary Battery), each compacted down to its essentials — a module that
-# isn't present for a given item (e.g. a server has no Display or Wireless)
-# is simply skipped rather than left as an error.
+# Builds the Southcomp item-creation import sheet from any supported Dell
+# quote input, reusing extract_quote_source_data() so it always sees exactly
+# the same items/config_rows the quotation-generator tool does. The
+# Description is assembled from a fixed set of Product Details /
+# Configuration modules (Base, Display, Processor, Memory, Storage, Wireless,
+# Operating System, Primary Battery), each compacted down to its essentials —
+# a module that isn't present for a given item (e.g. a server has no Display
+# or Wireless) is simply skipped rather than left as an error.
 
 _TRADEMARK_RE = re.compile(r"[®™]|\(R\)|\(TM\)", re.IGNORECASE)
 
@@ -2527,15 +2588,30 @@ _TRADEMARK_RE = re.compile(r"[®™]|\(R\)|\(TM\)", re.IGNORECASE)
 # The optional "(?:processor\s+)?" skips the filler word some PDFs insert
 # between the tier and the model, e.g. "Ultra 7 processor 265HX".
 _PROC_ULTRA_RE = re.compile(r"ultra\D{0,12}?(\d+)\s+(?:processor\s+)?([A-Za-z0-9]+)", re.IGNORECASE)
-# Intel Core "i3-14100" / "i7-1370P" style.
-_PROC_COREI_RE = re.compile(r"\bi([3579])[\s\-]+(\S+)", re.IGNORECASE)
-# Intel Xeon "Silver 4410Y" / "Gold 5418Y" style — tier word is dropped, model kept.
+# Intel Core "i3-14100" / "i7-1370P" / "i5 14th Gen 14500" style — the
+# generation words are skipped so the model ("14500"), not "14th", is kept.
+_PROC_COREI_RE = re.compile(
+    r"\bi([3579])[\s\-]+(?:\d{1,2}(?:st|nd|rd|th)\s+gen(?:eration)?\s+)?([A-Za-z0-9]+)",
+    re.IGNORECASE,
+)
+# Intel "Core 5 320" / "Core 7 150U" style (no Ultra, no i-prefix).
+_PROC_CORE_N_RE = re.compile(r"\bcore\s+([3579])\s+(\d{3,4}[A-Za-z]{0,2})\b", re.IGNORECASE)
+# Intel Xeon "Silver 4410Y" / "Gold 6548Y+" / "w5-2455X" style — tier word is
+# dropped, model kept (including a "+" suffix, which is a different CPU).
 _PROC_XEON_RE = re.compile(
-    r"xeon(?:\s*(?:®|\(r\)))?\s*(?:gold|silver|platinum|bronze)?\s*([A-Za-z0-9]+)",
+    r"xeon\s*(?:gold|silver|platinum|bronze)?\s*([A-Za-z0-9]+(?:-[A-Za-z0-9]+)?\+?)",
     re.IGNORECASE,
 )
 # AMD "EPYC 9555P" style.
 _PROC_EPYC_RE = re.compile(r"epyc\s+([A-Za-z0-9]+)", re.IGNORECASE)
+# Tried in order; the first family that matches names the processor.
+_PROC_FAMILIES: List[Tuple["re.Pattern", str]] = [
+    (_PROC_ULTRA_RE, "Cu{}-{}"),
+    (_PROC_COREI_RE, "i{}-{}"),
+    (_PROC_CORE_N_RE, "C{}-{}"),
+    (_PROC_XEON_RE, "Xeon-{}"),
+    (_PROC_EPYC_RE, "EPYC-{}"),
+]
 # "12 cores" or the "12C/24T" shorthand server BOQs use. \b before the digit
 # keeps this from matching digits embedded in a compound token like "A725".
 _PROC_CORES_RE = re.compile(r"\b(\d+)\s*(?:cores?\b|C/\d+T)", re.IGNORECASE)
@@ -2549,56 +2625,81 @@ _PROC_MEM_TAIL_RE = re.compile(r"with\s+(\d+)\s*GB\s+Memory", re.IGNORECASE)
 _DISPLAY_INCH_RE = re.compile(r'(\d+(?:\.\d+)?)\s*"')
 _GB_RE = re.compile(r"\b(\d+(?:\.\d+)?)\s*GB", re.IGNORECASE)
 _STORAGE_SIZE_RE = re.compile(r"\b(\d+(?:\.\d+)?)\s*(GB|TB)\b", re.IGNORECASE)
-_STORAGE_TYPE_RE = re.compile(r"\b(SSD|HDD|NVMe)\b", re.IGNORECASE)
-_BATTERY_YEAR_RE = re.compile(r"\b(\d+)[\s-]*year", re.IGNORECASE)
+_BATTERY_YEAR_RE = re.compile(r"\b(\d+)[\s-]*(?:year|yr)", re.IGNORECASE)
+_WIFI_GEN_RE = re.compile(r"wi-?fi\s*(\d+(?:/\d+)?E?)\b", re.IGNORECASE)
+_WIFI_MODEL_RE = re.compile(
+    r"\b((?:AX|BE|AC)\d{3}[A-Z]?|RTL\d{4}[A-Z]*|MT\d{4}[A-Z]*|QCN[A-Z]*\d{3,4}[A-Z]*)\b",
+    re.IGNORECASE,
+)
 # A Dell SKU-shaped bracketed code, e.g. "(210-BPPK)" — NOT "(AZERTY)" (no
 # digit/dash). Used only against untrusted text (an item's own top-level
 # pricing-line name, which can contain unrelated brackets like a language
 # or layout code).
 _SKU_BRACKET_RE = re.compile(r"\((\d{3,4}-[A-Za-z0-9]{2,10})\)")
+_SKU_SHAPE_RE = re.compile(r"^\d{3,4}-[A-Za-z0-9]{2,10}")
 # A looser bracketed model code, e.g. "(PB14250)" — allowed only against text
 # already confirmed to be the "Base" module's own description, where a
 # bracket is reliably a Dell model code even without the digit-dash shape.
 _MODEL_BRACKET_RE = re.compile(r"\(([A-Za-z0-9\-]{4,15})\)")
+# A Dell model code inside an item's own name, e.g. "Dell Pro Dock - WD25",
+# "Dell Pro Slim QCS1250" — the only identifier Dell's online-store quote
+# gives items that carry no part number at all.
+_MODEL_CODE_RE = re.compile(r"\b([A-Z]{2,3}\d{2,5}[A-Z0-9]*)\b")
+# Dell's order code in square brackets, e.g. "... Customer Kit - [VPXRKM]".
+_ORDER_CODE_RE = re.compile(r"\[([A-Z0-9]{5,8})\]")
+# "[config name]" / "- [order code]" tails Dell appends to item names.
+_SQUARE_BRACKETS_RE = re.compile(r"\s*-?\s*\[[^\[\]]*\]")
+_BASE_BUILD_SUFFIX_RE = re.compile(r"(?:\s+(?:XCTO|CTO|BTO|BTX|Base))+\s*$", re.IGNORECASE)
+_BASE_MODEL_TAIL_RE = re.compile(r",\s*[A-Z]{1,3}\d{4,6}\s*$")
+# A Dell client model code left unbracketed in a product name, e.g. "Dell Pro
+# 24 All-in-One QC24251 35W" or "Dell Pro Slim QCS1250". Only 2 letters + 5
+# digits or 3 letters + 4 digits: a PowerEdge "XE9680" / "HS5610" (2 + 4) is
+# the server's own model name and must stay.
+_BASE_MODEL_CODE_RE = re.compile(r"\s*\b(?:[A-Z]{2}\d{5}|[A-Z]{3}\d{4})\b")
+
+
+def _strip_square_brackets(text: str) -> str:
+    # Innermost first, so a nested "[A - [B]]" goes away in two passes.
+    prev = None
+    while prev != text:
+        prev, text = text, _SQUARE_BRACKETS_RE.sub("", text)
+    return text.strip()
 
 
 def _abbreviate_base(desc: str) -> str:
-    return desc.split("(", 1)[0].strip() or desc.strip()
+    """"Dell Pro 14 Plus (PB14250) XCTO Base" -> "Dell Pro 14 Plus";
+    "Precision 3280 CFF CTO BASE" -> "Precision 3280 CFF"."""
+    text = _strip_square_brackets(_TRADEMARK_RE.sub("", desc))
+    text = text.split("(", 1)[0].strip() or text.strip()
+    text = _BASE_MODEL_TAIL_RE.sub("", text)
+    text = _BASE_MODEL_CODE_RE.sub("", text)
+    text = _BASE_BUILD_SUFFIX_RE.sub("", text).strip()
+    return text or desc.strip()
 
 
 def _abbreviate_processor(desc: str) -> str:
-    prefix = ""
-    m = _PROC_ULTRA_RE.search(desc)
-    if m:
-        prefix = f"Cu{m.group(1)}-{m.group(2)}"
-    else:
-        m = _PROC_COREI_RE.search(desc)
+    text = _TRADEMARK_RE.sub("", desc)
+    parts = []
+    for pattern, fmt in _PROC_FAMILIES:
+        m = pattern.search(text)
         if m:
-            prefix = f"i{m.group(1)}-{m.group(2)}"
-        else:
-            m = _PROC_XEON_RE.search(desc)
-            if m:
-                prefix = f"Xeon-{m.group(1)}"
-            else:
-                m = _PROC_EPYC_RE.search(desc)
-                if m:
-                    prefix = f"EPYC-{m.group(1)}"
-
-    parts = [prefix] if prefix else []
-    mc = _PROC_CORES_RE.search(desc)
+            parts.append(fmt.format(*m.groups()))
+            break
+    mc = _PROC_CORES_RE.search(text)
     if mc:
         parts.append(f"{mc.group(1)}C")
-    mg = _PROC_GHZ_RE.search(desc) or _PROC_GSHORT_RE.search(desc)
-    if mg:
-        parts.append(f"{mg.group(1)}GHz")
-    mm = _PROC_MEM_TAIL_RE.search(desc)
-    if mm:
-        parts.append(f"{mm.group(1)}GB")
+    # "2.6 GHz to 5.0 GHz" -> the top speed, matching the "up to N GHz"
+    # figure the other Dell processor descriptions give.
+    speeds = _PROC_GHZ_RE.findall(text) or _PROC_GSHORT_RE.findall(text)
+    if speeds:
+        # One style whatever Dell wrote: "5.40" -> "5.4", "2G" -> "2.0".
+        ghz = f"{max(float(s) for s in speeds):.2f}".rstrip("0")
+        parts.append(f"{ghz}0GHz" if ghz.endswith(".") else f"{ghz}GHz")
 
     if parts:
         return " ".join(parts)
     # Unrecognized processor family — fall back to the same "before the (" trim as Base.
-    return desc.split("(", 1)[0].strip()
+    return text.split("(", 1)[0].strip()
 
 
 def _abbreviate_display(desc: str) -> str:
@@ -2606,28 +2707,48 @@ def _abbreviate_display(desc: str) -> str:
     return f'{m.group(1)}"' if m else ""
 
 
-def _abbreviate_memory(desc: str) -> str:
-    m = _GB_RE.search(desc)
-    return f"{m.group(1)}GB" if m else ""
-
-
 def _abbreviate_storage(desc: str) -> str:
+    """"512 GB, TLC, SSD" -> "512GB SSD". Empty when there's no capacity:
+    that's an empty bay ("No Hard Drive") or a mechanical part listed under
+    the same module ("Thermal Pad, Screw and Rubber for SSD"), not a drive."""
     size_m = _STORAGE_SIZE_RE.search(desc)
-    size = f"{size_m.group(1)}{size_m.group(2).upper()}" if size_m else ""
-    type_m = _STORAGE_TYPE_RE.search(desc)
-    typ = type_m.group(1).upper() if type_m else ""
-    return f"{size} {typ}".strip()
+    if not size_m:
+        return ""
+    low = desc.lower()
+    if "ssd" in low:
+        kind = "SSD"
+    elif "nvme" in low:
+        kind = "NVMe"
+    elif "hdd" in low or "hard drive" in low:
+        kind = "HDD"
+    elif "m.2" in low or "pcie" in low:
+        kind = "SSD"
+    else:
+        kind = ""
+    return f"{size_m.group(1)}{size_m.group(2).upper()} {kind}".strip()
 
 
 def _abbreviate_wireless(desc: str) -> str:
+    """Normalized to "Wi-Fi <generation> <card>", e.g. "Wi-Fi 6E AX211",
+    whichever order Dell wrote them in ("Intel BE201 Wi-Fi 7 2x2, ...")."""
     text = _TRADEMARK_RE.sub("", desc)
+    gen_m = _WIFI_GEN_RE.search(text)
+    model_m = _WIFI_MODEL_RE.search(text)
+    if gen_m or model_m:
+        parts = []
+        if gen_m:
+            # "Wi-Fi 6/6E" -> "6E" (the card supports both; 6E is the higher one)
+            parts.append("Wi-Fi " + gen_m.group(1).upper().split("/")[-1])
+        if model_m:
+            parts.append(model_m.group(1).upper())
+        return " ".join(parts)
     text = text.split(",", 1)[0].strip()
     text = re.sub(r"^(Intel|Dell)\s+", "", text, flags=re.IGNORECASE)
     return text.strip()
 
 
 def _abbreviate_os(desc: str) -> str:
-    return desc.split(",", 1)[0].strip()
+    return re.sub(r"\s{2,}", " ", _TRADEMARK_RE.sub("", desc)).split(",", 1)[0].strip()
 
 
 def _abbreviate_battery(desc: str) -> str:
@@ -2635,70 +2756,188 @@ def _abbreviate_battery(desc: str) -> str:
     return f"{m.group(1)}Y" if m else ""
 
 
-# (module names to look for, in the order they're concatenated) -> abbreviator.
-# A module name that isn't present for a given item is simply skipped.
-_ITEM_DESC_FIELDS: List[Tuple[Tuple[str, ...], "callable"]] = [
-    (("base",), _abbreviate_base),
-    (("display",), _abbreviate_display),
-    (("processor",), _abbreviate_processor),
-    (("memory", "memory capacity"), _abbreviate_memory),
-    (("storage", "hard drives"), _abbreviate_storage),
-    (("wireless",), _abbreviate_wireless),
-    (("operating system",), _abbreviate_os),
-    (("primary battery",), _abbreviate_battery),
-]
+_CPU_FAMILY_RE = re.compile(
+    r"\b(?:xeon|epyc|ryzen|threadripper|core\s+(?:ultra|i[3579]\b|[3579]\b))",
+    re.IGNORECASE,
+)
+_CPU_EXCLUDE_RE = re.compile(r"heatsink|thermal|label|branding|graphics", re.IGNORECASE)
+# Grouped/compact BOQs list components with no module column, so those rows
+# are recognized by their own text instead.
+_UNLABELED_MEMORY_RE = re.compile(r"^\s*\d+\s*GB\b.*?(?:DIMM|DDR\d|CAMM)", re.IGNORECASE)
+_UNLABELED_STORAGE_RE = re.compile(
+    r"^\s*(?:\(\d+\)\s*)*\d+(?:\.\d+)?\s*(?:GB|TB)\b.*?(?:SSD|HDD|NVMe|Hard Drive)",
+    re.IGNORECASE,
+)
+_UNLABELED_OS_RE = re.compile(
+    r"^\s*(?:no operating system|(?:microsoft\s+)?windows\s+(?:server|\d+)|vmware|red hat|suse|ubuntu)",
+    re.IGNORECASE,
+)
+_STORAGE_MODULE_EXCLUDE_RE = re.compile(
+    r"controller|config|raid|cable|bracket|reader|boot|software|adapter|driver",
+    re.IGNORECASE,
+)
+# Mechanical parts listed under the same module as the real component, e.g.
+# a "Wireless" row for the WLAN card's screw, or an external antenna.
+_ITEM_JUNK_RE = re.compile(r"\b(?:screw|antenna|bracket|filler|thermal|rubber|cable)\b", re.IGNORECASE)
 
 
-def _find_module_value(item_no: str, config_rows: List[Tuple], names: Tuple[str, ...]) -> str:
-    # Some BOQs list the same module twice for one item — e.g. a "Wireless"
-    # row for a mechanical filler screw followed by the actual wireless card.
-    # The later row is consistently the real component, so keep the last
-    # match rather than the first.
-    names_norm = {re.sub(r"\s+", " ", n).strip().lower() for n in names}
-    found = ""
+def _is_cpu_text(desc: str) -> bool:
+    text = _TRADEMARK_RE.sub("", desc or "")
+    return bool(_CPU_FAMILY_RE.search(text)) and not _CPU_EXCLUDE_RE.search(text)
+
+
+def _classify_config_row(module: str, desc: str, sku: str) -> str:
+    """Which description field a config row feeds ("" = none).
+
+    module is normalized (lowercase, single-spaced). "system" is a base row
+    that isn't labelled "Base": some exports name the base module after the
+    product itself ("PowerEdge R6715", "Dell Pro Max Slim FCS1250") or have
+    no module column at all — Dell system bases are always 210- SKUs.
+    """
+    if not module:
+        if sku.startswith("210-"):
+            return "system"
+        if _is_cpu_text(desc):
+            return "processor"
+        if _UNLABELED_MEMORY_RE.match(desc):
+            return "memory"
+        if _UNLABELED_STORAGE_RE.match(desc):
+            return "storage"
+        if _UNLABELED_OS_RE.match(desc):
+            return "os"
+        return ""
+    if module == "base":
+        return "base"
+    if module == "display":
+        return "display"
+    if module == "processor":
+        return "processor"
+    if module == "additional processor":
+        # "No Additional Processor" vs. a real second CPU
+        return "processor" if _is_cpu_text(desc) else ""
+    if module in ("memory", "memory capacity"):
+        return "memory"
+    if ("storage" in module or "hard drive" in module) and not _STORAGE_MODULE_EXCLUDE_RE.search(module):
+        return "storage"
+    if module == "wireless":
+        return "wireless"
+    if module == "operating system":
+        return "os"
+    if module == "primary battery":
+        return "battery"
+    return "system" if sku.startswith("210-") else ""
+
+
+def _row_qty(row: Tuple) -> int:
+    m = re.match(r"\s*(\d+)", str(row[5] or ""))
+    return max(int(m.group(1)), 1) if m else 1
+
+
+def _build_item_description(item_no: str, config_rows: List[Tuple], item_name: str = "") -> str:
+    """Compact spec line for one item, e.g. 'Dell Pro 16 Plus 16" Cu7-265U 12C
+    5.3GHz 16GB 512GB SSD Wi-Fi 6E AX211 Windows 11 Pro'.
+
+    Servers keep their counts: "2x Xeon-6548Y+ ...", total memory over all
+    DIMMs, and each drive group ("2x 3.84TB SSD + 6x 480GB SSD"). Returns ""
+    when the item has no usable configuration, so the caller falls back to
+    the item's own name.
+    """
+    base = system = display = cpu = cpu_mem_tail = wireless = os_name = battery = ""
+    cpu_count = 0
+    mem_total = 0.0
+    storage: List[str] = []
     for row in config_rows:
         if row[0] != item_no:
             continue
-        mod_norm = re.sub(r"\s+", " ", (row[2] or "")).strip().lower()
-        if mod_norm in names_norm and row[3]:
-            found = row[3]
-    return found
-
-
-def _build_item_description(item_no: str, config_rows: List[Tuple]) -> str:
-    parts = []
-    for names, abbreviate in _ITEM_DESC_FIELDS:
-        raw = _find_module_value(item_no, config_rows, names)
-        if not raw:
+        desc = (row[3] or "").strip()
+        if not desc:
             continue
-        abbr = abbreviate(raw)
-        if abbr:
-            parts.append(abbr)
-    return " ".join(parts)
+        module = re.sub(r"\s+", " ", row[2] or "").strip().lower()
+        kind = _classify_config_row(module, desc, (row[4] or "").strip())
+        if kind == "base":
+            base = base or _abbreviate_base(desc)
+        elif kind == "system":
+            system = system or _abbreviate_base(desc)
+        elif kind == "display":
+            display = display or _abbreviate_display(desc)
+        elif kind == "processor":
+            abbr = _abbreviate_processor(desc)
+            if abbr:
+                cpu = cpu or abbr
+                cpu_count += _row_qty(row)
+            m = _PROC_MEM_TAIL_RE.search(desc)
+            if m and not cpu_mem_tail:
+                cpu_mem_tail = f"{m.group(1)}GB"
+        elif kind == "memory":
+            m = _GB_RE.search(desc)
+            if m:
+                mem_total += float(m.group(1)) * _row_qty(row)
+        elif kind == "storage":
+            abbr = _abbreviate_storage(desc)
+            if abbr:
+                qty = _row_qty(row)
+                storage.append(f"{qty}x {abbr}" if qty > 1 else abbr)
+        elif kind == "wireless":
+            if not wireless and not _ITEM_JUNK_RE.search(desc):
+                wireless = _abbreviate_wireless(desc)
+        elif kind == "os":
+            os_name = os_name or _abbreviate_os(desc)
+        elif kind == "battery":
+            battery = battery or _abbreviate_battery(desc)
+
+    if cpu and cpu_count > 1:
+        cpu = f"{cpu_count}x {cpu}"
+    if mem_total:
+        memory = f"{int(mem_total)}GB" if mem_total == int(mem_total) else f"{mem_total}GB"
+    else:
+        # Onboard memory folded into the processor name ("... with 32GB
+        # Memory") stands in only when there's no Memory row of its own —
+        # otherwise the same 32GB would be listed twice.
+        memory = cpu_mem_tail
+    specs = [display, cpu, memory, " + ".join(storage), wireless, os_name, battery]
+
+    head = base or system
+    if not head:
+        # No base row at all (e.g. a desktop in Dell's online-store quote).
+        # A real system still has several spec fields; anything less is an
+        # accessory whose own name describes it better than one field would.
+        if sum(1 for s in specs if s) < 2:
+            return ""
+        head = _abbreviate_base(item_name) if item_name else ""
+    return " ".join(p for p in [head] + specs if p)
 
 
-def _resolve_item_code(item_no: str, config_rows: List[Tuple], fallback_desc: str) -> str:
+def _resolve_item_code(item_no: str, config_rows: List[Tuple], fallback_desc: str, heading_sku: str = "") -> str:
     """Resolve the Dell part number to show as this item's code.
 
     Tried in order, since not every template exposes a SKU the same way:
       1. The "Base" module's own SKU column (most templates).
-      2. A bracketed model code inside the "Base" module's own description,
+      2. Any 210- (Dell system base) SKU among the item's rows — exports
+         that name the base module after the product instead of "Base".
+      3. A bracketed model code inside the "Base" module's own description,
          e.g. "(PB14250)" — still a trusted source (it IS the Base row),
          just not shaped like a full order SKU.
-      3. A SKU-shaped bracketed code in the item's heading text — some
+      4. A SKU-shaped bracketed code in the item's heading text — some
          Configuration-sheet Excel exports name the base module after the
          product itself (e.g. "PowerEdge R6715") instead of "Base", but still
          carry "(210-BPPK)"-style brackets in the per-item heading.
-      4. The first config row for this item that carries any real SKU at
+      5. heading_sku: the SKU from the item's Product Details heading even
+         when no component table follows it (a plain accessory), or the
+         Word order form's Part Number column.
+      6. The first config row for this item that carries any real SKU at
          all (covers BOQs where even the first/base row uses the product
          name as its module label, with no separate "Base" row).
-      5. A SKU-shaped bracketed code in the item's own top-level pricing
-         description — last resort, and deliberately strict (digit-dash
-         shaped only) since this text is untrusted: it can carry unrelated
-         brackets like "(AZERTY)", a keyboard layout, not a part number.
+      7. A SKU-shaped bracketed code in the item's own top-level pricing
+         description — deliberately strict (digit-dash shaped only) since
+         this text is untrusted: it can carry unrelated brackets like
+         "(AZERTY)", a keyboard layout, not a part number.
+      8. A Dell model code in the item's own name ("Dell Pro Dock - WD25"),
+         then a bracketed Dell order code ("[VPXRKM]") — last resorts for
+         quotes that carry no part number at all for this item.
     """
     base_sku = ""
     base_desc = ""
+    system_sku = ""
     heading_code = ""
     first_sku = ""
     for row in config_rows:
@@ -2708,7 +2947,9 @@ def _resolve_item_code(item_no: str, config_rows: List[Tuple], fallback_desc: st
         if (row[2] or "").strip().lower() == "base" and not base_sku:
             base_desc = row[3] or ""
             base_sku = sku
-        if sku and not first_sku:
+        if sku.startswith("210-") and not system_sku:
+            system_sku = sku
+        if not first_sku and _SKU_SHAPE_RE.match(sku):
             first_sku = sku
         if not heading_code:
             heading = row[1] or ""
@@ -2719,23 +2960,36 @@ def _resolve_item_code(item_no: str, config_rows: List[Tuple], fallback_desc: st
 
     if base_sku:
         return base_sku
+    if system_sku:
+        return system_sku
     m = _MODEL_BRACKET_RE.search(base_desc)
     if m:
         return m.group(1)
     if heading_code:
         return heading_code
+    if heading_sku:
+        return heading_sku
     if first_sku:
         return first_sku
     m = _SKU_BRACKET_RE.search(fallback_desc or "")
+    if m:
+        return m.group(1)
+    models = _MODEL_CODE_RE.findall(_strip_square_brackets(fallback_desc or ""))
+    if models:
+        return models[-1]
+    m = _ORDER_CODE_RE.search(fallback_desc or "")
     return m.group(1) if m else ""
+
+
+def _normalize_quote_ref(ref: str) -> str:
+    """First quote number in ref, with a BOQ-style "v4" version written the
+    way Dell's PDFs (and the Southcomp sample) write it: "3400021144897.4"."""
+    ref = (ref or "").split(",")[0].strip()
+    return re.sub(r"^(\d{6,})v(\d+)$", r"\1.\2", ref, flags=re.IGNORECASE)
 
 
 _SOUTHCOMP_IMPORT_HEADERS = [
     "Item", "Description", "ItemType", "LottedYN", "ShwRoom", "ProductLine", "SalesCat", "AccountCode", "Currency", "TaxClass", "Unit", "DeprecType", "StdProdLine", "StdProdCateg", "Userfield1", "Userfield2", "Userfield3", "UserFld4", "UserField 5", "COO", "HSCode", "VendorId", "ECCN", "ItemStatus", "StdProdLineType", "UPC", "ItemGroup", "SpecialLCId", "EcotaxeID", "SorecopID", "StCondId", "ProvCountry", "CTOYN", "ArabDescr", "ArabAddlDescr", "HighValueYN", "QtyOrderMin", "STKUseAsSerYN", "Weight", "ModelNo", "SplitSectorYN", "UserField6", "UserField7", "UserField8", "WHTVatId", "WHTIncId", "WhseItemYN", "RegNum", "RemoveDiscountFOCYN", "Userfield9", "Userfield10", "Userfield11", "Userfield12", "Userfield13", "Userfield14", "AcceptFOCYN", "Integration1", "Integration2", "Integration3", "MOHCode", "GTIN", "ExtWarr", "CTOItemId", "DemoYN", "AddlDescr", "StdItemId", "RptLoc",
-]
-
-_SOUTHCOMP_IMPORT_FIXED_BLANK_ROW = [
-    None, None, 'fixed', 'fixed', 'blank', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'blank', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', None, 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', 'fixed', None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, 'blank'
 ]
 
 
@@ -2748,15 +3002,26 @@ def extract_item_creation_rows(input_bytes: bytes) -> List[Tuple[str, str]]:
     data = extract_quote_source_data(input_bytes)
     items = data["items"]
     config_rows = data["config_rows"]
-    quote_ref = (data.get("quote_ref") or "").strip()
+    item_quote_refs = data.get("item_quote_refs") or {}
+    heading_skus = data.get("heading_skus") or {}
+    # The Word order form's "Part Number" column. Excel inputs fill
+    # part_numbers from a looser, non-Dell pattern, so only SKU-shaped
+    # values are trusted.
+    part_numbers = {
+        k: v.strip() for k, v in (data.get("part_numbers") or {}).items()
+        if _SKU_SHAPE_RE.match((v or "").strip())
+    }
     rows: List[Tuple[str, str]] = []
     for idx, item in enumerate(items, start=1):
         item_no = str(idx)
-        fallback_desc = (item[0] if item else "").strip()
-        description = _build_item_description(item_no, config_rows)
-        if not description:
-            description = fallback_desc
-        item_code = _resolve_item_code(item_no, config_rows, fallback_desc)
+        raw_name = (item[0] if item else "").strip()
+        item_name = _strip_square_brackets(_TRADEMARK_RE.sub("", raw_name))
+        description = _build_item_description(item_no, config_rows, item_name) or item_name
+        description = re.sub(r"\s+,", ",", re.sub(r"\s+", " ", description)).strip()
+        item_code = _resolve_item_code(
+            item_no, config_rows, raw_name, heading_skus.get(item_no) or part_numbers.get(item_no, "")
+        )
+        quote_ref = _normalize_quote_ref(item_quote_refs.get(item_no) or data.get("quote_ref") or "")
         if quote_ref and item_code and not item_code.startswith(quote_ref):
             item_code = f"{quote_ref}-{item_code}"
         if item_code or description:
@@ -2787,10 +3052,11 @@ def _build_item_import_row(item_code: str, description: str) -> list:
 
 
 def generate_item_creation_excel(rows: List[Tuple[str, str]]) -> bytes:
-    """Build the Southcomp item-creation workbook matching the sample template."""
+    """Build the Southcomp item-creation workbook: the sample template's
+    header row, then one import row per item."""
     wb = Workbook()
     ws = wb.active
-    ws.title = "Items"
+    ws.title = "Sheet1"  # same sheet name as the Southcomp sample template
     ws.sheet_view.showGridLines = False
 
     header_fill = PatternFill(start_color="9BC2E6", end_color="9BC2E6", fill_type="solid")
@@ -2812,22 +3078,18 @@ def generate_item_creation_excel(rows: List[Tuple[str, str]]) -> bytes:
 
     for item_code, description in rows:
         ws.append(_build_item_import_row(item_code, description))
-        ws.append(_SOUTHCOMP_IMPORT_FIXED_BLANK_ROW)
 
     for col_idx, _ in enumerate(_SOUTHCOMP_IMPORT_HEADERS, start=1):
         ws.column_dimensions[get_column_letter(col_idx)].width = 14
-    ws.column_dimensions["A"].width = 24
-    ws.column_dimensions["B"].width = 68
+    ws.column_dimensions["A"].width = 28
+    ws.column_dimensions["B"].width = 80
     ws.freeze_panes = "A2"
 
-    for row_idx in range(1, ws.max_row + 1):
+    for row_idx in range(2, ws.max_row + 1):
         for col_idx in range(1, ws.max_column + 1):
             cell = ws.cell(row_idx, col_idx)
             cell.border = border_thin
-            if row_idx == 1:
-                cell.alignment = Alignment(horizontal="left", vertical="center")
-            elif row_idx >= 2:
-                cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+            cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
     buf = BytesIO()
     wb.save(buf)
@@ -2837,22 +3099,44 @@ def generate_item_creation_excel(rows: List[Tuple[str, str]]) -> bytes:
 
 def generate_item_creation_excel_from_inputs(
     inputs: List[Tuple[str, bytes]],
-) -> Tuple[bytes, int]:
-    """inputs: [(source_name, file_bytes), ...]. Returns (xlsx_bytes, row_count).
+) -> Tuple[bytes, int, List[str]]:
+    """inputs: [(source_name, file_bytes), ...].
 
-    Rows from all uploaded quotes are combined into one workbook; an
-    (item, description) pair already seen (e.g. the same laptop config
-    quoted twice) is written once.
+    Returns (xlsx_bytes, row_count, notes). Rows from all uploaded quotes are
+    combined into one workbook; an (item, description) pair already seen
+    (e.g. the same laptop config quoted twice) is written once. notes holds
+    one line per file the user should look at: unreadable, no Dell items
+    found, or items left without a code.
     """
     all_rows: List[Tuple[str, str]] = []
     seen = set()
-    for _name, data in inputs:
-        for pair in extract_item_creation_rows(data):
-            if pair in seen:
+    variants: Dict[str, int] = {}
+    notes: List[str] = []
+    for name, data in inputs:
+        try:
+            file_rows = extract_item_creation_rows(data)
+        except Exception as e:
+            notes.append(f"{name}: could not be read ({e}).")
+            continue
+        if not file_rows:
+            notes.append(f"{name}: no Dell items found — is it a Dell quote?")
+            continue
+        missing_codes = sum(1 for code, _ in file_rows if not code)
+        if missing_codes:
+            notes.append(f"{name}: {missing_codes} item(s) have no item code — fill them in before importing.")
+        for code, desc in file_rows:
+            if (code, desc) in seen:
                 continue
-            seen.add(pair)
-            all_rows.append(pair)
-    return generate_item_creation_excel(all_rows), len(all_rows)
+            seen.add((code, desc))
+            if code:
+                # Same base SKU in one quote but a different configuration
+                # (e.g. two PowerEdge R660 nodes with different drives): the
+                # item code must stay unique, so number the later variants.
+                variants[code] = variants.get(code, 0) + 1
+                if variants[code] > 1:
+                    code = f"{code}-{variants[code]}"
+            all_rows.append((code, desc))
+    return generate_item_creation_excel(all_rows), len(all_rows), notes
 
 
 def build_item_creation_filename() -> str:
