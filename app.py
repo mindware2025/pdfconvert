@@ -35,10 +35,10 @@ from extractors.freight_forwarder_processor import (
     create_excel_file as create_freight_forwarder_excel_file,
     process_freight_forwarder_pdfs,
 )
-from extractors.joint_line_processor import (
-    build_preview_dataframe as build_joint_line_preview_dataframe,
-    create_joint_line_excel_file,
-    process_joint_line_pdfs,
+from extractors.joint_line_v2 import (
+    build_preview_dataframe as build_joint_line_v2_preview_dataframe,
+    create_joint_line_v2_excel_file,
+    process_joint_line_v2_pdfs,
 )
 from amal.processor import build_output_workbook as build_comm_generator_workbook
 from amal.processor import process_uploaded_pairs as process_comm_generator_pairs
@@ -1140,37 +1140,37 @@ elif tool == "🚚 Freight Forwarder JV Tool":
                 )
 elif tool == "Joint Line OCR Tool":
     st.title("Joint Line OCR Tool")
-    st.write("Upload Joint Line PDF invoices. The app will extract the charges and let you download one consolidated Excel file.")
+    st.write("Upload Joint Line invoices and credit notes (INV0… / CCN0…). The app will extract the charges and let you download one consolidated Excel file.")
 
-    joint_line_files = st.file_uploader(
+    joint_line_v2_files = st.file_uploader(
         "Choose Joint Line PDF(s)",
         type=["pdf"],
         accept_multiple_files=True,
-        key="joint_line_upload",
+        key="joint_line_v2_upload",
     )
 
-    if joint_line_files:
-        joint_line_invoices, joint_line_errors = process_joint_line_pdfs(joint_line_files)
+    if joint_line_v2_files:
+        joint_line_v2_docs, joint_line_v2_errors = process_joint_line_v2_pdfs(joint_line_v2_files)
 
-        if joint_line_errors:
-            st.error("\n".join(joint_line_errors))
+        if joint_line_v2_errors:
+            st.error("\n".join(joint_line_v2_errors))
 
-        if joint_line_invoices:
-            st.dataframe(build_joint_line_preview_dataframe(joint_line_invoices))
-            joint_line_excel = create_joint_line_excel_file(joint_line_invoices)
+        if joint_line_v2_docs:
+            st.dataframe(build_joint_line_v2_preview_dataframe(joint_line_v2_docs))
+            joint_line_v2_excel = create_joint_line_v2_excel_file(joint_line_v2_docs)
             st.download_button(
                 label="⬇️ Download Joint Line Excel file",
-                data=joint_line_excel.getvalue(),
+                data=joint_line_v2_excel.getvalue(),
                 file_name=f"Joint Line-{datetime.now().strftime('%Y-%m-%d')}.xlsx",
                 on_click=lambda: (
                         update_usage(
                             "joint_line_ocr",
                             team,
-                            pdf_count=count_uploaded_files(joint_line_files, (".pdf",)),
+                            pdf_count=count_uploaded_files(joint_line_v2_files, (".pdf",)),
                         )
                     ),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="joint_line_download",
+                key="joint_line_v2_download",
             )
 elif tool == "📦 Barcode PDF Generator grouped":
     st.write("Upload a CSV file with PalletID and IMEIs to generate barcode PDF.")
