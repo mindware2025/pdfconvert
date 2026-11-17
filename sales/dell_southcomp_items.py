@@ -18,8 +18,8 @@ def render_southcomp_item_creation_tool(team, update_usage) -> None:
     )
 
     uploaded_files = st.file_uploader(
-        "Upload Dell BOQ Excel, PDF or Word (.docx)",
-        type=["xlsx", "xlsm", "xls", "pdf", "docx"],
+        "Upload Dell BOQ Excel, PDF, Word (.docx) or HTML quote",
+        type=["xlsx", "xlsm", "xls", "pdf", "docx", "html", "htm"],
         accept_multiple_files=True,
         key="southcomp_items_uploader",
     )
