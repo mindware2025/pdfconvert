@@ -319,6 +319,10 @@ def _find_label_value(ws, labels: Tuple[str, ...], max_rows: int = 60, max_cols:
             text = _cell_to_text(ws.cell(r, c).value).strip().lower()
             if not text:
                 continue
+            # A label cell is short ("Quote No.:"). Skip sentences such as
+            # "...search for your eQuote number under Quotes..." in newer Dell quotes.
+            if len(text) > 40:
+                continue
             if any(label in text for label in labels):
                 for nc in range(c + 1, min(ws.max_column, max_cols) + 1):
                     candidate = _cell_to_text(ws.cell(r, nc).value).strip()
@@ -386,9 +390,10 @@ def _extract_expiry(ws) -> str:
         except Exception:
             return value
 
-    # Try strict position first
+    # Try strict position first, but only if it really holds a date
+    # (in newer Dell quotes E19 is "Premier Page Name", e.g. "SouthComp Polaris").
     direct = _fmt(ws["E19"].value)
-    if direct:
+    if direct and re.fullmatch(r"\d{2}/\d{2}/\d{4}", direct):
         return _adjust(direct)
 
     for r in range(1, min(ws.max_row, 80) + 1):
@@ -1063,9 +1068,35 @@ def _extract_pdf_lines(pdf_bytes: bytes) -> List[str]:
 # existing _extract_items_pdf()/_extract_config_from_pdf() path is used
 # unchanged.
 
+# "N. Description Qty $List $Unit $Subtotal" (older) or
+# "N. Description Qty $Unit $Subtotal" (newer, Nov 2026).
 _PREMIER_ITEM_LINE_PAT = re.compile(
-    r"^\d+\.\s*(.+?)\s+(\d+)\s+[$]?([\d,]+\.\d+)\s+[$]?([\d,]+\.\d+)\s+[$]?([\d,]+\.\d+)\s*$"
+    r"^\d+\.\s*(.+?)\s+(\d+)\s+[$]?([\d,]+\.\d+)\s+[$]?([\d,]+\.\d+)(?:\s+[$]?([\d,]+\.\d+))?\s*$"
 )
+
+
+def _is_doubled_token(tok: str) -> bool:
+    return len(tok) >= 2 and len(tok) % 2 == 0 and tok[0::2] == tok[1::2]
+
+
+def _undouble_line(line: str) -> str:
+    """Fix PDFs that store every character twice ("QQuuoottee NNoo..::" -> "Quote No.:").
+
+    Tokens with letters/symbols are collapsed when fully doubled; pure-digit
+    tokens only when another token on the same line was doubled, so a real
+    number like "1100" is never touched on an ordinary line.
+    """
+    tokens = line.split(" ")
+    has_doubled_word = any(_is_doubled_token(t) and not t.isdigit() and len(t) >= 4 for t in tokens)
+    if not has_doubled_word:
+        return line
+    out = []
+    for t in tokens:
+        if _is_doubled_token(t) and (not t.isdigit() or has_doubled_word):
+            out.append(t[0::2])
+        else:
+            out.append(t)
+    return " ".join(out)
 
 
 def _try_extract_premier_pricing_summary_pdf(
@@ -1077,7 +1108,12 @@ def _try_extract_premier_pricing_summary_pdf(
     consolidation_fee), or None when this template isn't detected so the
     caller can fall back to the existing PDF parsing path.
     """
-    lines = _extract_pdf_lines(pdf_bytes)
+    # Some exports store label text twice, either per letter ("QQuuoottee") or
+    # per word ("Quote Quote No.: No.:"). Item lines are left exactly as read.
+    lines = [
+        l if _PREMIER_ITEM_LINE_PAT.match(l.strip()) else _dedupe_adjacent_words(_undouble_line(l))
+        for l in _extract_pdf_lines(pdf_bytes)
+    ]
     if not any("e-quote name" in l.lower() or "e-quote creator" in l.lower() for l in lines):
         return None
 
@@ -1138,16 +1174,22 @@ def _try_extract_premier_pricing_summary_pdf(
             continue
 
         if in_items:
-            if low.startswith("subtotal:"):
+            if low.startswith("subtotal:") or low.startswith("tax summary"):
                 in_items = False
                 continue
             m = _PREMIER_ITEM_LINE_PAT.match(stripped)
             if m:
-                desc_s, qty_s, _list_s, unit_s, total_s = m.groups()
+                desc_s, qty_s, p1, p2, p3 = m.groups()
+                # 3 prices: list, unit, subtotal. 2 prices: unit, subtotal.
+                unit_s, total_s = (p2, p3) if p3 else (p1, p2)
                 qty_val = int(qty_s)
                 unit_val = _parse_money(unit_s) or 0.0
                 total_val = _parse_money(total_s) or (qty_val * unit_val)
                 items.append((desc_s.strip(), qty_val, unit_val, total_val))
+            elif re.search(r"\s\d+$", stripped) or low.startswith("term:"):
+                # Bundled sub-item with its own qty ("McAfee® ... 12 Months 5")
+                # and its subscription term line: not part of the item name.
+                continue
             elif items and not _is_price_or_qty_line(stripped):
                 old_desc, qty, unit, total = items[-1]
                 items[-1] = (f"{old_desc} {stripped}".strip(), qty, unit, total)
@@ -1155,8 +1197,131 @@ def _try_extract_premier_pricing_summary_pdf(
     if not items:
         return None
 
-    config_rows = _extract_config_from_pdf_module_table(pdf_bytes)
+    config_rows = _extract_config_from_pdf_module_table(pdf_bytes) or _extract_config_from_pdf_option_table(pdf_bytes)
     return items, metadata, config_rows, quote_ref, date_text, expiry_text, consolidation_fee
+
+
+_PDF_PAGE_NOISE = re.compile(
+    r"^\d{1,2}/\d{1,2}/\d{2,4},\s+\d{1,2}:\d{2}"      # browser print header "11/17/26, 9:32 PM ..."
+    r"|file:///|united kingdom\s+page\s+\d+|^telephone:|emerging markets|^page\s+\d+$",
+    re.I,
+)
+
+
+def _extract_config_from_pdf_option_table(pdf_bytes: bytes) -> List[Tuple]:
+    """Product Details tables in the newer Dell Premier eQuote PDF (Nov 2026).
+
+    Header: "Description | Option | Tax Type | Qty". The "Description" column
+    holds the module name, the real description sits in an unlabelled column
+    to its right, and "Option" holds the SKU. Module and description text often
+    wrap onto the lines below a row; those lines are joined to the row above.
+
+    Each tuple: (item_number_str, "", module, description, sku, qty)
+    """
+    config_rows: List[Tuple] = []
+    try:
+        import pdfplumber
+    except ImportError:
+        return config_rows
+
+    item_number = 0
+    in_product_details = False
+    cols = None  # (module_x, desc_x, option_x, tax_x, qty_x)
+
+    def _find_desc_x(page, header_top, module_x, option_x):
+        """Most common left edge of the description column in this table."""
+        counts: Dict[int, int] = {}
+        words = page.extract_words(use_text_flow=True)
+        rows: Dict[int, List] = {}
+        for w in words:
+            if w["top"] > header_top:
+                rows.setdefault(round(w["top"]), []).append(w)
+        for row in rows.values():
+            xs = sorted({round(w["x0"]) for w in row if module_x + 15 < w["x0"] < option_x - 10})
+            for x in xs[:1]:
+                counts[x] = counts.get(x, 0) + 1
+        return max(counts, key=counts.get) if counts else None
+
+    def _split_text(page, row_words, lo, hi):
+        """Text of the characters in [lo, hi) on this row; splits glued words like 'ReaderNo'."""
+        top = min(w["top"] for w in row_words) - 1
+        bottom = max(w["bottom"] for w in row_words) + 1
+        chars = [c for c in page.chars if top <= c["top"] <= bottom and lo <= c["x0"] < hi]
+        chars.sort(key=lambda c: c["x0"])
+        out, last_x1 = [], None
+        for c in chars:
+            if last_x1 is not None and c["x0"] - last_x1 > 1.5:
+                out.append(" ")
+            out.append(c["text"])
+            last_x1 = c["x1"]
+        return re.sub(r"\s+", " ", "".join(out)).strip()
+
+    try:
+        with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
+            for page in pdf.pages:
+                words = page.extract_words(use_text_flow=True)
+                rows: Dict[int, List] = {}
+                for w in words:
+                    rows.setdefault(round(w["top"]), []).append(w)
+                prev_y = None  # y of the last row that can take a wrapped line
+                for y in sorted(rows):
+                    row_words = sorted(rows[y], key=lambda w: w["x0"])
+                    line = _dedupe_adjacent_words(_undouble_line(" ".join(w["text"] for w in row_words).strip()))
+                    low = line.lower()
+
+                    if not in_product_details:
+                        if "product details" in low:
+                            in_product_details = True
+                        continue
+                    if _PDF_PAGE_NOISE.search(line):
+                        prev_y = None
+                        continue
+                    if any(s in low for s in ("purchase order number", "customer signature", "connect with dell")):
+                        return config_rows
+                    if low.startswith("qty") and "unit price" in low and "subtotal" in low:
+                        item_number += 1
+                        cols, prev_y = None, None
+                        continue
+                    if low.startswith("description") and "option" in low and "tax" in low:
+                        pos = {w["text"].lower(): w["x0"] for w in row_words}
+                        if all(k in pos for k in ("description", "option", "tax", "qty")):
+                            module_x, option_x = pos["description"], pos["option"]
+                            desc_x = _find_desc_x(page, row_words[0]["top"], module_x, option_x)
+                            if desc_x:
+                                cols = (module_x, desc_x, option_x, pos["tax"], pos["qty"])
+                        prev_y = None
+                        continue
+                    if cols is None or item_number == 0:
+                        continue
+                    if low in ("components", "software", "services", "accessories"):
+                        prev_y = None
+                        continue
+
+                    module_x, desc_x, option_x, tax_x, qty_x = cols
+                    module = _split_text(page, row_words, 0, desc_x - 1)
+                    desc = _split_text(page, row_words, desc_x - 1, option_x - 8)
+                    sku = _split_text(page, row_words, option_x - 8, tax_x - 5)
+                    qty = _split_text(page, row_words, qty_x - 10, page.width)
+
+                    if re.fullmatch(r"\d+", qty) and sku:
+                        config_rows.append((str(item_number), "", module, desc, sku, qty))
+                        prev_y = y
+                    elif prev_y is not None and y - prev_y < 16 and config_rows and not sku:
+                        # Wrapped module / description text belongs to the row above.
+                        it, head, m0, d0, s0, q0 = config_rows[-1]
+
+                        def _join(a: str, b: str) -> str:
+                            if not b:
+                                return a
+                            return f"{a}{b}" if a.endswith("-") else f"{a} {b}".strip()
+
+                        config_rows[-1] = (it, head, _join(m0, module), _join(d0, desc), s0, q0)
+                        prev_y = y
+                    else:
+                        prev_y = None
+    except Exception:
+        pass
+    return config_rows
 
 
 def _extract_config_from_pdf_module_table(pdf_bytes: bytes) -> List[Tuple]:
@@ -1515,10 +1680,42 @@ def _find_config_table_header(ws, start_row: int = 1, search_rows: int = 30) -> 
                 labels["sku"] = c
             if name.strip() in ("qty", "quantity") and "qty" not in labels:
                 labels["qty"] = c
+            if name.strip() == "option" and "option" not in labels:
+                labels["option"] = c
+            if name.strip() == "tax type" and "tax_type" not in labels:
+                labels["tax_type"] = c
         if all(k in labels for k in ("description", "sku")):
+            labels.pop("option", None)
+            labels.pop("tax_type", None)
             labels.setdefault("module", labels["description"])
             return r, labels
+        # Newer Dell Premier quotes: header "Description | Option | Tax Type | Qty",
+        # where "Description" holds the module name, the real description sits in an
+        # unlabelled column after it, and "Option" holds the SKU.
+        if all(k in labels for k in ("description", "option", "tax_type")) and labels["option"] > labels["description"] + 1:
+            module_col = labels["description"]
+            sku_col = labels["option"]
+            return r, {
+                "module": module_col,
+                "description": module_col,  # placeholder; real text read via desc_span
+                "desc_span": (module_col + 1, sku_col - 1),
+                "sku": sku_col,
+                "qty": labels.get("qty", 0),
+            }
     return None
+
+
+def _config_cell(ws, row: int, colmap: Dict, key: str) -> str:
+    """Read one config field; handles the unlabelled description column (desc_span)."""
+    if key == "description" and colmap.get("desc_span"):
+        start, end = colmap["desc_span"]
+        for c in range(start, end + 1):
+            text = _cell_to_text(ws.cell(row, c).value)
+            if text:
+                return text
+        return ""
+    col = colmap.get(key, 0)
+    return _cell_to_text(ws.cell(row, col).value) if col else ""
 
 
 def _extract_config_rows(ws) -> List[Tuple]:
@@ -1623,7 +1820,10 @@ def _extract_all_config_rows(ws) -> List[Tuple]:
 
         header_row, colmap = header_info
         data_row = header_row + 1
-        has_real_module_col = bool(colmap.get("module")) and colmap.get("module") != colmap.get("description")
+        span_layout = bool(colmap.get("desc_span"))
+        has_real_module_col = span_layout or (
+            bool(colmap.get("module")) and colmap.get("module") != colmap.get("description")
+        )
 
         while data_row <= search_end and not _row_text(ws, data_row, 1, max_col):
             data_row += 1
@@ -1638,10 +1838,15 @@ def _extract_all_config_rows(ws) -> List[Tuple]:
                 data_row += 1
                 continue
             blank_streak = 0
-            mod = _cell_to_text(ws.cell(data_row, colmap.get("module", 0)).value) if has_real_module_col else ""
-            desc = _cell_to_text(ws.cell(data_row, colmap.get("description", 0)).value)
-            sku = _cell_to_text(ws.cell(data_row, colmap.get("sku", 0)).value)
-            qty = _cell_to_text(ws.cell(data_row, colmap.get("qty", 0)).value)
+            mod = _config_cell(ws, data_row, colmap, "module") if has_real_module_col else ""
+            desc = _config_cell(ws, data_row, colmap, "description")
+            sku = _config_cell(ws, data_row, colmap, "sku")
+            qty = _config_cell(ws, data_row, colmap, "qty")
+            if span_layout and not re.fullmatch(r"\d+(?:\.0+)?", qty.strip()):
+                # Section headings ("Components", "Software"), the next item's
+                # "Qty | Unit Price | Subtotal" line, and footer text.
+                data_row += 1
+                continue
             # A row with a real SKU is a config row even if its text mentions a
             # currency — e.g. power cords described as "... 10A (EUR)".
             has_real_sku = bool(sku.strip()) and sku.strip().lower() != "sku"
@@ -2455,6 +2660,12 @@ def extract_quote_source_data(input_bytes: bytes, exchange_rate: float = 0.0) ->
                 for desc, qty, unit, total in items
             ]
     elif is_pdf:
+        if not any(l.strip() for l in _extract_pdf_lines(input_bytes)):
+            raise ValueError(
+                "This PDF has no readable text: it was saved as a picture (for example with "
+                "'Microsoft Print to PDF'), so the quote can't be read. Please upload the "
+                "original Dell PDF or the Excel version of the quote."
+            )
         premier_result = _try_extract_premier_pricing_summary_pdf(input_bytes)
         checkout_result = None if premier_result is not None else _try_extract_checkout_confirmation_pdf(input_bytes)
         if premier_result is not None:
