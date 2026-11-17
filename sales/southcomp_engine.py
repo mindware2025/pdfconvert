@@ -2848,12 +2848,42 @@ def _html_to_xlsx_bytes(input_bytes: bytes) -> bytes:
     return out.getvalue()
 
 
+def _repair_xlsx_bytes(input_bytes: bytes) -> bytes:
+    """Some Dell exports contain cells with an empty style index (s=""). Excel
+    ignores it, but openpyxl can't open the file. If the workbook doesn't open,
+    drop those empty style attributes from the sheets and return the fixed copy;
+    cell values are untouched. Anything that still won't open is returned as is."""
+    import zipfile
+    try:
+        openpyxl.load_workbook(BytesIO(input_bytes), data_only=True)
+        return input_bytes
+    except Exception:
+        pass
+    try:
+        src = zipfile.ZipFile(BytesIO(input_bytes))
+        out = BytesIO()
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as dst:
+            for info in src.infolist():
+                data = src.read(info.filename)
+                if info.filename.startswith("xl/worksheets/") and info.filename.endswith(".xml"):
+                    data = re.sub(rb'\s+s=""', b"", data)
+                dst.writestr(info, data)
+        fixed = out.getvalue()
+        openpyxl.load_workbook(BytesIO(fixed), data_only=True)
+        return fixed
+    except Exception:
+        return input_bytes
+
+
 def _normalize_input(input_bytes: bytes) -> bytes:
-    """HTML quotes are converted to a worksheet; everything else is unchanged."""
+    """HTML quotes are converted to a worksheet; Excel files that openpyxl can't
+    open are repaired when possible; everything else is unchanged."""
     if input_bytes.lstrip().startswith(b"%PDF") or _is_docx(input_bytes):
         return input_bytes
     if _is_html(input_bytes):
         return _html_to_xlsx_bytes(input_bytes)
+    if input_bytes[:2] == b"PK":
+        return _repair_xlsx_bytes(input_bytes)
     return input_bytes
 
 
@@ -2861,6 +2891,7 @@ def describe_input_kind(input_bytes: bytes) -> str:
     """Return a short label for which extraction path an input will take (for usage tracking)."""
     if _is_html(input_bytes):
         return "html"
+    input_bytes = _normalize_input(input_bytes)
     if input_bytes.lstrip().startswith(b"%PDF"):
         return "pdf"
     if _is_docx(input_bytes):
