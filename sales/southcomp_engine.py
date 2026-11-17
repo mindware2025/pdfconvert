@@ -2420,8 +2420,8 @@ def _build_quote_workbook(
             ws.merge_cells(f"A{start_row}:D{end_row}")
 
     _write_address(5, 8, [
-        "14, rue du Bas Marin",
-        "94537 Orly cedex - France",
+        "Tour MATTEI - 207, rue de Bercy (13ème étage)",
+        "75012 Paris",
         "DL:     +33 1 49 79 42 24",
         "Fax:   +33 1 49 79 45 33",
     ], merge=False)

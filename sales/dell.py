@@ -2297,8 +2297,8 @@ def generate_dell_quote(
         address_end_row = 7
     elif is_eur_location:
         _write_address_block(5, 8, [
-            "14, rue du Bas Marin",
-            "94537 Orly cedex - France",
+            "Tour MATTEI - 207, rue de Bercy (13ème étage)",
+            "75012 Paris",
             "DL:     +33 1 49 79 42 24",
             "Fax:   +33 1 49 79 45 33",
         ], merge=False)
