@@ -707,6 +707,118 @@ def _extract_items_pricing_summary(ws) -> Optional[List[Tuple]]:
     return items if items else _extract_items_pricing_summary_by_header(ws)
 
 
+def _extract_extended_services_southcomp(ws):
+    """Dell Extended Services (warranty / support renewal) quote.
+
+    One quote line per asset that has a service contract; that asset's details
+    and the components it covers go to the Configuration sheet. Returns
+    (items, config_rows, quote_ref, date_text, quote_meta, part_numbers), or None
+    when the sheet isn't an Extended Services quote.
+    """
+    max_c = min(ws.max_column, 40)
+
+    def row_texts(r):
+        return [_cell_to_text(ws.cell(r, c).value).strip() for c in range(1, max_c + 1)]
+
+    details_row = next(
+        (r for r in range(1, min(ws.max_row, 80) + 1)
+         if any("dell extended services details" in t.lower() for t in row_texts(r))),
+        None,
+    )
+    if details_row is None:
+        return None
+
+    header_row, cols = None, {}
+    for r in range(details_row + 1, min(ws.max_row, details_row + 15) + 1):
+        texts = [t.lower() for t in row_texts(r)]
+        if "asset" in texts and any(t.startswith("price") for t in texts):
+            header_row = r
+            for c, t in enumerate(texts, start=1):
+                t = re.sub(r"\s+", " ", t)
+                for key, test in (
+                    ("asset", lambda x: x == "asset"),
+                    ("agreement", lambda x: x.startswith("agreement id")),
+                    ("model", lambda x: x == "model"),
+                    ("model_desc", lambda x: x == "model description"),
+                    ("model_qty", lambda x: x == "model qty"),
+                    ("install", lambda x: x == "install at/ship to"),
+                    ("city", lambda x: x == "install at/ship to city"),
+                    ("country", lambda x: x == "install at/ship to country"),
+                    ("lob", lambda x: x.startswith("lob")),
+                    ("svc_desc", lambda x: x == "service contract description"),
+                    ("svc_sku", lambda x: x == "services sku"),
+                    ("start", lambda x: x == "new contract start date"),
+                    ("end", lambda x: x == "new contract end date"),
+                    ("qty", lambda x: x == "quantity"),
+                    ("price", lambda x: x.startswith("price")),
+                ):
+                    if key not in cols and test(t):
+                        cols[key] = c
+            break
+    if header_row is None or "price" not in cols:
+        return None
+
+    def get(r, key):
+        c = cols.get(key)
+        return _cell_to_text(ws.cell(r, c).value).strip() if c else ""
+
+    items: List[Tuple] = []
+    config_rows: List[Tuple] = []
+    part_numbers: Dict[str, str] = {}
+    for r in range(header_row + 1, ws.max_row + 1):
+        texts = row_texts(r)
+        if any(t.lower().startswith("total") for t in texts):
+            break
+        if not any(texts):
+            continue
+        asset, svc = get(r, "asset"), get(r, "svc_desc")
+        if asset or svc:
+            qty = int(_parse_money(get(r, "qty")) or 1)
+            total = _parse_money(ws.cell(r, cols["price"]).value) or 0.0
+            model = get(r, "model_desc") or get(r, "model")
+            period = " - ".join(p for p in (get(r, "start"), get(r, "end")) if p)
+            parts = [svc or "Dell Extended Service"]
+            if asset:
+                parts.append(f"Asset {asset}" + (f" ({model})" if model else ""))
+            if period:
+                parts.append(period)
+            items.append((" | ".join(parts), qty, total / qty if qty else total, total))
+            item_no = str(len(items))
+            if get(r, "svc_sku"):
+                part_numbers[item_no] = get(r, "svc_sku")
+            site = ", ".join(
+                p for p in (get(r, "install").replace("\n", " "), get(r, "city"), get(r, "country")) if p
+            )
+            for label, value in (
+                ("Service", svc), ("Service SKU", get(r, "svc_sku")), ("Asset", asset),
+                ("Agreement ID", get(r, "agreement")), ("Model", model), ("Family", get(r, "lob")),
+                ("Contract Period", period), ("Install At", site),
+            ):
+                if value:
+                    config_rows.append((item_no, "", label, value, "", ""))
+        elif items and (get(r, "model") or get(r, "model_desc")):
+            # Component covered by the asset above.
+            config_rows.append((
+                str(len(items)), "", "Covered Component",
+                get(r, "model_desc") or get(r, "model"), get(r, "model"), get(r, "model_qty"),
+            ))
+
+    if not items:
+        return None
+
+    meta = {k: "" for k in ("company name", "customer name", "customer number", "end user", "reseller")}
+    meta["company name"] = _find_label_value(ws, ("company name",))
+    for r in range(1, details_row):
+        for c, t in enumerate(row_texts(r), start=1):
+            if t.lower().startswith("end user -"):
+                below = _cell_to_text(ws.cell(r + 1, c).value).strip()
+                if below:
+                    meta["end user"] = below
+    quote_ref = _find_label_value(ws, ("quote #",))
+    date_text = _find_label_value(ws, ("date:",))
+    return items, config_rows, quote_ref, date_text, meta, part_numbers
+
+
 def _extract_items_pricing_summary_by_header(ws) -> Optional[List[Tuple]]:
     """Fallback when "Pricing Summary" isn't at the usual Excel cells (e.g. a quote
     converted from Dell's HTML): find the "Qty | Unit Price | Subtotal" header
@@ -2834,7 +2946,10 @@ def extract_quote_source_data(input_bytes: bytes, exchange_rate: float = 0.0) ->
         src_ws = src_wb.active
         config_ws = _find_config_sheet(src_wb)
 
-        if _is_qar_report(src_ws):
+        ext = _extract_extended_services_southcomp(src_ws)
+        if ext is not None:
+            items, config_rows, quote_ref, date_text, quote_meta, part_numbers = ext
+        elif _is_qar_report(src_ws):
             quote_ref, quote_meta = _extract_qar_metadata(src_ws)
             items, config_rows = _extract_items_qar(src_ws)
         # Try grouped template
