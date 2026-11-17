@@ -439,6 +439,13 @@ def _extract_quote_metadata(ws) -> Dict[str, str]:
                         out["end user"] = "\n".join(lines)
                     break
             break
+    # Dell Premier eQuote (Excel export): same fields the PDF version shows.
+    creator = _find_label_value(ws, ("e-quote creator",))
+    if creator:
+        out["quote creator"] = creator
+        page_name = _find_label_value(ws, ("premier page name",))
+        if page_name and page_name != "-" and not out.get("reseller"):
+            out["reseller"] = page_name
     return out
 
 
@@ -2287,7 +2294,8 @@ def _build_quote_workbook(
     customer_title_row = (summary_title_row + 4) if has_expiry else (summary_title_row + 3)
 
     # --- Quote metadata ---
-    if is_pdf:
+    # Dell Premier eQuotes use the same block whether uploaded as PDF or Excel.
+    if is_pdf or quote_meta.get("quote creator"):
         meta_rows = [
             ("End Customer:", quote_meta.get("end user", "")),
             ("Reseller:", quote_meta.get("reseller", "")),
@@ -2685,6 +2693,11 @@ def extract_quote_source_data(input_bytes: bytes, exchange_rate: float = 0.0) ->
                 quote_meta["reseller"] = pos_meta["reseller"]
             if pos_meta.get("quote_name") and not quote_meta.get("company name"):
                 quote_meta["company name"] = pos_meta["quote_name"]
+        # Same rule as Excel quotes (_extract_expiry): show Dell's expiry minus 2 days.
+        try:
+            expiry_text = (datetime.strptime(expiry_text, "%d/%m/%Y") - timedelta(days=2)).strftime("%d/%m/%Y")
+        except (TypeError, ValueError):
+            pass
     else:
         src_wb = openpyxl.load_workbook(BytesIO(input_bytes), data_only=True)
         src_ws = src_wb.active
