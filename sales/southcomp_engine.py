@@ -190,6 +190,7 @@ def _add_logo(ws, anchor: str = "A1", width: int = 780, height: int = 52) -> Non
 
 def detect_template_type(input_bytes: bytes) -> str:
     """Return 'extended_services' or 'standard_quote'."""
+    input_bytes = _normalize_input(input_bytes)
     if input_bytes.lstrip().startswith(b"%PDF"):
         return "standard_quote"
     try:
@@ -682,7 +683,7 @@ def _locate_pricing_summary(ws) -> Optional[Tuple[int, int]]:
 def _extract_items_pricing_summary(ws) -> Optional[List[Tuple]]:
     located = _locate_pricing_summary(ws)
     if not located:
-        return None
+        return _extract_items_pricing_summary_by_header(ws)
     _, start_row = located
     A, B, K, L, N = colidx("A"), colidx("B"), colidx("K"), colidx("L"), colidx("N")
     items = []
@@ -703,6 +704,54 @@ def _extract_items_pricing_summary(ws) -> Optional[List[Tuple]]:
             break
         items.append((desc, qty_val, unit_val, sub_val))
         r += 1
+    return items if items else _extract_items_pricing_summary_by_header(ws)
+
+
+def _extract_items_pricing_summary_by_header(ws) -> Optional[List[Tuple]]:
+    """Fallback when "Pricing Summary" isn't at the usual Excel cells (e.g. a quote
+    converted from Dell's HTML): find the "Qty | Unit Price | Subtotal" header
+    below it and read the numbered rows under that header by column."""
+    max_c = min(ws.max_column, 30)
+    title_row = None
+    for r in range(1, min(ws.max_row, 120) + 1):
+        if any("pricing summary" in _cell_to_text(ws.cell(r, c).value).lower() for c in range(1, max_c + 1)):
+            title_row = r
+            break
+    if title_row is None:
+        return None
+    cols: Dict[str, int] = {}
+    header_row = None
+    for r in range(title_row + 1, min(ws.max_row, title_row + 5) + 1):
+        for c in range(1, max_c + 1):
+            t = _cell_to_text(ws.cell(r, c).value).strip().lower()
+            if t == "qty":
+                cols["qty"] = c
+            elif t == "unit price":
+                cols["unit"] = c
+            elif t == "subtotal":
+                cols["total"] = c
+        if {"qty", "unit", "total"} <= set(cols):
+            header_row = r
+            break
+        cols = {}
+    if header_row is None:
+        return None
+    items = []
+    for r in range(header_row + 1, ws.max_row + 1):
+        if not re.match(r"^\d+\.?$", _cell_to_text(ws.cell(r, 1).value).strip()):
+            break
+        desc = next(
+            (_cell_to_text(ws.cell(r, c).value) for c in range(2, cols["qty"]) if _cell_to_text(ws.cell(r, c).value)),
+            "",
+        )
+        qty_val = int(_parse_money(ws.cell(r, cols["qty"]).value) or 0)
+        unit_val = _parse_money(ws.cell(r, cols["unit"]).value) or 0.0
+        sub_val = _parse_money(ws.cell(r, cols["total"]).value)
+        if sub_val is None:
+            sub_val = qty_val * unit_val
+        if not desc or (qty_val <= 0 and unit_val == 0.0 and not sub_val):
+            break
+        items.append((desc, qty_val, unit_val, sub_val))
     return items if items else None
 
 
@@ -2617,8 +2666,89 @@ def _build_quote_workbook(
 
 # ==================== PUBLIC API ====================
 
+# ==================== HTML INPUT (Dell eQuote e-mail / .html) ====================
+# Dell sends Premier eQuotes as HTML. It is the same table layout as the Excel
+# export (that Excel is this HTML opened in Excel), so the HTML is laid out into a
+# worksheet cell-for-cell, honouring colspan, and then read by the Excel path.
+
+def _is_html(input_bytes: bytes) -> bool:
+    head = input_bytes[:4096].lstrip().lower()
+    return head.startswith((b"<html", b"<!doctype html", b"<body", b"<meta", b"<table", b"<div"))
+
+
+def _html_to_xlsx_bytes(input_bytes: bytes) -> bytes:
+    from html.parser import HTMLParser
+
+    class _Rows(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.rows: List[List[Tuple[str, int]]] = []
+            self._stack: List[List[Tuple[str, int]]] = []  # open <tr>s (tables nest)
+            self._cell: Optional[List[str]] = None
+            self._cell_span = 1
+            self._cell_stack: List[Tuple[Optional[List[str]], int]] = []
+            self._skip = 0  # inside <script>/<style>
+
+        def handle_starttag(self, tag, attrs):
+            if tag in ("script", "style"):
+                self._skip += 1
+            elif tag == "tr":
+                self._cell_stack.append((self._cell, self._cell_span))
+                self._cell = None
+                self._stack.append([])
+            elif tag in ("td", "th") and self._stack:
+                span = dict(attrs).get("colspan") or "1"
+                self._cell_span = int(span) if span.isdigit() and int(span) < 50 else 1
+                self._cell = []
+            elif tag == "br" and self._cell is not None:
+                self._cell.append(" ")
+
+        def handle_endtag(self, tag):
+            if tag in ("script", "style") and self._skip:
+                self._skip -= 1
+            elif tag in ("td", "th") and self._stack and self._cell is not None:
+                text = re.sub(r"\s+", " ", "".join(self._cell)).strip()
+                self._stack[-1].append((text, self._cell_span))
+                self._cell = None
+            elif tag == "tr" and self._stack:
+                row = self._stack.pop()
+                if any(t for t, _ in row):
+                    self.rows.append(row)
+                self._cell, self._cell_span = self._cell_stack.pop() if self._cell_stack else (None, 1)
+
+        def handle_data(self, data):
+            if not self._skip and self._cell is not None:
+                self._cell.append(data)
+
+    parser = _Rows()
+    parser.feed(input_bytes.decode("utf-8", errors="replace"))
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    for r_idx, row in enumerate(parser.rows, start=1):
+        col = 1
+        for text, span in row:
+            if text:
+                ws.cell(r_idx, col, _sanitize_excel_text(text))
+            col += span
+    out = BytesIO()
+    wb.save(out)
+    return out.getvalue()
+
+
+def _normalize_input(input_bytes: bytes) -> bytes:
+    """HTML quotes are converted to a worksheet; everything else is unchanged."""
+    if input_bytes.lstrip().startswith(b"%PDF") or _is_docx(input_bytes):
+        return input_bytes
+    if _is_html(input_bytes):
+        return _html_to_xlsx_bytes(input_bytes)
+    return input_bytes
+
+
 def describe_input_kind(input_bytes: bytes) -> str:
     """Return a short label for which extraction path an input will take (for usage tracking)."""
+    if _is_html(input_bytes):
+        return "html"
     if input_bytes.lstrip().startswith(b"%PDF"):
         return "pdf"
     if _is_docx(input_bytes):
@@ -2647,6 +2777,7 @@ def extract_quote_source_data(input_bytes: bytes, exchange_rate: float = 0.0) ->
     exchange_rate (EUR/USD) is only used to normalize a EUR-priced Word form
     back to USD; callers that don't need prices can leave it at 0.
     """
+    input_bytes = _normalize_input(input_bytes)
     is_pdf = input_bytes.lstrip().startswith(b"%PDF")
     is_docx = not is_pdf and _is_docx(input_bytes)
     items: List[Tuple] = []
