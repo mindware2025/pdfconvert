@@ -10,6 +10,7 @@ from logging.handlers import RotatingFileHandler
 
 import openpyxl
 from sales.xlsx_repair import repair_xlsx_bytes
+from sales.dell_currency_support import UAE_TERMS_TITLE, UAE_TERMS_AND_CONDITIONS
 from openpyxl import Workbook
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -2865,7 +2866,22 @@ def generate_dell_quote(
             "Kindly also ensure to review the proposal specifications from your end and ensure that they match the requirements exactly as per the End User.",
         ]
     footer_row = max(row_ptr + 2, header_row + 8)
-    if include_footer_notes:
+    if include_footer_notes and style_currency == "AED":
+        # UAE quotes: numbered Terms and Conditions.
+        ws.merge_cells(start_row=footer_row, start_column=2, end_row=footer_row, end_column=8)
+        ws.cell(footer_row, 2).value = UAE_TERMS_TITLE
+        ws.cell(footer_row, 2).font = Font(bold=True, color="1F497D")
+        footer_row += 1
+        merged_width = sum((ws.column_dimensions[get_column_letter(c)].width or 10) for c in range(2, 9))
+        chars_per_line = max(40, int(merged_width * 1.1))
+        for line in UAE_TERMS_AND_CONDITIONS:
+            ws.merge_cells(start_row=footer_row, start_column=2, end_row=footer_row, end_column=8)
+            ws.cell(footer_row, 2).value = _sanitize_excel_text(line)
+            ws.cell(footer_row, 2).alignment = Alignment(wrap_text=True, vertical="top")
+            n_lines = max(1, -(-len(line) // chars_per_line))
+            ws.row_dimensions[footer_row].height = 15 * n_lines + 2
+            footer_row += 1
+    elif include_footer_notes:
         for line in notes:
             footer_end_col = 8 if style_currency in ("AED", "EUR", "SAR") else 6
             ws.merge_cells(start_row=footer_row, start_column=2, end_row=footer_row, end_column=footer_end_col)

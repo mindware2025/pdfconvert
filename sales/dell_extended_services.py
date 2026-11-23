@@ -7,6 +7,7 @@ import os
 import re
 import openpyxl
 from sales.xlsx_repair import repair_xlsx_bytes
+from sales.dell_currency_support import UAE_TERMS_TITLE, UAE_TERMS_AND_CONDITIONS
 from openpyxl import Workbook
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -405,7 +406,7 @@ def generate_dell_extended_services_quote(
         ws[f"G{total_row}"].border = border_thin
     # ===== FOOTER NOTES =====
     if include_footer_notes:
-        footer_notes = _aed_footer_notes(currency_code)
+        footer_notes = list(UAE_TERMS_AND_CONDITIONS) if (currency_code or "").upper() == "AED" else _aed_footer_notes(currency_code)
         notes_title_row = (total_row + 2) if total_cells else (row_ptr + 2)
         ws.merge_cells(start_row=notes_title_row, start_column=1, end_row=notes_title_row, end_column=7)
         ws.cell(notes_title_row, 1).value = "Terms and Conditions"
@@ -417,7 +418,7 @@ def generate_dell_extended_services_quote(
         body_cell.value = "\n".join(footer_notes)
         body_cell.alignment = Alignment(wrap_text=True, vertical="top")
         body_cell.border = border_thin
-        ws.row_dimensions[notes_body_row].height = max(180, min(520, len(footer_notes) * 22))
+        ws.row_dimensions[notes_body_row].height = max(180, min(409, sum(15 * max(1, -(-len(n) // 120)) for n in footer_notes)))
     # Column widths
     widths = {
         "A": 8, "B": 15, "C": 50, "D": 8, "E": 15, "F": 18, "G": 12
