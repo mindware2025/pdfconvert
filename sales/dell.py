@@ -10,6 +10,7 @@ from logging.handlers import RotatingFileHandler
 
 import openpyxl
 from sales.xlsx_repair import repair_xlsx_bytes
+from sales.dell_currency_support import UAE_TERMS_TITLE, UAE_TERMS_AND_CONDITIONS
 from openpyxl import Workbook
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -538,6 +539,25 @@ def _pricing_summary_is_ksa_layout(ws, header_row: int, start_row: int) -> bool:
     return False
 
 
+def _pricing_summary_header_columns(ws, header_row: int):
+    """Return (qty, unit price, subtotal) columns from the Pricing Summary header, or None."""
+    for r in (header_row, header_row + 1):
+        if r > ws.max_row:
+            continue
+        found = {}
+        for c in range(1, min(ws.max_column, 25) + 1):
+            name = re.sub(r"\s+", " ", _cell_to_text(ws.cell(r, c).value)).strip().lower().rstrip(":")
+            if name in ("qty", "quantity"):
+                found.setdefault("qty", c)
+            elif name == "unit price":
+                found.setdefault("unit", c)
+            elif name == "subtotal":
+                found.setdefault("subtotal", c)
+        if len(found) == 3 and found["qty"] < found["unit"] < found["subtotal"]:
+            return found["qty"], found["unit"], found["subtotal"]
+    return None
+
+
 def _try_extract_items_from_pricing_summary(ws):
     logger = _get_logger()
     located = _locate_pricing_summary(ws)
@@ -548,7 +568,12 @@ def _try_extract_items_from_pricing_summary(ws):
     header_row, start_row = located
     logger.debug("_try_extract_items_from_pricing_summary: header_row=%d start_row=%d", header_row, start_row)
     A, B = colidx('A'), colidx('B')
-    if _pricing_summary_is_ksa_layout(ws, header_row, start_row):
+    header_cols = _pricing_summary_header_columns(ws, header_row)
+    if header_cols:
+        # Read the columns from the header labels. Quotes with a "Dell Local**"
+        # column (AED, SAR...) shift Qty/Unit Price/Subtotal one column left.
+        K, L, N = header_cols
+    elif _pricing_summary_is_ksa_layout(ws, header_row, start_row):
         logger.debug("_try_extract_items_from_pricing_summary: detected KSA layout (Qty/Unit Price/Subtotal at J/K/L)")
         K, L, N = colidx('J'), colidx('K'), colidx('L')
     else:
@@ -952,7 +977,9 @@ def _extract_compact_quote_items_and_config(ws):
         blank_streak = 0
 
         first_cell = _cell_to_text(ws.cell(r, cols["item"]).value).strip()
-        sku = _cell_to_text(ws.cell(r, cols["sku"]).value)
+        sku = _cell_to_text(ws.cell(r, cols["sku"]).value) if "sku" in cols else ""
+        if sku.startswith("[+]"):
+            sku = ""
         desc = _cell_to_text(ws.cell(r, cols["description"]).value)
         qty_raw = _cell_to_text(ws.cell(r, cols["qty"]).value)
         unit_col = cols.get("unit")
@@ -985,6 +1012,140 @@ def _extract_compact_quote_items_and_config(ws):
             config_rows.append((current_item, "", "", desc, "", qty_raw))
 
     return items, config_rows
+
+
+def _extract_compact_quote_from_workbook(wb, ws):
+    """Compact quotes can be split over several sheets (e.g. "14 inch", "16 inch")."""
+    items, config_rows = _extract_compact_quote_items_and_config(ws)
+    if not items:
+        return items, config_rows
+    for other in wb.worksheets:
+        if other is ws:
+            continue
+        more_items, more_rows = _extract_compact_quote_items_and_config(other)
+        if not more_items:
+            continue
+        offset = len(items)
+        items.extend(more_items)
+        for row in more_rows:
+            config_rows.append((str(int(row[0]) + offset),) + tuple(row[1:]))
+    return items, config_rows
+
+
+_SOLUTION_SKU_PAT = re.compile(r"^(?:\d{3}-[A-Z0-9]{4,5}|[A-Z]{1,2}\d{5,}|\d{3}-\d{5})$", re.I)
+
+
+def _find_price_summary_solution_header(ws):
+    """Dell Solutions Configurator quote: 'Price Summary' table with Description /
+    Selling Price / Quantity / Subtotal Price columns."""
+    for r in range(1, min(ws.max_row, 150) + 1):
+        if _cell_to_text(ws.cell(r, 1).value).strip().lower() != "price summary":
+            continue
+        for hr in range(r + 1, min(ws.max_row, r + 5) + 1):
+            cols = {}
+            for c in range(1, min(ws.max_column, 40) + 1):
+                name = re.sub(r"\s+", " ", _cell_to_text(ws.cell(hr, c).value)).strip().lower()
+                if name == "description":
+                    cols.setdefault("description", c)
+                elif name == "selling price":
+                    cols.setdefault("unit", c)
+                elif name == "quantity":
+                    cols.setdefault("qty", c)
+                elif name == "subtotal price":
+                    cols.setdefault("total", c)
+            if len(cols) == 4:
+                return hr, cols
+    return None
+
+
+def _extract_price_summary_solution_quote(ws):
+    """Return (items, config_rows, headings) for a Solutions Configurator quote, or ([], [], {})."""
+    found = _find_price_summary_solution_header(ws)
+    if not found:
+        return [], [], {}
+    header_row, cols = found
+
+    items = []
+    for r in range(header_row + 1, ws.max_row + 1):
+        desc = _cell_to_text(ws.cell(r, cols["description"]).value).strip()
+        if desc.lower().startswith(("subtotal", "total")):
+            break
+        if not desc:
+            continue
+        qty_raw = ws.cell(r, cols["qty"]).value
+        try:
+            qty_val = int(_parse_money(qty_raw) or 0)
+        except Exception:
+            qty_val = 0
+        if qty_val <= 0:
+            continue
+        unit_val = _parse_money(ws.cell(r, cols["unit"]).value) or 0.0
+        total_val = _parse_money(ws.cell(r, cols["total"]).value)
+        desc = re.sub(r"^\*+\s*", "", desc)
+        items.append((desc, qty_val, unit_val, total_val if total_val is not None else qty_val * unit_val))
+    if not items:
+        return [], [], {}
+
+    # Product Details: one block per product ("Description | Quantity | Unit Price |
+    # Subtotal Price" header, product name, then SKU rows). Local onsite-service blocks
+    # (priced in AED/SAR) belong to the product above them.
+    config_rows = []
+    headings: Dict[str, str] = {}
+    item_no = 0
+    in_block = False
+    block_is_service = False
+    expect_heading = False
+    detail_start = header_row + len(items)
+    for r in range(detail_start, ws.max_row + 1):
+        a = _cell_to_text(ws.cell(r, 1).value).strip()
+        if a.lower() == "description":
+            row_l = _row_text(ws, r, 1, min(ws.max_column, 40)).lower()
+            if "quantity" in row_l and "unit price" in row_l:
+                expect_heading = True
+                in_block = False
+                continue
+        if expect_heading and a:
+            expect_heading = False
+            row_l = _row_text(ws, r, 1, min(ws.max_column, 40))
+            block_is_service = bool(re.search(r"\b(AED|SAR|QAR|EUR)\s*[\d,]", row_l)) and item_no > 0
+            if not block_is_service:
+                if item_no >= len(items):
+                    break
+                item_no += 1
+                headings[str(item_no)] = re.sub(r"^\*+\s*", "", a)
+            in_block = True
+            continue
+        if not in_block or not a:
+            continue
+        if _SOLUTION_SKU_PAT.match(a):
+            b = _cell_to_text(ws.cell(r, 2).value).strip()
+            qty_txt = ""
+            for c in range(3, min(ws.max_column, 40) + 1):
+                v = _cell_to_text(ws.cell(r, c).value).strip()
+                if re.fullmatch(r"\d+", v):
+                    qty_txt = v
+                    break
+            config_rows.append((str(item_no), headings.get(str(item_no), ""), "", b, a, qty_txt))
+        elif a.lower().startswith(("** based on", "important notes")):
+            break
+    return items, config_rows, headings
+
+
+def _extract_solution_quote_parties(ws) -> Dict[str, str]:
+    """End user ("End User: X |") and reseller ("Reseller Details" > Company Name)."""
+    out = {}
+    for r in range(1, min(ws.max_row, 80) + 1):
+        for c in range(1, min(ws.max_column, 30) + 1):
+            text = _cell_to_text(ws.cell(r, c).value).strip()
+            m = re.match(r"^end user\s*:\s*(.+?)\s*\|?\s*$", text, re.I)
+            if m and not out.get("end user"):
+                out["end user"] = m.group(1).strip()
+            if text.lower() == "reseller details" and not out.get("reseller"):
+                for rr in range(r + 1, min(ws.max_row, r + 6) + 1):
+                    if _cell_to_text(ws.cell(rr, c).value).strip().lower() == "company name":
+                        out["reseller"] = _cell_to_text(ws.cell(rr + 1, c).value).strip()
+                        break
+    return out
 
 
 def _extract_excel_consolidation_fee(ws) -> float:
@@ -1904,7 +2065,7 @@ def _extract_product_detail_headings(ws) -> Dict[str, str]:
             heading = _cell_to_text(ws.cell(r, 2).value)
             if not heading:
                 heading = _row_text(ws, r, 1, max_col)
-            headings[item_no] = _clean_heading_text(heading)
+            headings[item_no] = re.sub(r"^\*+\s*", "", _clean_heading_text(heading))
         r += 1
 
     return headings
@@ -1966,6 +2127,9 @@ def detect_dell_standard_variant(input_excel_bytes: bytes) -> str:
 
         if _try_extract_items_from_pricing_summary(src_ws):
             return "pricing_summary"
+
+        if _extract_price_summary_solution_quote(src_ws)[0]:
+            return "price_summary_solution"
 
         compact_items, _ = _extract_compact_quote_items_and_config(src_ws)
         if compact_items:
@@ -2087,14 +2251,24 @@ def generate_dell_quote(
             # ---- Extract items (Pricing Summary layout first; else generic) ----
             extracted_config_rows = None
             is_compact_quote = False
+            solution_items, solution_headings = [], {}
             items_ps = _try_extract_items_from_pricing_summary(src_ws)
             if items_ps:
                 items = items_ps
                 logger.info("Found %d items via Pricing Summary extraction", len(items))
                 _log_items("Pricing summary items", items)
             else:
-                compact_items, compact_config_rows = _extract_compact_quote_items_and_config(src_ws)
-                if compact_items:
+                solution_items, solution_config_rows, solution_headings = _extract_price_summary_solution_quote(src_ws)
+                compact_items, compact_config_rows = ([], []) if solution_items else _extract_compact_quote_from_workbook(src_wb, src_ws)
+                if solution_items:
+                    items = solution_items
+                    extracted_config_rows = solution_config_rows
+                    for key, value in _extract_solution_quote_parties(src_ws).items():
+                        if value and not (quote_meta or {}).get(key):
+                            quote_meta[key] = value
+                    logger.info("Found %d items via Solutions Configurator Price Summary", len(items))
+                    _log_items("Price Summary items", items)
+                elif compact_items:
                     items = compact_items
                     extracted_config_rows = compact_config_rows
                     is_compact_quote = True
@@ -2132,7 +2306,7 @@ def generate_dell_quote(
                 logger.info("Using separate configuration sheet for product detail extraction: %d config rows", len(config_rows))
             else:
                 config_rows = extracted_config_rows if extracted_config_rows is not None else _extract_all_config_rows(src_ws)
-                item_headings_by_item = _extract_product_detail_headings(src_ws)
+                item_headings_by_item = _extract_product_detail_headings(src_ws) or solution_headings
                 item_display_numbers_by_item = _extract_product_detail_display_numbers(src_ws)
             consolidation_fee = _extract_excel_consolidation_fee(src_ws)
             shipping_fee = _extract_excel_shipping_fee(src_ws)
@@ -2185,7 +2359,7 @@ def generate_dell_quote(
             normalized = re.sub(r"\s+", " ", normalized).strip()
 
             # Dell files use multiple part number formats, including 210-XXXX and AD123456.
-            if re.fullmatch(r"(?:\d{3}-[A-Z0-9]{4,5}|[A-Z]{2}\d{6,})", normalized, re.I):
+            if re.fullmatch(r"(?:\d{3}-[A-Z0-9]{4,5}|[A-Z]{1,2}\d{6,})", normalized, re.I):
                 return normalized
         return ""
 
@@ -2692,7 +2866,22 @@ def generate_dell_quote(
             "Kindly also ensure to review the proposal specifications from your end and ensure that they match the requirements exactly as per the End User.",
         ]
     footer_row = max(row_ptr + 2, header_row + 8)
-    if include_footer_notes:
+    if include_footer_notes and style_currency == "AED":
+        # UAE quotes: numbered Terms and Conditions.
+        ws.merge_cells(start_row=footer_row, start_column=2, end_row=footer_row, end_column=8)
+        ws.cell(footer_row, 2).value = UAE_TERMS_TITLE
+        ws.cell(footer_row, 2).font = Font(bold=True, color="1F497D")
+        footer_row += 1
+        merged_width = sum((ws.column_dimensions[get_column_letter(c)].width or 10) for c in range(2, 9))
+        chars_per_line = max(40, int(merged_width * 1.1))
+        for line in UAE_TERMS_AND_CONDITIONS:
+            ws.merge_cells(start_row=footer_row, start_column=2, end_row=footer_row, end_column=8)
+            ws.cell(footer_row, 2).value = _sanitize_excel_text(line)
+            ws.cell(footer_row, 2).alignment = Alignment(wrap_text=True, vertical="top")
+            n_lines = max(1, -(-len(line) // chars_per_line))
+            ws.row_dimensions[footer_row].height = 15 * n_lines + 2
+            footer_row += 1
+    elif include_footer_notes:
         for line in notes:
             footer_end_col = 8 if style_currency in ("AED", "EUR", "SAR") else 6
             ws.merge_cells(start_row=footer_row, start_column=2, end_row=footer_row, end_column=footer_end_col)
