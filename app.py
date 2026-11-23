@@ -2128,6 +2128,7 @@ elif tool == "💻 Dell Quotation":
         "S.Jammoul@mindware.net",
         "m.ali@mindware.net",
         "R.AlKhateeb@mindware.net",
+        "N.Nasar@mindware.net",
     ]
     mw_sales_person = ""
     if currency_code == "AED":
