@@ -21,6 +21,7 @@ import re
 from datetime import datetime
 from io import BytesIO
 import openpyxl
+from sales.xlsx_repair import repair_xlsx_bytes
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 # ── keep all the original imports from your dell module ──────────────────────
@@ -312,7 +313,7 @@ def _extract_fee_values(input_excel_bytes: bytes) -> tuple[float, float]:
     if is_pdf:
         _, _, _, _, _, consolidation_fee = _extract_pdf_quote_data(input_excel_bytes)
         return float(consolidation_fee or 0.0), 0.0
-    wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
+    wb = openpyxl.load_workbook(BytesIO(repair_xlsx_bytes(input_excel_bytes)), data_only=True)
     ws = wb.active
     return _extract_excel_consolidation_fee(ws), _extract_excel_shipping_fee(ws)
 
@@ -321,7 +322,7 @@ def _extract_items_and_metadata(input_excel_bytes: bytes):
     if is_pdf:
         items, quote_meta, config_rows, quote_ref_text, date_text, _ = _extract_pdf_quote_data(input_excel_bytes)
         return items, quote_meta, config_rows, {}, quote_ref_text, date_text, is_pdf
-    wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
+    wb = openpyxl.load_workbook(BytesIO(repair_xlsx_bytes(input_excel_bytes)), data_only=True)
     ws = wb.active
     quote_meta = _extract_quote_metadata(ws)
     item_headings_by_item = _extract_product_detail_headings(ws)

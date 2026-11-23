@@ -9,6 +9,7 @@ import tempfile
 from logging.handlers import RotatingFileHandler
 
 import openpyxl
+from sales.xlsx_repair import repair_xlsx_bytes
 from openpyxl import Workbook
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -136,7 +137,7 @@ def build_dell_output_filename(input_excel_bytes: bytes, currency_code: str = "U
         if is_pdf:
             _, quote_meta, _, quote_ref_text, _, _ = _extract_pdf_quote_data(input_excel_bytes)
         else:
-            src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
+            src_wb = openpyxl.load_workbook(BytesIO(repair_xlsx_bytes(input_excel_bytes)), data_only=True)
             src_ws = src_wb.active
             quote_ref_text, _ = _extract_metadata_strict(src_ws)
             if (
@@ -555,14 +556,28 @@ def _try_extract_items_from_pricing_summary(ws):
 
     items = []
     r = start_row
+    blank_streak = 0
     while r <= ws.max_row:
         sr = ws.cell(r, A).value
-        if sr is None or str(sr).strip() == "":
+        sr_text = "" if sr is None else str(sr).strip()
+        if not sr_text:
+            # Newer eQuotes put a bundled service line, a "Term: ..." line and
+            # blank rows under each product. Skip those and keep going; stop at
+            # the next section ("Tax Summary") or after a long blank gap.
+            if _cell_to_text(ws.cell(r, B).value):
+                break
+            row_has_text = any(_cell_to_text(ws.cell(r, c).value) for c in range(1, min(ws.max_column, 16) + 1))
+            blank_streak = 0 if row_has_text else blank_streak + 1
+            if blank_streak > 3 or not items:
+                break
+            r += 1
+            continue
+        if not re.match(r'^\d+', sr_text):
             break
-        if not re.match(r'^\d+', str(sr).strip()):
-            break
+        blank_streak = 0
 
-        desc_text = _cell_to_text(ws.cell(r, B).value)
+        # "** Dell Pro Tower Desktop": the asterisks point to a footnote in the quote.
+        desc_text = re.sub(r"^\*+\s*", "", _cell_to_text(ws.cell(r, B).value))
         if not desc_text:
             break
 
@@ -631,11 +646,42 @@ def _find_config_table_header(ws, start_row: int, search_rows: int = 30) -> Opti
                 labels['sku'] = c
             if name.strip() in ('qty', 'quantity') and 'qty' not in labels:
                 labels['qty'] = c
+            if name.strip() == 'option' and 'option' not in labels:
+                labels['option'] = c
+            if name.strip() == 'tax type' and 'tax_type' not in labels:
+                labels['tax_type'] = c
         # Some Dell exports omit the "Module" column and start directly with Description.
         if all(k in labels for k in ('description', 'sku')):
+            labels.pop('option', None)
+            labels.pop('tax_type', None)
             labels.setdefault('module', labels['description'])
             return r, labels
+        # Newer Dell Premier eQuotes: "Description | Option | Tax Type | Qty", where
+        # "Description" holds the module name, the real description sits in an
+        # unlabelled column after it, and "Option" holds the SKU.
+        if all(k in labels for k in ('description', 'option', 'tax_type')) and labels['option'] > labels['description'] + 1:
+            module_col, sku_col = labels['description'], labels['option']
+            return r, {
+                'module': module_col,
+                'description': module_col,  # placeholder; real text read via desc_span
+                'desc_span': (module_col + 1, sku_col - 1),
+                'sku': sku_col,
+                'qty': labels.get('qty', 0),
+            }
     return None
+
+
+def _config_cell(ws, row: int, colmap: Dict, key: str) -> str:
+    """Read one config field; handles the unlabelled description column (desc_span)."""
+    if key == "description" and colmap.get("desc_span"):
+        start, end = colmap["desc_span"]
+        for c in range(start, end + 1):
+            text = _cell_to_text(ws.cell(row, c).value)
+            if text:
+                return text
+        return ""
+    col = colmap.get(key, 0)
+    return _cell_to_text(ws.cell(row, col).value) if col else ""
 
 
 def _collect_config_rows_for_product(ws, start_row: int, columns: Dict[str, int], next_product_start: Optional[int]) -> List[Tuple[str, str, str]]:
@@ -1728,7 +1774,7 @@ def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str]]:
         if not heading:
             heading = _row_text(ws, row_idx, 1, max_col)
 
-        return item_marker.rstrip("."), _clean_heading_text(heading)
+        return item_marker.rstrip("."), re.sub(r"^\*+\s*", "", _clean_heading_text(heading))
 
     def _find_next_item_row(start_row: int) -> Optional[int]:
         for row_idx in range(start_row, ws.max_row + 1):
@@ -1765,7 +1811,10 @@ def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str]]:
 
         header_row, colmap = header_info
         data_row = header_row + 1
-        has_real_module_col = bool(colmap.get("module")) and colmap.get("module") != colmap.get("description")
+        span_layout = bool(colmap.get("desc_span"))
+        has_real_module_col = span_layout or (
+            bool(colmap.get("module")) and colmap.get("module") != colmap.get("description")
+        )
 
         # Skip empty rows after header
         while data_row <= search_end and not _row_text(ws, data_row, 1, max_col):
@@ -1787,10 +1836,15 @@ def _extract_all_config_rows(ws) -> List[Tuple[str, str, str, str, str, str]]:
                 data_row += 1
                 continue
 
-            mod = _cell_to_text(ws.cell(data_row, colmap.get("module", 0)).value) if has_real_module_col else ""
-            desc = _cell_to_text(ws.cell(data_row, colmap.get("description", 0)).value)
-            sku = _cell_to_text(ws.cell(data_row, colmap.get("sku", 0)).value)
-            qty = _cell_to_text(ws.cell(data_row, colmap.get("qty", 0)).value)
+            mod = _config_cell(ws, data_row, colmap, "module") if has_real_module_col else ""
+            desc = _config_cell(ws, data_row, colmap, "description")
+            sku = _config_cell(ws, data_row, colmap, "sku")
+            qty = _config_cell(ws, data_row, colmap, "qty")
+            if span_layout and not re.fullmatch(r"\d+(?:\.0+)?", qty.strip()):
+                # Section headings ("Components", "Software"), the next item's
+                # "Qty | Unit Price | Subtotal" line, and footer text.
+                data_row += 1
+                continue
 
             if not has_real_module_col and desc and not any([sku, qty]):
                 mod = desc
@@ -1900,7 +1954,7 @@ def detect_dell_standard_variant(input_excel_bytes: bytes) -> str:
         if input_excel_bytes.lstrip().startswith(b"%PDF"):
             return "pdf"
 
-        src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
+        src_wb = openpyxl.load_workbook(BytesIO(repair_xlsx_bytes(input_excel_bytes)), data_only=True)
         src_ws = src_wb.active
 
         if _is_grouped_config_template(src_ws):
@@ -1977,7 +2031,7 @@ def generate_dell_quote(
         item_descs_order = [it[0] for it in items]
         item_headings_by_item = {str(i + 1): items[i][0] for i in range(len(items))}
     else:
-        src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
+        src_wb = openpyxl.load_workbook(BytesIO(repair_xlsx_bytes(input_excel_bytes)), data_only=True)
         src_ws = src_wb.active
         src_config_ws = _find_configuration_sheet(src_wb)
         if src_config_ws is not None:
@@ -2144,6 +2198,14 @@ def generate_dell_quote(
             else:
                 item_no, _heading, _module, _desc, sku, _tax = row_data
             if sku and item_no not in part_numbers_by_item:
+                part_numbers_by_item[item_no] = sku
+        # Newer eQuotes don't list the base unit first (it may start with the
+        # Processor); the "Enclosure" line is the system's own SKU there.
+        for row_data in config_rows:
+            item_no, _heading, module = row_data[0], row_data[1], str(row_data[2]).strip().lower()
+            sku = row_data[4]
+            first_sku = part_numbers_by_item.get(item_no, "")
+            if module == "enclosure" and sku and not re.match(r"^\d{3}-", str(first_sku)):
                 part_numbers_by_item[item_no] = sku
 
     heading_part_numbers_by_item: Dict[str, str] = {}

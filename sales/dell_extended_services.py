@@ -6,6 +6,7 @@ from datetime import datetime
 import os
 import re
 import openpyxl
+from sales.xlsx_repair import repair_xlsx_bytes
 from openpyxl import Workbook
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -135,7 +136,7 @@ def build_dell_extended_services_output_filename(input_excel_bytes: bytes, curre
     quote_no = ""
     end_user = ""
     try:
-        src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
+        src_wb = openpyxl.load_workbook(BytesIO(repair_xlsx_bytes(input_excel_bytes)), data_only=True)
         src_ws = src_wb.active
         meta = _extract_metadata(src_ws)
         quote_no = meta.get("quote_no", "")
@@ -250,7 +251,7 @@ def generate_dell_extended_services_quote(
             conversion_rate = CURRENCY_CONVERSION_RATES.get(currency_code, AED_RATE)
     else:
         conversion_rate = CURRENCY_CONVERSION_RATES.get(currency_code, AED_RATE)
-    src_wb = openpyxl.load_workbook(BytesIO(input_excel_bytes), data_only=True)
+    src_wb = openpyxl.load_workbook(BytesIO(repair_xlsx_bytes(input_excel_bytes)), data_only=True)
     src_ws = src_wb.active
     meta = _extract_metadata(src_ws)
     meta = {k: _strip_trailing_asterisk(v) for k, v in meta.items()}
