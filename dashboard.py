@@ -737,8 +737,29 @@ def _team_chip(team: str) -> str:
     return f'<span class="mw-chip" style="--chip-color:{color}">{label}</span>'
 
 
+def add_total_saved(rows: list, mgmt_df: pd.DataFrame, catalog_df: pd.DataFrame) -> list:
+    """Add each tool's total hours saved since tracking started (Sheet1 history).
+
+    When several catalog rows share one logged tool, only the first gets the total,
+    so hours are never counted twice.
+    """
+    totals = mgmt_df.groupby("tool_clean")["hours"].sum() if not mgmt_df.empty else pd.Series(dtype=float)
+    claimed = set()
+    for row, canonical in zip(rows, catalog_df["tool_clean"]):
+        if canonical in claimed:
+            row["TotalHours"] = 0.0
+            continue
+        claimed.add(canonical)
+        row["TotalHours"] = float(totals.get(canonical, 0.0))
+    return rows
+
+
+def _fmt_total(hours: float) -> str:
+    return f"{hours:,.0f} hrs" if hours >= 1 else ("{:.1f} hrs".format(hours) if hours else "—")
+
+
 def build_catalog_table_html(rows: list, max_rows: int | None = None) -> str:
-    ordered = sorted(rows, key=lambda r: r["SavedMinutes"], reverse=True)
+    ordered = sorted(rows, key=lambda r: (r.get("TotalHours", 0), r["SavedMinutes"]), reverse=True)
     if max_rows:
         ordered = ordered[:max_rows]
 
@@ -758,13 +779,14 @@ def build_catalog_table_html(rows: list, max_rows: int | None = None) -> str:
             f"<td>{runs_str}</td>"
             f"<td>{per_run_str}</td>"
             f"<td>{saved_str}</td>"
+            f'<td class="mw-total">{_fmt_total(r.get("TotalHours", 0))}</td>'
             "</tr>"
         )
 
     return (
         '<div class="mw-table-wrap"><table class="mw-table"><thead><tr>'
         "<th>Tool</th><th>Team</th><th>Status</th><th>Live since</th>"
-        "<th>Runs/mo</th><th>Time saved/run</th><th>Saved this month</th>"
+        "<th>Runs/mo</th><th>Time saved/run</th><th>Saved this month</th><th>Total saved</th>"
         "</tr></thead><tbody>" + "".join(body_parts) + "</tbody></table></div>"
     )
 
@@ -879,6 +901,25 @@ def _inject_css(tv_mode: bool) -> None:
         }}
         .mw-table tr:last-child td {{ border-bottom: none; }}
         .mw-tool-name {{ font-weight: 600; }}
+        .mw-total {{ font-weight: 600; color: #9fd3c3 !important; }}
+        .mw-table, .mw-table th, .mw-table td {{
+            border-left: none !important; border-right: none !important; border-top: none !important;
+        }}
+        .mw-table {{ border: none !important; margin: 0 !important; }}
+        .mw-table thead, .mw-table tr {{ border: none !important; }}
+        [data-testid="stWidgetLabel"] p, [data-testid="stCaptionContainer"],
+        [data-testid="stCaptionContainer"] p {{ color: {PALETTE["dim"]} !important; }}
+        [data-baseweb="input"], [data-baseweb="input"] > div, [data-baseweb="select"] > div,
+        [data-testid="stTextInputRootElement"], [data-testid="stMultiSelect"] [role="group"] {{
+            background: #141d2b !important; border-color: rgba(255, 255, 255, 0.10) !important;
+        }}
+        [data-baseweb="input"] input, [data-baseweb="select"] div, [data-baseweb="select"] input,
+        [data-testid="stTextInputRootElement"] input, [data-testid="stMultiSelect"] [role="group"] * {{
+            color: {PALETTE["white"]} !important; -webkit-text-fill-color: {PALETTE["white"]} !important;
+        }}
+        [data-baseweb="input"] input::placeholder {{ color: {PALETTE["dim"]} !important; -webkit-text-fill-color: {PALETTE["dim"]} !important; }}
+        [data-baseweb="select"] svg {{ fill: {PALETTE["dim"]} !important; }}
+        [data-baseweb="tag"] {{ background: rgba(108, 155, 210, 0.25) !important; }}
         .mw-pill {{
             display: inline-flex; align-items: center; gap: 0.35rem;
             padding: 0.2rem 0.6rem; border-radius: 999px;
@@ -1021,14 +1062,31 @@ def _dashboard_body(run_log_sheet, catalog_sheet, tv_mode: bool, usage_sheet=Non
             )
         else:
             ts = compute_time_saved(catalog_df, df, now)
+            rows = add_total_saved(ts["rows"], mgmt["df"], catalog_df)
             st.markdown(
                 '<div class="mw-section-title">Automation Catalog</div>',
                 unsafe_allow_html=True,
             )
-            st.markdown(
-                build_catalog_table_html(ts["rows"]),
-                unsafe_allow_html=True,
-            )
+            f_search, f_team, f_status = st.columns([2, 2, 2])
+            search = f_search.text_input("Search tool", key="mw_cat_search", placeholder="Tool name")
+            teams = sorted({str(r["Team"]) for r in rows if str(r["Team"]).strip()})
+            statuses = sorted({str(r["Status"]) for r in rows if str(r["Status"]).strip()})
+            team_sel = f_team.multiselect("Team", teams, key="mw_cat_team", placeholder="All teams")
+            status_sel = f_status.multiselect("Status", statuses, key="mw_cat_status", placeholder="All statuses")
+            shown = [
+                r
+                for r in rows
+                if (not search or search.strip().lower() in str(r["Tool"]).lower())
+                and (not team_sel or str(r["Team"]) in team_sel)
+                and (not status_sel or str(r["Status"]) in status_sel)
+            ]
+            if shown:
+                total_shown = sum(r.get("TotalHours", 0) for r in shown)
+                since = mgmt["df"]["month"].min().strftime("%b %Y") if not mgmt["df"].empty else ""
+                st.caption(f"{len(shown)} tools · {total_shown:,.0f} hours saved in total since {since}")
+                st.markdown(build_catalog_table_html(shown), unsafe_allow_html=True)
+            else:
+                st.markdown('<div class="mw-empty">No tools match these filters.</div>', unsafe_allow_html=True)
             if mgmt["unrated"]:
                 st.caption(
                     "Not counted in hours saved yet (no minutes in the Tool Catalog): "
