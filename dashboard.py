@@ -42,28 +42,28 @@ CACHE_TTL_SECONDS = 240   # at most one Sheets read per 4 min per client
 TV_REFRESH_SECONDS = 300  # fragment rerun cadence; >= TTL so each refresh gets fresh data
 
 PALETTE = {
-    "navy": "#0c1930",
-    "card": "#10223e",
-    "steel": "#6ea8ff",
-    "glow": "#7cc7ff",
-    "white": "#f2f7ff",
-    "dim": "rgba(157,193,255,0.65)",
+    "navy": "#0f1724",
+    "card": "#141d2b",
+    "steel": "#7fa6d6",
+    "glow": "#8db8e0",
+    "white": "#e6ebf2",
+    "dim": "#8b97a8",
 }
-GRID = "rgba(110,168,255,0.10)"
+GRID = "rgba(255,255,255,0.06)"
 
 # Status colors reserved for state, never reused as a categorical series color.
-STATUS_COLORS = {"live": "#0ca30c", "test": "#fab219", "default": "#6b7a94"}
+STATUS_COLORS = {"live": "#5db39e", "test": "#d4a35c", "default": "#7d8796"}
 
 # Categorical colors for the team donut — validated 4-slot set (dataviz
 # validator, dark surface #10223e, all-pairs). Fixed per team, never by rank.
 TEAM_ORDER = ["Finance", "Operations", "Credit", "Sales"]
 TEAM_COLORS = {
-    "Finance": "#3987e5",
-    "Operations": "#008300",
-    "Credit": "#d55181",
-    "Sales": "#c98500",
+    "Finance": "#d4a35c",
+    "Operations": "#5db39e",
+    "Credit": "#b08bc9",
+    "Sales": "#6c9bd2",
 }
-TEAM_FALLBACK_COLOR = "#6b7a94"
+TEAM_FALLBACK_COLOR = "#7d8796"
 
 # ---------------------------------------------------------------------------
 # Tool-name normalization — the logged names are free-form (mixed casing,
@@ -467,13 +467,13 @@ def _apply_dark(fig: go.Figure, title: str) -> go.Figure:
         ),
         margin=dict(t=44, l=8, r=8, b=8),
         hoverlabel=dict(
-            bgcolor="#14294a",
-            bordercolor="rgba(110,168,255,0.35)",
+            bgcolor="#1c2636",
+            bordercolor="rgba(255,255,255,0.12)",
             font=dict(color=PALETTE["white"], family="Google Sans, Segoe UI, sans-serif"),
         ),
         showlegend=False,
     )
-    fig.update_xaxes(gridcolor=GRID, zeroline=False, linecolor="rgba(110,168,255,0.20)")
+    fig.update_xaxes(gridcolor=GRID, zeroline=False, linecolor="rgba(255,255,255,0.10)")
     fig.update_yaxes(gridcolor=GRID, zeroline=False, linecolor="rgba(0,0,0,0)")
     return fig
 
@@ -681,7 +681,7 @@ def build_runs_trend_chart(df: pd.DataFrame, now: datetime, compact: bool = Fals
             mode="lines",
             line=dict(color=PALETTE["glow"], width=3, shape="spline", smoothing=0.5),
             fill="tozeroy",
-            fillcolor="rgba(124,199,255,0.15)",
+            fillcolor="rgba(141,184,224,0.10)",
             customdata=custom,
             hovertemplate="<b>%{x|%d %b}</b><br>%{customdata[0]} runs that day"
             "<br>%{customdata[1]:,} month to date<extra></extra>",
@@ -792,8 +792,7 @@ def _inject_css(tv_mode: bool) -> None:
         f"""
         <style>
         [data-testid="stApp"] {{
-            background: radial-gradient(1200px 700px at 50% -10%,
-                #14294a 0%, #0c1930 48%, #060e1c 100%) !important;
+            background: #0f1724 !important;
         }}
         [data-testid="stToolbar"], #MainMenu {{ display: none !important; }}
         html, body, [class*="css"] {{
@@ -817,9 +816,9 @@ def _inject_css(tv_mode: bool) -> None:
             text-align: center;
             padding: 1.3rem 1rem 1.1rem;
             margin-bottom: 1rem;
-            background: rgba(12, 163, 12, 0.08);
-            border: 1px solid rgba(12, 163, 12, 0.35);
-            border-radius: 18px;
+            background: #141d2b;
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-radius: 14px;
         }}
         .mw-hero-label {{
             font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase;
@@ -827,24 +826,22 @@ def _inject_css(tv_mode: bool) -> None:
         }}
         .mw-hero-value {{
             font-family: 'Google Sans', 'Segoe UI', sans-serif;
-            font-size: clamp(2.3rem, 5.5vw, 4.2rem); font-weight: 800;
-            color: #baf7ba;
-            text-shadow: 0 0 26px rgba(12, 163, 12, 0.55);
+            font-size: clamp(2.3rem, 5vw, 3.8rem); font-weight: 600;
+            color: #9fd3c3;
         }}
         .mw-hero-value span {{
             font-size: 1.1rem; font-weight: 500; color: {PALETTE["dim"]};
-            margin-left: 0.4rem; text-shadow: none;
+            margin-left: 0.4rem;
         }}
         .mw-section-title {{
             font-size: 0.95rem; letter-spacing: 1px; text-transform: uppercase;
             color: {PALETTE["dim"]}; margin: 1.2rem 0 0.6rem;
         }}
         .mw-kpi {{
-            background: rgba(20, 41, 74, 0.55);
-            border: 1px solid rgba(110, 168, 255, 0.25);
-            border-radius: 18px;
+            background: #141d2b;
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-radius: 14px;
             padding: 1.1rem 1.3rem 1rem;
-            box-shadow: inset 0 0 40px rgba(124, 199, 255, 0.05);
         }}
         .mw-kpi-label {{
             font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px;
@@ -852,37 +849,32 @@ def _inject_css(tv_mode: bool) -> None:
         }}
         .mw-kpi-value {{
             font-family: 'Google Sans', 'Segoe UI', sans-serif;
-            font-size: clamp(2.2rem, 4.5vw, 4rem); font-weight: 700; line-height: 1.05;
+            font-size: clamp(2rem, 4vw, 3.4rem); font-weight: 600; line-height: 1.05;
             color: {PALETTE["white"]};
-            animation: mw-kpi-glow 6s ease-in-out infinite;
         }}
         .mw-kpi-sub {{ font-size: 0.8rem; color: {PALETTE["dim"]}; margin-top: 0.3rem; }}
-        @keyframes mw-kpi-glow {{
-            0%, 100% {{ text-shadow: 0 0 18px rgba(124, 199, 255, 0.45); }}
-            50% {{ text-shadow: 0 0 32px rgba(124, 199, 255, 0.85); }}
-        }}
         .mw-empty {{
-            border: 1px dashed rgba(110, 168, 255, 0.3); border-radius: 18px;
+            border: 1px dashed rgba(255, 255, 255, 0.08); border-radius: 18px;
             padding: 3rem 1rem; text-align: center; color: {PALETTE["dim"]};
         }}
         .mw-banner {{
-            background: rgba(20, 41, 74, 0.55);
-            border: 1px solid rgba(110, 168, 255, 0.25); border-radius: 12px;
+            background: #141d2b;
+            border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px;
             padding: 1rem 1.2rem; color: {PALETTE["dim"]};
         }}
         .mw-table-wrap {{
             overflow-x: auto;
-            border: 1px solid rgba(110, 168, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 14px;
         }}
         .mw-table {{ width: 100%; border-collapse: collapse; font-size: 0.85rem; }}
         .mw-table th {{
             text-align: left; padding: 0.6rem 0.9rem; color: {PALETTE["dim"]};
             font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px;
-            border-bottom: 1px solid rgba(110, 168, 255, 0.2); white-space: nowrap;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08); white-space: nowrap;
         }}
         .mw-table td {{
-            padding: 0.55rem 0.9rem; border-bottom: 1px solid rgba(110, 168, 255, 0.08);
+            padding: 0.55rem 0.9rem; border-bottom: 1px solid rgba(255, 255, 255, 0.08);
             color: {PALETTE["white"]}; white-space: nowrap;
         }}
         .mw-table tr:last-child td {{ border-bottom: none; }}
@@ -901,9 +893,9 @@ def _inject_css(tv_mode: bool) -> None:
             color: var(--chip-color); font-size: 0.78rem; font-weight: 600;
         }}
         .stButton > button {{
-            background: rgba(20, 41, 74, 0.8) !important;
+            background: #141d2b !important;
             color: {PALETTE["white"]} !important;
-            border: 1px solid rgba(110, 168, 255, 0.35) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
             box-shadow: none !important;
         }}
         {tv_extra}
