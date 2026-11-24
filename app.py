@@ -706,7 +706,7 @@ def show_fail():
 # --- TV / wall dashboard: read-only view for office screens (?view=dashboard).
 # Placed before the login gate on purpose: it shows numbers only, no tools.
 if st.query_params.get("view") == "dashboard":
-    render_dashboard(run_log_sheet, catalog_sheet, tv_mode=True)
+    render_dashboard(run_log_sheet, catalog_sheet, tv_mode=True, usage_sheet=tool_sheet)
     st.stop()
 
 if st.session_state.login_state == "login":
@@ -775,7 +775,7 @@ if st.session_state.get("app_view") == "dashboard":
     if st.button("⬅️ Back to tools", key="dash_back"):
         st.session_state.app_view = "tools"
         st.rerun()
-    render_dashboard(run_log_sheet, catalog_sheet, tv_mode=False)
+    render_dashboard(run_log_sheet, catalog_sheet, tv_mode=False, usage_sheet=tool_sheet)
     st.stop()
 
 # 🎯 Team Selection Section — one-click gradient tiles.

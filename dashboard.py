@@ -1,6 +1,8 @@
 """MINDBOT management dashboard.
 
-Reads two Google Sheets worksheets, both read-only:
+Reads three Google Sheets worksheets, all read-only:
+  - "Sheet1" (written by update_usage in app.py) — monthly run counts per tool
+    and team since Oct-2025; the source for the month-by-month numbers.
   - "Run Log" (written by log_run_details in app.py) — one row per automation run.
   - "Tool Catalog" (maintained by hand in Sheets, replacing the old manual Excel
     handoff) — one row per tool with its manual/automated time-per-run estimate,
@@ -85,6 +87,10 @@ _EXACT = {
     "lenovo quotation": "Lenovo Quotation",
 }
 _PREFIXES = [
+    ("southcomp polaris", "Southcomp Polaris"),
+    ("joint_line", "Joint Line OCR"),
+    ("ibm rebate", "IBM Rebate"),
+    ("cloud automation", "Cloud Invoice"),
     ("mibb quotations", "MIBB Quotation"),
     ("dell quotation", "Dell Quotation"),
     ("dell orion", "Dell Quotation (Orion)"),
@@ -118,7 +124,27 @@ CATALOG_ALIASES = {
     "dell invoice extractor (pre-alert upload)": "Dell Invoice",
     "google dnts extractor": "Google Extractor",
     "google invoice extractor": "Google Extractor",
+    "dell quotation southcomp polaris": "Southcomp Polaris",
+    "southcomp polaris": "Southcomp Polaris",
+    "dell quotation automatiom": "Dell Quotation",
+    "dell quotation automation": "Dell Quotation",
+    "aws invoice tool": "AWS Invoice",
+    "cloud invoice tool": "Cloud Invoice",
+    "barcode pdf generator": "Barcode Generator",
+    "ibm credit note automation (ksa)": "IBM Credit Note (KSA)",
+    "joint line ocr": "Joint Line OCR",
 }
+
+# Tools that produce a customer quotation (counted in the "Quotations" KPI).
+QUOTATION_TOOLS = {
+    "Dell Quotation",
+    "Dell Quotation (Orion)",
+    "Southcomp Polaris",
+    "IBM Quotation",
+    "MIBB Quotation",
+    "Lenovo Quotation",
+}
+HOURS_PER_FTE_MONTH = 160
 
 
 def normalize_catalog_tool(raw) -> str:
@@ -322,6 +348,103 @@ def compute_time_saved(catalog_df: pd.DataFrame, run_log_df: pd.DataFrame, now: 
 
 
 # ---------------------------------------------------------------------------
+# Data loading — monthly usage history (Sheet1) and management metrics
+# ---------------------------------------------------------------------------
+
+
+def _empty_usage() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "month": pd.Series(dtype="datetime64[ns]"),
+            "tool_clean": pd.Series(dtype="object"),
+            "Team": pd.Series(dtype="object"),
+            "runs": pd.Series(dtype="int64"),
+        }
+    )
+
+
+@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner=False)
+def load_usage_history(_sheet) -> pd.DataFrame:
+    """Monthly run counts from "Sheet1" (Tool, Month, Usage Count, Team…).
+
+    Sheet1 goes back to Oct-2025, before the Run Log existed, so it is the
+    source for every month-by-month number on the dashboard.
+    """
+    values = _sheet.get_all_values()
+    if len(values) < 2:
+        return _empty_usage()
+    rows = [(row + [""] * 4)[:4] for row in values[1:]]
+    df = pd.DataFrame(rows, columns=["Tool", "Month", "Usage Count", "Team"])
+    df = df[df["Tool"].astype(str).str.strip() != ""]
+    df["month"] = pd.to_datetime(df["Month"].astype(str).str.strip(), format="%b-%Y", errors="coerce")
+    df["runs"] = pd.to_numeric(df["Usage Count"], errors="coerce").fillna(0).astype(int)
+    df = df.dropna(subset=["month"])
+    if df.empty:
+        return _empty_usage()
+    df["Team"] = df["Team"].astype(str).str.strip().str.title()
+    df["tool_clean"] = df["Tool"].map(normalize_tool_name)
+    return df[["month", "tool_clean", "Team", "runs"]].reset_index(drop=True)
+
+
+def usage_from_run_log(run_log_df: pd.DataFrame) -> pd.DataFrame:
+    """Fallback when Sheet1 can't be read: monthly counts from the Run Log."""
+    if run_log_df.empty:
+        return _empty_usage()
+    df = run_log_df.assign(month=run_log_df["Timestamp"].dt.to_period("M").dt.to_timestamp())
+    return (
+        df.groupby(["month", "tool_clean", "Team"]).size().rename("runs").reset_index()
+    )
+
+
+def minutes_saved_per_tool(catalog_df) -> dict:
+    """Minutes saved per run for each canonical tool (first catalog row wins)."""
+    rates = {}
+    if catalog_df is None or catalog_df.empty:
+        return rates
+    for _, row in catalog_df.iterrows():
+        per_run = row["Time Saved per Run (min)"]
+        if pd.notna(per_run) and row["tool_clean"] not in rates:
+            rates[row["tool_clean"]] = float(per_run)
+    return rates
+
+
+def compute_management(usage_df: pd.DataFrame, run_log_df: pd.DataFrame, rates: dict, now: datetime) -> dict:
+    df = usage_df.copy()
+    df["hours"] = df["tool_clean"].map(rates).fillna(0) * df["runs"] / 60
+
+    this_month = pd.Timestamp(now.year, now.month, 1)
+    last_month = this_month - pd.DateOffset(months=1)
+    year_start = pd.Timestamp(now.year, 1, 1)
+    ytd = df[df["month"] >= year_start]
+
+    def hours(mask):
+        return float(df.loc[mask, "hours"].sum())
+
+    in_use = 0
+    if not run_log_df.empty:
+        recent = run_log_df["Timestamp"] >= pd.Timestamp(now) - pd.Timedelta(days=60)
+        in_use = int(run_log_df.loc[recent, "tool_clean"].nunique())
+
+    unrated = sorted(
+        t for t in df.loc[df["month"] >= year_start, "tool_clean"].unique() if t not in rates
+    )
+    return {
+        "df": df,
+        "hours_ytd": float(ytd["hours"].sum()),
+        "runs_ytd": int(ytd["runs"].sum()),
+        "hours_month": hours(df["month"] == this_month),
+        "hours_last_month": hours(df["month"] == last_month),
+        "last_month_label": last_month.strftime("%B"),
+        "quotes_ytd": int(ytd.loc[ytd["tool_clean"].isin(QUOTATION_TOOLS), "runs"].sum()),
+        "quotes_month": int(
+            df.loc[(df["month"] == this_month) & df["tool_clean"].isin(QUOTATION_TOOLS), "runs"].sum()
+        ),
+        "tools_in_use": in_use,
+        "unrated": unrated,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Charts
 # ---------------------------------------------------------------------------
 
@@ -465,6 +588,103 @@ def build_team_chart(df: pd.DataFrame, now: datetime, compact: bool = False) -> 
     return fig
 
 
+def build_monthly_hours_chart(mgmt_df: pd.DataFrame, now: datetime, compact: bool = False) -> go.Figure:
+    df = mgmt_df[mgmt_df["month"] <= pd.Timestamp(now)]
+    months = pd.date_range(df["month"].min(), pd.Timestamp(now.year, now.month, 1), freq="MS") if not df.empty else []
+    pivot = (
+        df.groupby(["month", "Team"])["hours"].sum().unstack(fill_value=0).reindex(months, fill_value=0)
+        if not df.empty
+        else pd.DataFrame()
+    )
+    teams = [t for t in TEAM_ORDER if t in pivot.columns and pivot[t].sum() > 0] + [
+        t for t in pivot.columns if t not in TEAM_ORDER and pivot[t].sum() > 0
+    ]
+    labels = [m.strftime("%b %y") for m in months]
+    fig = go.Figure()
+    for team in teams:
+        fig.add_trace(
+            go.Bar(
+                x=labels,
+                y=pivot[team].round(0),
+                name=team,
+                marker=dict(color=TEAM_COLORS.get(team, TEAM_FALLBACK_COLOR), line=dict(color=PALETTE["card"], width=1)),
+                hovertemplate=f"{team}: <b>%{{y:,.0f}}</b> hrs<extra></extra>",
+            )
+        )
+    totals = pivot[teams].sum(axis=1) if teams else []
+    if len(labels):
+        fig.add_trace(
+            go.Scatter(
+                x=labels,
+                y=list(totals),
+                mode="text",
+                text=[f"{v:,.0f}" if v else "" for v in totals],
+                textposition="top center",
+                textfont=dict(color=PALETTE["dim"], size=11),
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
+    _apply_dark(fig, "Hours saved per month, by team")
+    fig.update_layout(
+        barmode="stack",
+        bargap=0.3,
+        height=260 if compact else 340,
+        hovermode="x unified",
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=1, xanchor="right", font=dict(color=PALETTE["dim"], size=12)),
+    )
+    fig.update_xaxes(showgrid=False)
+    peak = float(max(totals)) if len(labels) and len(totals) else 0
+    fig.update_yaxes(range=[0, peak * 1.15 if peak else 1])
+    return fig
+
+
+def build_top_tools_hours_chart(mgmt_df: pd.DataFrame, now: datetime, compact: bool = False) -> go.Figure:
+    ytd = mgmt_df[mgmt_df["month"] >= pd.Timestamp(now.year, 1, 1)]
+    grouped = ytd.groupby("tool_clean").agg(hours=("hours", "sum"), runs=("runs", "sum"))
+    top = grouped[grouped["hours"] > 0].sort_values("hours").tail(8)
+    fig = go.Figure(
+        go.Bar(
+            x=top["hours"].round(0),
+            y=top.index,
+            orientation="h",
+            marker=dict(color=PALETTE["steel"]),
+            text=[f"{v:,.0f} hrs" for v in top["hours"]],
+            textposition="outside",
+            textfont=dict(color=PALETTE["white"], size=12),
+            cliponaxis=False,
+            customdata=top["runs"],
+            hovertemplate="%{y}: <b>%{x:,.0f}</b> hrs · %{customdata:,} runs<extra></extra>",
+        )
+    )
+    _apply_dark(fig, f"Top tools by hours saved — {now.year}")
+    fig.update_layout(height=260 if compact else 340, bargap=0.35, barcornerradius=4, margin=dict(t=44, l=8, r=60, b=8))
+    fig.update_yaxes(showgrid=False, tickfont=dict(color=PALETTE["dim"], size=12))
+    return fig
+
+
+def build_runs_trend_chart(df: pd.DataFrame, now: datetime, compact: bool = False) -> go.Figure:
+    idx = pd.date_range(end=pd.Timestamp(now).normalize(), periods=30, freq="D")
+    daily = df.groupby("date").size().reindex(idx, fill_value=0) if not df.empty else pd.Series(0, index=idx)
+    fig = go.Figure(
+        go.Scatter(
+            x=idx,
+            y=daily.values,
+            mode="lines",
+            line=dict(color=PALETTE["glow"], width=3, shape="spline", smoothing=0.6),
+            fill="tozeroy",
+            fillcolor="rgba(124,199,255,0.15)",
+            hovertemplate="%{x|%d %b}: <b>%{y}</b> runs<extra></extra>",
+        )
+    )
+    _apply_dark(fig, "Daily runs — last 30 days")
+    fig.update_layout(height=260 if compact else 340, hovermode="x unified")
+    fig.update_xaxes(tickformat="%d %b")
+    fig.update_yaxes(rangemode="tozero")
+    return fig
+
+
 # ---------------------------------------------------------------------------
 # Layout
 # ---------------------------------------------------------------------------
@@ -480,11 +700,13 @@ def _kpi_tile(label: str, value: str, sub: str = "") -> str:
     )
 
 
-def _time_saved_hero(total_hours: float) -> str:
+def _time_saved_hero(total_hours: float, year: int, runs: int, months: int = 12) -> str:
+    fte = total_hours / HOURS_PER_FTE_MONTH / max(1, months)
     return (
         '<div class="mw-hero">'
-        '<div class="mw-hero-label">⚡ Estimated time saved this month</div>'
-        f'<div class="mw-hero-value">{total_hours:,.1f}<span> hours</span></div>'
+        f'<div class="mw-hero-label">⚡ Time saved by automation in {year}</div>'
+        f'<div class="mw-hero-value">{total_hours:,.0f}<span> hours</span></div>'
+        f'<div class="mw-kpi-sub">{runs:,} automated runs · ≈ {fte:,.1f} full-time employees every month</div>'
         "</div>"
     )
 
@@ -515,7 +737,7 @@ def build_catalog_table_html(rows: list, max_rows: int | None = None) -> str:
         go_live = r["Go-Live"]
         go_live_str = go_live.strftime("%d %b %Y") if pd.notna(go_live) else "—"
         runs_str = f'{r["Runs"]:,}' + (" (est.)" if r["Estimated"] else "")
-        per_run_str = f'{r["PerRun"]:.0f} min' if pd.notna(r["PerRun"]) else "—"
+        per_run_str = f'{r["PerRun"]:g} min' if pd.notna(r["PerRun"]) else "—"
         saved_str = f'{r["SavedMinutes"] / 60:.1f} hrs' if r["SavedMinutes"] else "—"
         body_parts.append(
             "<tr>"
@@ -681,7 +903,7 @@ def _inject_css(tv_mode: bool) -> None:
     )
 
 
-def _dashboard_body(run_log_sheet, catalog_sheet, tv_mode: bool) -> None:
+def _dashboard_body(run_log_sheet, catalog_sheet, tv_mode: bool, usage_sheet=None) -> None:
     now = datetime.now()
     st.markdown(
         '<div class="mw-dash-head">'
@@ -708,31 +930,43 @@ def _dashboard_body(run_log_sheet, catalog_sheet, tv_mode: bool) -> None:
         except APIError:
             catalog_df = None
 
-    if catalog_df is not None and not catalog_df.empty:
-        ts = compute_time_saved(catalog_df, df, now)
-        st.markdown(_time_saved_hero(ts["total_hours"]), unsafe_allow_html=True)
+    usage_df = None
+    if usage_sheet is not None:
+        try:
+            usage_df = load_usage_history(usage_sheet)
+        except APIError:
+            usage_df = None
+    if usage_df is None or usage_df.empty:
+        usage_df = usage_from_run_log(df)
 
-    kpis = compute_kpis(df, now)
+    rates = minutes_saved_per_tool(catalog_df)
+    mgmt = compute_management(usage_df, df, rates, now)
+
+    st.markdown(_time_saved_hero(mgmt["hours_ytd"], now.year, mgmt["runs_ytd"], now.month), unsafe_allow_html=True)
 
     tiles = st.columns(4)
     tiles[0].markdown(
-        _kpi_tile("PDFs today", f"{kpis['pdfs_today']:,}", f"{kpis['runs_today']} runs"),
+        _kpi_tile(
+            "Hours saved this month",
+            f"{mgmt['hours_month']:,.0f}",
+            f"{now.strftime('%B')} so far · ≈ {mgmt['hours_month'] / HOURS_PER_FTE_MONTH:,.1f} FTE",
+        ),
         unsafe_allow_html=True,
     )
     tiles[1].markdown(
-        _kpi_tile("PDFs this month", f"{kpis['pdfs_month']:,}", now.strftime("%B %Y")),
+        _kpi_tile(
+            f"Hours saved in {mgmt['last_month_label']}",
+            f"{mgmt['hours_last_month']:,.0f}",
+            f"≈ {mgmt['hours_last_month'] / HOURS_PER_FTE_MONTH:,.1f} full-time employees",
+        ),
         unsafe_allow_html=True,
     )
     tiles[2].markdown(
-        _kpi_tile("Automation runs", f"{kpis['runs_month']:,}", "this month"),
+        _kpi_tile("Quotations generated", f"{mgmt['quotes_ytd']:,}", f"{now.year} · {mgmt['quotes_month']:,} this month"),
         unsafe_allow_html=True,
     )
     tiles[3].markdown(
-        _kpi_tile(
-            "Top tool",
-            kpis["top_tool"],
-            f"{kpis['top_tool_count']:,} PDFs this month" if kpis["top_tool_count"] else "",
-        ),
+        _kpi_tile("Tools in use", f"{mgmt['tools_in_use']:,}", "used in the last 60 days"),
         unsafe_allow_html=True,
     )
 
@@ -741,39 +975,37 @@ def _dashboard_body(run_log_sheet, catalog_sheet, tv_mode: bool) -> None:
         unsafe_allow_html=True,
     )
 
-    if df.empty:
+    if mgmt["df"].empty:
         st.markdown(
             '<div class="mw-empty">No runs logged yet — numbers will appear here '
-            "as soon as the team starts processing PDFs.</div>",
+            "as soon as the team starts using the tools.</div>",
             unsafe_allow_html=True,
         )
     else:
         st.plotly_chart(
-            build_trend_chart(df, now, compact=tv_mode),
+            build_monthly_hours_chart(mgmt["df"], now, compact=tv_mode),
             width="stretch",
             config={"displayModeBar": False},
         )
-
-        col_tools, col_teams = st.columns([3, 2])
+        col_tools, col_trend = st.columns([3, 2])
         with col_tools:
             st.plotly_chart(
-                build_top_tools_chart(df, now, compact=tv_mode),
+                build_top_tools_hours_chart(mgmt["df"], now, compact=tv_mode),
                 width="stretch",
                 config={"displayModeBar": False},
             )
-        with col_teams:
+        with col_trend:
             st.plotly_chart(
-                build_team_chart(df, now, compact=tv_mode),
+                build_runs_trend_chart(df, now, compact=tv_mode),
                 width="stretch",
                 config={"displayModeBar": False},
             )
 
     # The catalog table is detail meant to be read at a desk, not from across a
-    # room — TV mode stops at the hero number + charts above so everything
-    # still fits on one screen without scrolling.
+    # room — TV mode stops at the numbers and charts above.
     if catalog_sheet is not None and not tv_mode:
         if catalog_df is None:
-            pass  # APIError already implied core data is flaky; don't pile on a second banner
+            pass
         elif catalog_df.empty:
             st.markdown(
                 '<div class="mw-empty">No tools in the catalog yet — add rows to the '
@@ -782,6 +1014,7 @@ def _dashboard_body(run_log_sheet, catalog_sheet, tv_mode: bool) -> None:
                 unsafe_allow_html=True,
             )
         else:
+            ts = compute_time_saved(catalog_df, df, now)
             st.markdown(
                 '<div class="mw-section-title">Automation Catalog</div>',
                 unsafe_allow_html=True,
@@ -790,13 +1023,18 @@ def _dashboard_body(run_log_sheet, catalog_sheet, tv_mode: bool) -> None:
                 build_catalog_table_html(ts["rows"]),
                 unsafe_allow_html=True,
             )
+            if mgmt["unrated"]:
+                st.caption(
+                    "Not counted in hours saved yet (no minutes in the Tool Catalog): "
+                    + ", ".join(mgmt["unrated"])
+                )
 
 
-def render_dashboard(run_log_sheet, catalog_sheet=None, tv_mode: bool = False) -> None:
+def render_dashboard(run_log_sheet, catalog_sheet=None, tv_mode: bool = False, usage_sheet=None) -> None:
     _inject_css(tv_mode)
     if tv_mode:
         st.fragment(run_every=TV_REFRESH_SECONDS)(_dashboard_body)(
-            run_log_sheet, catalog_sheet, tv_mode
+            run_log_sheet, catalog_sheet, tv_mode, usage_sheet
         )
     else:
-        _dashboard_body(run_log_sheet, catalog_sheet, tv_mode)
+        _dashboard_body(run_log_sheet, catalog_sheet, tv_mode, usage_sheet)
