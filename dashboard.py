@@ -665,23 +665,33 @@ def build_top_tools_hours_chart(mgmt_df: pd.DataFrame, now: datetime, compact: b
 
 
 def build_runs_trend_chart(df: pd.DataFrame, now: datetime, compact: bool = False) -> go.Figure:
-    idx = pd.date_range(end=pd.Timestamp(now).normalize(), periods=30, freq="D")
-    daily = df.groupby("date").size().reindex(idx, fill_value=0) if not df.empty else pd.Series(0, index=idx)
+    """Month-to-date runs, cumulative. Hover shows that day's runs and the running total."""
+    month_start = pd.Timestamp(now.year, now.month, 1)
+    idx = pd.date_range(month_start, pd.Timestamp(now).normalize(), freq="D")
+    month_df = df[df["date"] >= month_start] if not df.empty else df
+    daily = month_df.groupby("date").size().reindex(idx, fill_value=0) if not month_df.empty else pd.Series(0, index=idx)
+    cumulative = daily.cumsum()
+    x = [month_start - pd.Timedelta(hours=12)] + list(idx)
+    y = [0] + list(cumulative.values)
+    custom = [[0, 0]] + [[int(d), int(c)] for d, c in zip(daily.values, cumulative.values)]
     fig = go.Figure(
         go.Scatter(
-            x=idx,
-            y=daily.values,
+            x=x,
+            y=y,
             mode="lines",
-            line=dict(color=PALETTE["glow"], width=3, shape="spline", smoothing=0.6),
+            line=dict(color=PALETTE["glow"], width=3, shape="spline", smoothing=0.5),
             fill="tozeroy",
             fillcolor="rgba(124,199,255,0.15)",
-            hovertemplate="%{x|%d %b}: <b>%{y}</b> runs<extra></extra>",
+            customdata=custom,
+            hovertemplate="<b>%{x|%d %b}</b><br>%{customdata[0]} runs that day"
+            "<br>%{customdata[1]:,} month to date<extra></extra>",
         )
     )
-    _apply_dark(fig, "Daily runs — last 30 days")
+    total = int(cumulative.iloc[-1]) if len(cumulative) else 0
+    _apply_dark(fig, f"Runs this month — {total:,} so far")
     fig.update_layout(height=260 if compact else 340, hovermode="x unified")
-    fig.update_xaxes(tickformat="%d %b")
-    fig.update_yaxes(rangemode="tozero")
+    fig.update_xaxes(tickformat="%d %b", range=[month_start - pd.Timedelta(hours=12), pd.Timestamp(now).normalize() + pd.Timedelta(hours=12)])
+    fig.update_yaxes(rangemode="tozero", title=dict(text="Cumulative runs", font=dict(color=PALETTE["dim"], size=11)))
     return fig
 
 
@@ -962,7 +972,11 @@ def _dashboard_body(run_log_sheet, catalog_sheet, tv_mode: bool, usage_sheet=Non
         unsafe_allow_html=True,
     )
     tiles[2].markdown(
-        _kpi_tile("Quotations generated", f"{mgmt['quotes_ytd']:,}", f"{now.year} · {mgmt['quotes_month']:,} this month"),
+        _kpi_tile(
+            "Documents processed",
+            f"{mgmt['runs_ytd']:,}",
+            f"{now.year} · {mgmt['quotes_ytd']:,} of them quotations",
+        ),
         unsafe_allow_html=True,
     )
     tiles[3].markdown(
